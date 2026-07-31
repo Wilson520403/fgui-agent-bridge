@@ -68,7 +68,9 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT tree
 
 全局参数 `--project`、`--editor`、`--timeout` 必须位于子命令前。`call` 只用于调试原始 Action，不替代正式 MCP 工具。
 
-## 安装位置与手动 Setup
+## 安装位置与安装方式
+
+面向使用者的 `README.md` 同时提供“AI 快速安装（提示词安装）”和“人类安装”。AI 安装必须实际执行并验证下述同一套安装步骤，不能只返回命令说明。
 
 安装边界必须明确区分：
 

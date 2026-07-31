@@ -9,7 +9,32 @@
 
 Bridge 仓库与 FairyGUI 工程分开存放。FairyGUI 工程只需要安装插件；使用 Codex 时可额外安装 Skill。
 
-## 快速安装
+## AI 快速安装（提示词安装）
+
+将下面的提示词复制给能够操作本地终端和文件的 AI 编程 Agent（例如 Codex）。AI 应实际执行安装与验证，而不是只返回命令说明。
+
+```text
+请帮我在这台电脑上完整安装 FairyGUI Agent Bridge。你可以执行终端命令和编辑本地文件，请实际完成安装，不要只给操作说明。
+
+源仓库：https://github.com/Wilson520403/fgui-agent-bridge.git
+目标 FairyGUI 工程：优先从当前工作区自动查找 .fairy 文件；找不到或找到多个时再询问我。
+目标代码仓库：当前工作区；如果当前工作区就是 Bridge 仓库，先询问我是否还要把 Codex Skill 安装到其他代码仓库。
+
+请按以下要求执行：
+1. 检查 Git、Python 3.10+、uv、FairyGUI Editor，以及可选的 codex CLI。缺少可安全安装的依赖时直接安装；无法自动处理时明确告诉我阻塞项。
+2. 使用仓库最新 main 分支。仓库已存在时先检查 git status，不覆盖未提交修改；不存在时克隆到稳定、非临时目录。
+3. 识别并确认目标 FairyGUI 工程。可以使用 .fairy 文件、FairyGUI 工程目录，或包含 FairyGUI/FairyGUI.fairy 的代码仓库目录。
+4. 在 Bridge 仓库执行 uv sync --frozen。
+5. 执行 uv run python scripts/sync_to_project.py --project <实际工程路径> --apply 安装插件，并确认目标工程 plugins/agent-bridge/ 中的受管理文件已经写入。
+6. 如果本机有 codex CLI，先执行 codex mcp get fgui 检查现有配置，再安全地新增或更新 fgui MCP；保留所有无关 MCP 配置。启动命令应从 Bridge 仓库运行 fgui-agent-mcp，并通过 FGUI_PROJECT_PATH 指向目标 FairyGUI 工程。
+7. 如果当前工作区是我要使用 Codex 操作的代码仓库，将 Bridge 仓库中的 .agents/skills/fgui-agent-bridge/ 复制到当前工作区同路径；不要把 .agent/、.venv/、缓存或 Git 元数据复制进去。
+8. 打开或提示我重新打开目标 FairyGUI 工程，然后依次完成 status、ping、project、packages 的低风险验证。不要用创建资源、保存或发布作为首次验证。
+9. 最后汇报实际使用的 Bridge 路径、FairyGUI 工程路径、Skill 安装路径、MCP 配置和每项验证结果；任何未完成或仍需人工操作的步骤都要明确列出。
+```
+
+如果已经知道路径，可以先把提示词中的“目标 FairyGUI 工程”和“目标代码仓库”改成绝对路径，AI 就不需要再次询问。
+
+## 人类安装
 
 ### 依赖
 
