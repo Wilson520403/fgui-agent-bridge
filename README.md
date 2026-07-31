@@ -30,7 +30,15 @@ uv sync --frozen
 
 ### 2. 安装 FairyGUI 插件
 
-下面一条命令会把插件同步到目标 FairyGUI 工程的 `plugins/agent-bridge/`：
+运行下面的命令，在弹出的窗口中选择 FairyGUI 工程目录：
+
+```bash
+uv run python scripts/sync_to_project.py --choose-project --apply
+```
+
+脚本会先检查工程，再将插件安装到 `plugins/agent-bridge/`。无效目录或取消选择时不会写入文件。
+
+也可以直接指定路径：
 
 ```bash
 uv run python scripts/sync_to_project.py \
@@ -38,7 +46,7 @@ uv run python scripts/sync_to_project.py \
   --apply
 ```
 
-`--project` 可以填写 `.fairy` 文件、FairyGUI 工程目录，或包含 `FairyGUI/FairyGUI.fairy` 的仓库目录。同步脚本不会删除目标目录中的其他文件。
+`--project` 支持 `.fairy` 文件、FairyGUI 工程目录，或包含 `FairyGUI/FairyGUI.fairy` 的仓库目录。
 
 然后重新打开 FairyGUI 工程。插件运行时目录 `.agent/` 会自动创建，不要提交到 Git。
 

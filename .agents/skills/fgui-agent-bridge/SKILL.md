@@ -77,15 +77,13 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT tree
 - Skill 可选安装到 Codex 操作的目标代码仓库 `.agents/skills/fgui-agent-bridge/`。
 - `.agent/` 是目标 FairyGUI 工程生成的运行时队列，不是安装文件，也不纳入 Git。
 
-普通使用者只需要把运行时插件文件复制到目标工程：
+普通使用者优先通过同步脚本选择 FairyGUI 工程并安装插件：
 
 ```bash
-PLUGIN_TARGET="/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/plugins/agent-bridge"
-mkdir -p "$PLUGIN_TARGET"
-cp plugin/package.json plugin/main.js "$PLUGIN_TARGET/"
+uv run python scripts/sync_to_project.py --choose-project --apply
 ```
 
-`plugin/main.ts`、`plugin/tsconfig.json` 和 `plugin/types/` 是开发文件，不要求安装到终端用户工程。
+脚本会先校验所选目录，再写入目标工程的 `plugins/agent-bridge/`；无效目录或取消选择时不得写入。自动化环境可改用 `--project PATH --apply`。
 
 在独立 Bridge 仓库准备 Python 环境：
 
@@ -113,22 +111,22 @@ cp -R .agents/skills/fgui-agent-bridge \
 
 完成安装后先执行低风险读取：`status → ping → project → packages`，不要以创建、导入、保存或发布作为首次连接测试。
 
-### 可选同步脚本
+### 同步脚本
 
-`scripts/sync_to_project.py` 只是维护者的复制辅助，不是安装前置条件。脚本默认 dry-run，必须显式传入 `--apply` 才写入：
+`scripts/sync_to_project.py` 支持目录选择和显式路径，两种方式都默认 dry-run，必须传入 `--apply` 才写入：
 
 ```bash
-uv run python scripts/sync_to_project.py \
-  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
-  --skill-root /ABSOLUTE/PATH/TO/TARGET-REPOSITORY
+# 打开目录选择器并安装插件
+uv run python scripts/sync_to_project.py --choose-project --apply
 
+# 自动化环境，并可同时安装 Skill
 uv run python scripts/sync_to_project.py \
   --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
   --skill-root /ABSOLUTE/PATH/TO/TARGET-REPOSITORY \
   --apply
 ```
 
-该脚本会复制完整的 `plugin/` 开发目录和 Skill；普通使用者按手动 Setup 只复制 `package.json` 与 `main.js` 即可。脚本不创建 Git 元数据、不复制缓存、不删除目标目录其他文件。
+`--project` 与 `--choose-project` 互斥。脚本不创建 Git 元数据、不复制缓存、不删除目标目录中的其他文件。
 
 ## 开发与变更同步
 

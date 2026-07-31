@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import platform
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,10 +29,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="预览或执行 FGUI Agent Bridge 插件与 Skill 同步。"
     )
-    parser.add_argument(
+    project_group = parser.add_mutually_exclusive_group(required=True)
+    project_group.add_argument(
         "--project",
-        required=True,
         help="目标 .fairy 文件、FairyGUI 工程目录或包含 FairyGUI/FairyGUI.fairy 的仓库目录。",
+    )
+    project_group.add_argument(
+        "--choose-project",
+        action="store_true",
+        help="打开目录选择器，选择目标 FairyGUI 工程。",
     )
     parser.add_argument(
         "--skill-root",
@@ -42,6 +49,97 @@ def parse_args() -> argparse.Namespace:
         help="实际写入；省略时仅输出预览。",
     )
     return parser.parse_args()
+
+
+def _run_directory_picker(command: list[str]) -> Path | None:
+    """运行系统目录选择器；空输出或取消选择时返回 None。"""
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return Path(value).expanduser() if value else None
+
+
+def _choose_with_tkinter() -> Path | None:
+    """使用 Tk 作为跨平台回退；无桌面或未安装 Tk 时给出明确错误。"""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:  # pragma: no cover - 依赖本机 GUI 环境
+        raise RuntimeError(
+            "当前系统没有可用的目录选择器，请改用 --project 指定工程路径。"
+        ) from exc
+
+    try:
+        root = tk.Tk()
+    except Exception as exc:  # pragma: no cover - 依赖本机 GUI 环境
+        raise RuntimeError(
+            "无法打开目录选择器，请改用 --project 指定工程路径。"
+        ) from exc
+
+    try:
+        root.withdraw()
+        root.update()
+        value = filedialog.askdirectory(
+            parent=root,
+            title="选择 FairyGUI 工程目录",
+            mustexist=True,
+        )
+        return Path(value).expanduser() if value else None
+    finally:
+        root.destroy()
+
+
+def choose_project_directory() -> Path | None:
+    """打开系统目录选择器，返回用户选择的工程目录。"""
+    system = platform.system()
+
+    if system == "Darwin" and shutil.which("osascript"):
+        return _run_directory_picker(
+            [
+                "osascript",
+                "-e",
+                'POSIX path of (choose folder with prompt "选择 FairyGUI 工程目录")',
+            ]
+        )
+
+    if system == "Windows":
+        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        if powershell:
+            script = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                "$dialog.Description = '选择 FairyGUI 工程目录'; "
+                "$dialog.ShowNewFolderButton = $false; "
+                "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) "
+                "{ $dialog.SelectedPath }"
+            )
+            return _run_directory_picker(
+                [powershell, "-NoProfile", "-STA", "-Command", script]
+            )
+
+    if system == "Linux":
+        if shutil.which("zenity"):
+            return _run_directory_picker(
+                [
+                    "zenity",
+                    "--file-selection",
+                    "--directory",
+                    "--title=选择 FairyGUI 工程目录",
+                ]
+            )
+        if shutil.which("kdialog"):
+            return _run_directory_picker(
+                [
+                    "kdialog",
+                    "--getexistingdirectory",
+                    ".",
+                    "--title",
+                    "选择 FairyGUI 工程目录",
+                ]
+            )
+
+    return _choose_with_tkinter()
 
 
 def resolve_project_file(value: str) -> Path:
@@ -117,7 +215,18 @@ def sync(entries: list[CopyEntry], *, apply: bool) -> tuple[int, int, int]:
 
 def main() -> int:
     args = parse_args()
-    project_file = resolve_project_file(args.project)
+
+    if args.choose_project:
+        selected_project = choose_project_directory()
+        if selected_project is None:
+            print("已取消 FairyGUI 工程选择。")
+            return 0
+        print(f"已选择工程目录：{selected_project}")
+        project_value = str(selected_project)
+    else:
+        project_value = args.project
+
+    project_file = resolve_project_file(project_value)
     plugin_destination = project_file.parent / "plugins" / "agent-bridge"
     entries = build_entries(PLUGIN_SOURCE, plugin_destination)
 
@@ -142,6 +251,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except ValueError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(f"错误：{exc}", file=sys.stderr)
         raise SystemExit(1) from None
