@@ -9,6 +9,13 @@
 
 Bridge 仓库与 FairyGUI 工程分开存放。FairyGUI 工程只需要安装插件；使用 Codex 时可额外安装 Skill。
 
+## 依赖
+
+- Python `3.10+`
+- [uv](https://docs.astral.sh/uv/)
+- FairyGUI Editor
+- 使用 Codex MCP 时需要 `codex` 命令
+
 ## AI 安装
 
 将下面的提示词复制给能够操作本地终端和文件的 AI 编程 Agent（例如 Codex）
@@ -20,15 +27,7 @@ Bridge 仓库与 FairyGUI 工程分开存放。FairyGUI 工程只需要安装插
 目标 FairyGUI 工程：优先从当前工作区自动查找 .fairy 文件；找不到或找到多个时停下来询问我。
 目标代码仓库：当前工作区；
 ```
-
 ## 人类安装
-
-### 依赖
-
-- Python `3.10+`
-- [uv](https://docs.astral.sh/uv/)
-- FairyGUI Editor
-- 使用 Codex MCP 时需要 `codex` 命令
 
 ### 1. 获取 Bridge
 
@@ -163,15 +162,6 @@ uv run fgui-agent \
 
 MCP 只提供显式工具；CLI 的 `call` 仅用于调试原始 Action。
 
-## 重要边界
-
-- `fgui_set_property` 支持白名单属性，并进入 Agent 属性撤销栈。
-- 插入和删除对象属于结构修改，暂不提供完整的 Agent 结构快照撤销。
-- 图片导入使用绝对本地路径；按钮状态图必须是工程内 `ui://` 图片。
-- 发布会写入磁盘，默认先保存；发布前应确认发布范围和工程发布设置。
-- 多个 FairyGUI 工程可以共用 Bridge 仓库和 Python 环境，但每个工程都要单独安装插件。
-- `.agent/` 是运行时队列，不纳入 Git。
-
 ## 当前限制
 
 - 暂不支持字体、音频、Spine 等非图片资源导入。
@@ -184,9 +174,7 @@ MCP 只提供显式工具；CLI 的 `call` 仅用于调试原始 Action。
 ```bash
 git pull
 uv sync --frozen
-uv run python scripts/sync_to_project.py \
-  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
-  --apply
+uv run python scripts/sync_to_project.py --choose-project --apply
 ```
 
 更新插件后重新打开 FairyGUI 工程。只有 MCP 启动命令或 Bridge 仓库路径变化时，才需要重新登记 MCP。
