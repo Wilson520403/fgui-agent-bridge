@@ -68,9 +68,54 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT tree
 
 全局参数 `--project`、`--editor`、`--timeout` 必须位于子命令前。`call` 只用于调试原始 Action，不替代正式 MCP 工具。
 
-## 同步到业务工程
+## 安装位置与手动 Setup
 
-独立仓库是开发真源。同步脚本默认只预览，必须显式传入 `--apply` 才写入：
+安装边界必须明确区分：
+
+- FairyGUI Editor 插件安装到每个目标 FairyGUI 工程的 `plugins/agent-bridge/`。
+- MCP/CLI 始终从独立 Bridge 仓库或已安装的 Python 工具环境运行，不放入 FairyGUI 工程。
+- Skill 可选安装到 Codex 操作的目标代码仓库 `.agents/skills/fgui-agent-bridge/`。
+- `.agent/` 是目标 FairyGUI 工程生成的运行时队列，不是安装文件，也不纳入 Git。
+
+普通使用者只需要把运行时插件文件复制到目标工程：
+
+```bash
+PLUGIN_TARGET="/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/plugins/agent-bridge"
+mkdir -p "$PLUGIN_TARGET"
+cp plugin/package.json plugin/main.js "$PLUGIN_TARGET/"
+```
+
+`plugin/main.ts`、`plugin/tsconfig.json` 和 `plugin/types/` 是开发文件，不要求安装到终端用户工程。
+
+在独立 Bridge 仓库准备 Python 环境：
+
+```bash
+uv sync --frozen
+```
+
+注册 Codex MCP 时同时保留 Bridge 仓库路径与目标 FairyGUI 工程路径：
+
+```bash
+codex mcp add fgui -- \
+  uv run \
+  --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
+  fgui-agent-mcp \
+  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy
+```
+
+Skill 按需复制到目标代码仓库：
+
+```bash
+mkdir -p /ABSOLUTE/PATH/TO/TARGET-REPOSITORY/.agents/skills
+cp -R .agents/skills/fgui-agent-bridge \
+  /ABSOLUTE/PATH/TO/TARGET-REPOSITORY/.agents/skills/
+```
+
+完成安装后先执行低风险读取：`status → ping → project → packages`，不要以创建、导入、保存或发布作为首次连接测试。
+
+### 可选同步脚本
+
+`scripts/sync_to_project.py` 只是维护者的复制辅助，不是安装前置条件。脚本默认 dry-run，必须显式传入 `--apply` 才写入：
 
 ```bash
 uv run python scripts/sync_to_project.py \
@@ -83,10 +128,7 @@ uv run python scripts/sync_to_project.py \
   --apply
 ```
 
-- 插件目标为 FairyGUI 工程的 `plugins/agent-bridge/`。
-- Skill 仅在提供 `--skill-root` 时写入 `.agents/skills/fgui-agent-bridge/`。
-- 脚本不创建 Git 元数据、不复制缓存、不删除目标目录其他文件。
-- 发布仓库变更完成后，业务工程同步应作为独立操作审阅和提交。
+该脚本会复制完整的 `plugin/` 开发目录和 Skill；普通使用者按手动 Setup 只复制 `package.json` 与 `main.js` 即可。脚本不创建 Git 元数据、不复制缓存、不删除目标目录其他文件。
 
 ## 开发与变更同步
 

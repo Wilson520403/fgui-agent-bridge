@@ -40,42 +40,210 @@ FairyGUI/.agent/
 
 ## 安装与运行
 
-需要 Python 3.10+ 和 [uv](https://docs.astral.sh/uv/)。在仓库根目录执行：
+安装分为三个相互独立的部分：
+
+1. **FairyGUI Editor 插件**安装到每个需要被操作的 FairyGUI 工程。
+2. **MCP/CLI**运行在独立的 Bridge 仓库中，不放入 FairyGUI 工程。
+3. **Skill**可选安装到使用 Codex 的目标代码仓库。
+
+不要把本 Git 仓库克隆到业务工程的 `plugins/` 中，也不要在 FairyGUI 工程中创建额外 Git 工作区。
+
+### 准备条件
+
+- Python 3.10 或更高版本。
+- [uv](https://docs.astral.sh/uv/)。
+- FairyGUI Editor；当前已验证版本为 `6.1.4`。
+- 使用 Codex MCP 时，需要本机可执行 `codex` 命令。
+
+下文使用三个不同占位路径：
+
+| 占位路径 | 含义 |
+| --- | --- |
+| `/ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE` | 本仓库的稳定克隆目录，用于运行 MCP/CLI |
+| `/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT` | 包含 `FairyGUI.fairy` 的 FairyGUI 工程目录 |
+| `/ABSOLUTE/PATH/TO/TARGET-REPOSITORY` | 需要安装 Skill 的目标代码仓库 |
+
+### 第一步：克隆并准备 Bridge 仓库
+
+将 Bridge 克隆到 FairyGUI 工程之外的稳定目录：
 
 ```bash
+git clone https://github.com/Wilson520403/fgui-agent-bridge.git
+cd fgui-agent-bridge
+git checkout v0.6.0
 uv sync --frozen
-uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT status
-uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT ping
 ```
 
-也可以把本目录作为普通 Python 包安装，安装后直接使用：
+Bridge 仓库承载 Python MCP/CLI、插件运行文件、源码、Skill 和文档。后续的 `uv run` 都应指向这个稳定目录。
+
+### 第二步：安装 FairyGUI Editor 插件
+
+每个需要被 Agent 操作的 FairyGUI 工程都需要安装一次插件。终端用户只需要复制两个运行时文件：
+
+```text
+<FAIRYGUI-PROJECT>/
+├── FairyGUI.fairy
+└── plugins/
+    └── agent-bridge/
+        ├── package.json
+        └── main.js
+```
+
+macOS / Linux：
 
 ```bash
-fgui-agent ping
-fgui-agent-mcp
+PLUGIN_TARGET="/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/plugins/agent-bridge"
+mkdir -p "$PLUGIN_TARGET"
+cp plugin/package.json plugin/main.js "$PLUGIN_TARGET/"
 ```
 
-### 工程定位
+Windows PowerShell：
 
-按以下优先级选择 FairyGUI 工程：
+```powershell
+$PluginTarget = "C:\Path\To\FairyGUIProject\plugins\agent-bridge"
+New-Item -ItemType Directory -Force -Path $PluginTarget
+Copy-Item plugin\package.json $PluginTarget -Force
+Copy-Item plugin\main.js $PluginTarget -Force
+```
+
+`plugin/main.ts`、`plugin/tsconfig.json` 和 `plugin/types/` 是开发与独立编译文件，不要求复制到用户工程。
+
+安装或更新插件后，重新打开 FairyGUI 工程。插件会在该工程创建 `.agent/` 运行时目录：
+
+```text
+<FAIRYGUI-PROJECT>/.agent/
+├── requests/
+├── processing/
+├── responses/
+├── status.json
+└── bridge.log
+```
+
+`.agent/` 是 MCP 与 FairyGUI Editor 的本地通信队列，不纳入 Git。
+
+### 第三步：验证插件与 CLI
+
+以下命令都在 Bridge 仓库根目录执行。先读取状态，不主动唤醒编辑器：
+
+```bash
+uv run fgui-agent \
+  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy \
+  status
+```
+
+再验证插件连接、协议和 capability：
+
+```bash
+uv run fgui-agent \
+  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy \
+  ping
+```
+
+正常响应应报告 Bridge 版本 `0.6.0` 和队列协议 `1.0`。若连接失败，依次检查：
+
+1. FairyGUI 工程是否已打开。
+2. `plugins/agent-bridge/package.json` 和 `main.js` 是否存在。
+3. 插件 ID 是否为 `com.fgui.agent-bridge`。
+4. `.agent/status.json` 是否生成且心跳仍在更新。
+5. `.agent/bridge.log` 和 FairyGUI Editor 控制台是否有错误。
+
+### 第四步：注册 Codex MCP
+
+Bridge 仓库路径与被操作的 FairyGUI 工程路径是两个独立参数，不能混用：
+
+```bash
+codex mcp add fgui -- \
+  uv run \
+  --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
+  fgui-agent-mcp \
+  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy
+```
+
+检查登记结果：
+
+```bash
+codex mcp get fgui
+```
+
+如果已经存在名为 `fgui` 的旧配置，先确认内容，再按需重新登记：
+
+```bash
+codex mcp get fgui
+codex mcp remove fgui
+```
+
+修改 MCP 配置后需要新建 Codex 任务，让客户端重新发现工具。
+
+也可以复制并修改仓库根目录的 `.mcp.example.json`；其中 Bridge 仓库路径和 FairyGUI 工程路径同样需要分别填写。
+
+### 第五步：可选安装 Skill
+
+Skill 不是 MCP 通信的必要条件。它用于让 Codex 理解 Bridge 的操作顺序、写入边界、保存语义和维护同步要求，应安装到 Codex 操作的目标代码仓库：
+
+```text
+<TARGET-REPOSITORY>/
+└── .agents/
+    └── skills/
+        └── fgui-agent-bridge/
+```
+
+macOS / Linux：
+
+```bash
+mkdir -p /ABSOLUTE/PATH/TO/TARGET-REPOSITORY/.agents/skills
+cp -R .agents/skills/fgui-agent-bridge \
+  /ABSOLUTE/PATH/TO/TARGET-REPOSITORY/.agents/skills/
+```
+
+Windows PowerShell：
+
+```powershell
+$SkillRoot = "C:\Path\To\TargetRepository\.agents\skills"
+New-Item -ItemType Directory -Force -Path $SkillRoot
+Copy-Item .agents\skills\fgui-agent-bridge $SkillRoot -Recurse -Force
+```
+
+### 第六步：完成验证
+
+依次执行低风险读取：
+
+```bash
+uv run --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
+  fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy status
+
+uv run --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
+  fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy ping
+
+uv run --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
+  fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy project
+
+uv run --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
+  fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT/FairyGUI.fairy packages
+```
+
+然后在新建的 Codex 任务中确认可以发现 `fgui_status`、`fgui_ping`、`fgui_get_project`、`fgui_list_packages` 等工具。首次验证不要直接执行创建、导入、保存或发布等写操作。
+
+### 工程定位规则
+
+CLI/MCP 按以下优先级选择 FairyGUI 工程：
 
 1. MCP 调用 `fgui_use_project` 后的会话选择。
 2. 启动参数 `--project`。
 3. 环境变量 `FGUI_PROJECT_PATH`。
 4. `CODEX_WORKSPACE_ROOT`、当前目录及父目录。
-5. 从 Python 包所在目录向上查找 `FairyGUI/FairyGUI.fairy`；独立克隆使用时通常应显式传入目标工程。
+5. 从 Python 包所在目录向上查找 `FairyGUI/FairyGUI.fairy`。
 
-参数可指向 `.fairy` 文件、FairyGUI 工程目录，或包含 `FairyGUI/FairyGUI.fairy` 的仓库目录。
+参数可指向 `.fairy` 文件、FairyGUI 工程目录，或包含 `FairyGUI/FairyGUI.fairy` 的仓库目录。独立克隆使用时推荐始终显式提供 `--project`。
 
-### 编辑器路径
+### FairyGUI Editor 路径
 
-推荐设置统一环境变量：
+macOS 推荐设置：
 
 ```bash
 export FAIRYGUI_EDITOR_PATH=/Applications/FairyGUI-Editor.app
 ```
 
-Windows 示例：
+Windows PowerShell：
 
 ```powershell
 $env:FAIRYGUI_EDITOR_PATH = "C:\Tools\FairyGUI-Editor\FairyGUI-Editor.exe"
@@ -83,43 +251,46 @@ $env:FAIRYGUI_EDITOR_PATH = "C:\Tools\FairyGUI-Editor\FairyGUI-Editor.exe"
 
 macOS 会尝试查找 `/Applications`、用户 `Applications` 和用户 `Downloads` 下的 `FairyGUI-Editor.app`。Windows 自动启动逻辑已实现，但尚未在真实 Windows 环境验证。其他平台不会自动启动编辑器，仍可连接已经运行并持续写入心跳的 FairyGUI Editor。
 
+### 可选：使用同步脚本辅助复制
 
-## 同步到 FairyGUI 工程
-
-独立仓库是代码真源。不要直接把 Git 仓库克隆到业务工程的 `plugins/` 中；使用同步脚本复制受管理文件：
+理解上述安装位置后，可以使用同步脚本减少重复复制。脚本不是安装前置条件，默认只预览，必须传入 `--apply` 才会写入：
 
 ```bash
-# 默认只预览，不写入
+# 仅预览插件变更
 uv run python scripts/sync_to_project.py \
   --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT
 
-# 同时预览插件与 Skill
+# 预览插件与 Skill 变更
 uv run python scripts/sync_to_project.py \
   --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
   --skill-root /ABSOLUTE/PATH/TO/TARGET-REPOSITORY
 
-# 确认后实际写入
+# 确认后执行
 uv run python scripts/sync_to_project.py \
   --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
   --skill-root /ABSOLUTE/PATH/TO/TARGET-REPOSITORY \
   --apply
 ```
 
-插件写入目标 FairyGUI 工程的 `plugins/agent-bridge/`。Skill 仅在提供 `--skill-root` 时写入目标仓库的 `.agents/skills/fgui-agent-bridge/`。脚本不会创建 Git 元数据，也不会删除目标目录中的其他文件。
+同步脚本会复制完整的 `plugin/` 开发目录及 Skill，适合维护者同步源码快照；普通使用者按第二步只复制 `package.json` 和 `main.js` 即可。脚本不会创建 Git 元数据，也不会删除目标目录中的其他文件。
 
-## MCP 配置
+## 更新
 
-`.mcp.example.json` 提供通用 stdio 配置。Bridge 仓库路径与被操作的 FairyGUI 工程路径是两个独立参数，不能混用。
+1. 在 Bridge 仓库中获取并切换到目标版本：
 
-Codex 也可以直接登记：
+   ```bash
+   git fetch --tags
+   git checkout v0.6.0
+   uv sync --frozen
+   ```
 
-```bash
-codex mcp add fgui --env FGUI_PROJECT_PATH=/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT -- \
-  uv run --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
-  fgui-agent-mcp
-```
+2. 重新复制 `plugin/package.json` 和 `plugin/main.js` 到每个 FairyGUI 工程。
+3. 如果安装了 Skill，重新复制 `.agents/skills/fgui-agent-bridge/`。
+4. 重新打开 FairyGUI 工程。
+5. 执行 `status` 和 `ping`，确认 Bridge 版本、协议与 capability。
+6. 只有 MCP 启动命令或 Bridge 仓库绝对路径发生变化时，才需要重新登记 Codex MCP。
 
-修改 MCP 配置后需要新建 Agent 任务，让客户端重新发现工具。
+多个 FairyGUI 工程可以共用同一个外部 Bridge 仓库和 Python 环境，但每个 FairyGUI 工程都必须分别安装插件。
 
 ## MCP 工具与完成度
 
@@ -155,34 +326,32 @@ MCP 不提供无约束的原始 `call` 工具。CLI 保留 `call` 子命令，�
 ## CLI 常用命令
 
 ```bash
-FGUI="uv run fgui-agent"
-
-$FGUI project
-$FGUI packages
-$FGUI items ViewHub
-$FGUI open ViewHub ViewHubBtnItem
-$FGUI create-component ViewHub NewPanel --width 1920 --height 1080 --folder Panels
-$FGUI import-image ViewHub /absolute/path/button_up.png --folder Sprite --name button_up
-$FGUI create-button ViewHub NewButton --folder Buttons --mode common \
+uv run fgui-agent project
+uv run fgui-agent packages
+uv run fgui-agent items ViewHub
+uv run fgui-agent open ViewHub ViewHubBtnItem
+uv run fgui-agent create-component ViewHub NewPanel --width 1920 --height 1080 --folder Panels
+uv run fgui-agent import-image ViewHub /absolute/path/button_up.png --folder Sprite --name button_up
+uv run fgui-agent create-button ViewHub NewButton --folder Buttons --mode common \
   --image ui://packageIdImageUp --image ui://packageIdImageDown
-$FGUI active
-$FGUI tree
-$FGUI set --id n4_qeeb x 120
-$FGUI undo
-$FGUI redo
-$FGUI history
-$FGUI publish-settings
-$FGUI publish-settings ViewHub
-$FGUI publish --scope active
-$FGUI publish --scope packages --package ViewHub --package Common
-$FGUI publish --scope all --publish-timeout 300
-$FGUI discard
+uv run fgui-agent active
+uv run fgui-agent tree
+uv run fgui-agent set --id n4_qeeb x 120
+uv run fgui-agent undo
+uv run fgui-agent redo
+uv run fgui-agent history
+uv run fgui-agent publish-settings
+uv run fgui-agent publish-settings ViewHub
+uv run fgui-agent publish --scope active
+uv run fgui-agent publish --scope packages --package ViewHub --package Common
+uv run fgui-agent publish --scope all --publish-timeout 300
+uv run fgui-agent discard
 ```
 
 全局参数必须放在子命令前：
 
 ```bash
-$FGUI --project /path/to/repository --timeout 15 ping
+uv run fgui-agent --project /path/to/repository --timeout 15 ping
 ```
 
 ## 创建组件、导入图片与按钮
