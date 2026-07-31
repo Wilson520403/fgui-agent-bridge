@@ -90,16 +90,19 @@ uv run --project /ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE \
 
 ## 可选：安装 Codex Skill
 
-Skill 用于补充操作顺序和安全边界，不是 MCP 的必需项：
+Skill 不是 MCP 的必需项。需要时，将仓库中的：
 
-```bash
-uv run python scripts/sync_to_project.py \
-  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
-  --skill-root /ABSOLUTE/PATH/TO/TARGET-REPOSITORY \
-  --apply
+```text
+.agents/skills/fgui-agent-bridge/
 ```
 
-Skill 会安装到目标仓库的 `.agents/skills/fgui-agent-bridge/`。
+直接复制到目标代码工程的：
+
+```text
+<目标工程>/.agents/skills/fgui-agent-bridge/
+```
+
+不需要单独运行安装脚本。
 
 ## 常用 CLI
 
