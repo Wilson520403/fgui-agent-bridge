@@ -1,0 +1,4 @@
+interface:
+  display_name: "FGUI Agent Bridge"
+  short_description: "安全操作并维护 FairyGUI Agent Bridge"
+  default_prompt: "使用 $fgui-agent-bridge 操作或维护 FairyGUI Agent Bridge。"

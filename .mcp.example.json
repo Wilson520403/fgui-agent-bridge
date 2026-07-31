@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "fgui": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE",
+        "fgui-agent-mcp"
+      ],
+      "env": {
+        "FGUI_PROJECT_PATH": "/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT"
+      }
+    }
+  }
+}

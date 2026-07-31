@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2018",
+    "module": "commonjs",
+    "strict": false,
+    "skipLibCheck": true,
+    "sourceMap": false,
+    "outDir": "./"
+  },
+  "files": [
+    "./types/editor.d.ts",
+    "./types/puerts.d.ts",
+    "./main.ts"
+  ],
+  "exclude": [
+    "./main.js"
+  ]
+}

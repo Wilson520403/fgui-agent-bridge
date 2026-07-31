@@ -1,0 +1,8 @@
+.venv/
+.agent/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+main.js.map
+.DS_Store
