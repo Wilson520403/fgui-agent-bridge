@@ -191,7 +191,7 @@ uv run python scripts/sync_to_project.py --choose-project --apply
 
 
 ## 其他开源库推荐
-- https://github.com/dsphper/lanhu-mcp，用于连接蓝湖 MCP,配合本工具，可以用 CodeX 之类的 Agent 自动切图然后拼接好 UI 发布
+- [蓝湖 MCP](https://github.com/dsphper/lanhu-mcp)，配合本工具，可以用 CodeX 之类的 Agent 自动切图然后拼接好 UI 发布
 
 
 ## 许可证
