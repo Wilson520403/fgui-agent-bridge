@@ -189,6 +189,11 @@ uv run python scripts/sync_to_project.py --choose-project --apply
 
 修改插件源码后，需重新生成并提交 `plugin/main.js`；版本号需同步更新到 `plugin/package.json`、`pyproject.toml`、Python `__version__` 和插件源码/运行文件。
 
+
+## 其他开源库推荐
+- https://github.com/dsphper/lanhu-mcp，用于连接蓝湖 MCP,配合本工具，可以用 CodeX 之类的 Agent 自动切图然后拼接好 UI 发布
+
+
 ## 许可证
 
 [MIT License](LICENSE)
