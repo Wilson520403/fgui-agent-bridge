@@ -1,6 +1,6 @@
 # FairyGUI Agent Bridge
 
-通过 MCP 或 CLI，让 Agent 以结构化指令操作 FairyGUI Editor。
+通过 MCP 或 CLI，让 CodeX之类的Agent 以结构化指令操作 FairyGUI Editor，从而实现自动拼UI界面
 
 - 版本：`0.6.0`
 - 队列协议：`1.0`
