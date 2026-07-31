@@ -26,7 +26,7 @@ cd fgui-agent-bridge
 uv sync --frozen
 ```
 
-需要固定版本时，可在 `uv sync` 前执行 `git checkout v0.6.0`。
+目录选择安装需要使用最新 `main` 分支；`v0.6.0` 标签不包含 `--choose-project`。
 
 ### 2. 安装 FairyGUI 插件
 
