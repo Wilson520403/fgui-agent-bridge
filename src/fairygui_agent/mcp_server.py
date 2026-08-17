@@ -160,6 +160,34 @@ def fgui_import_image(
 
 
 @mcp.tool()
+def fgui_import_font(
+    package_name: str,
+    source_path: str,
+    folder_path: str = "",
+    resource_name: str | None = None,
+    conflict_policy: Literal["error", "auto_rename", "replace"] = "error",
+    exported: bool = True,
+    create_folders: bool = True,
+    timeout_seconds: float = 120,
+) -> dict[str, Any]:
+    """从绝对本地路径导入字体；这是磁盘写入操作，支持拒绝、自动改名或替换同名字体。"""
+    if timeout_seconds <= 0 or timeout_seconds > 1800:
+        raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
+    resolved_source = Path(source_path).expanduser().resolve()
+    params: dict[str, Any] = {
+        "packageName": package_name,
+        "sourcePath": str(resolved_source),
+        "folderPath": folder_path,
+        "conflictPolicy": conflict_policy,
+        "exported": exported,
+        "createFolders": create_folders,
+    }
+    if resource_name:
+        params["resourceName"] = resource_name
+    return _client.call("import_font", params, timeout=timeout_seconds)
+
+
+@mcp.tool()
 def fgui_create_button(
     package_name: str,
     button_name: str,

@@ -2,7 +2,7 @@
   "name": "com.fgui.agent-bridge",
   "displayName": "FGUI Agent Bridge",
   "description": "通过本地 JSON 指令队列让 Agent 安全操作 FairyGUI Editor",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": {
     "name": "Wilson520403"
   },

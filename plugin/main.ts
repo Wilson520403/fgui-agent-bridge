@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.6.0";
+const BRIDGE_VERSION = "0.7.0";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_INTERVAL_FRAMES = 60;
@@ -140,6 +140,7 @@ function writeStatus(): void {
             "open_document",
             "create_component",
             "import_image",
+            "import_font",
             "create_button",
             "get_active_document",
             "get_tree",
@@ -547,6 +548,86 @@ async function importImage(params: any): Promise<any> {
     };
 }
 
+async function importFont(params: any): Promise<any> {
+    const pkg = resolvePackage(params);
+    const rawSourcePath = String(params.sourcePath || "").trim();
+    if (!rawSourcePath)
+        throw new Error("sourcePath 不能为空");
+    if (!IOPath.IsPathRooted(rawSourcePath))
+        throw new Error("sourcePath 必须是绝对路径");
+
+    const sourcePath = IOPath.GetFullPath(rawSourcePath);
+    if (!IOFile.Exists(sourcePath))
+        throw new Error(`字体文件不存在：${sourcePath}`);
+    const detectedType = FairyEditor.FPackageItemType.GetFileType(sourcePath);
+    if (detectedType !== FairyEditor.FPackageItemType.FONT)
+        throw new Error(`文件不是 FairyGUI 支持的字体资源：${sourcePath}`);
+
+    const folderPath = normalizePackagePath(params.folderPath);
+    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    let requestedName = params.resourceName
+        ? String(params.resourceName).trim()
+        : String(IOPath.GetFileNameWithoutExtension(sourcePath));
+    const sourceExtension = String(IOPath.GetExtension(requestedName) || "");
+    if (sourceExtension)
+        requestedName = String(IOPath.GetFileNameWithoutExtension(requestedName));
+    requestedName = validateResourceName(requestedName, "resourceName");
+
+    const policy = normalizeConflictPolicy(params.conflictPolicy);
+    let actualName = requestedName;
+    let existing = findItemInFolder(pkg, folder, actualName);
+    if (existing && policy === "error")
+        throw new Error(`资源已存在：${requestedName}`);
+    if (existing && policy === "auto_rename") {
+        actualName = resolveNewItemName(pkg, folder, requestedName, true);
+        existing = null;
+    }
+
+    if (existing && policy === "replace") {
+        if (existing.type !== FairyEditor.FPackageItemType.FONT)
+            throw new Error(`同名资源不是字体，不能替换：${requestedName}`);
+        await puerts.$promise(pkg.UpdateResource(existing, sourcePath));
+        existing.exported = params.exported !== false;
+        existing.SetChanged();
+        markPackageChanged(pkg);
+        return {
+            operation: "replaced",
+            requestedName,
+            actualName: existing.name,
+            autoRenamed: false,
+            sourcePath,
+            folderPath,
+            item: describeItem(existing),
+            packageModified: true,
+            requiresSave: true,
+            diskWrite: true
+        };
+    }
+
+    const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
+    const item = await puerts.$promise(pkg.ImportResource(sourcePath, folderPath, importFileName));
+    if (!item)
+        throw new Error(`导入字体失败：${sourcePath}`);
+    if (item.type !== FairyEditor.FPackageItemType.FONT)
+        throw new Error(`导入结果不是字体资源：${item.name}`);
+    item.exported = params.exported !== false;
+    item.SetChanged();
+
+    markPackageChanged(pkg);
+    return {
+        operation: "imported",
+        requestedName,
+        actualName: item.name,
+        autoRenamed: item.name !== requestedName,
+        sourcePath,
+        folderPath,
+        item: describeItem(item),
+        packageModified: true,
+        requiresSave: true,
+        diskWrite: true
+    };
+}
+
 function normalizeButtonMode(value: any): string {
     const mode = String(value || "common").toLowerCase();
     if (mode === "common")
@@ -737,6 +818,7 @@ const writableProperties: { [key: string]: boolean } = {
     useSourceSize: true,
     text: true,
     icon: true,
+    font: true,
     tooltips: true,
     blendMode: true,
     customData: true,
@@ -1128,6 +1210,7 @@ function handleCommand(request: AgentRequest): any {
         open_document: true,
         create_component: true,
         import_image: true,
+        import_font: true,
         create_button: true,
         select_object: true,
         set_property: true,
@@ -1185,6 +1268,9 @@ function handleCommand(request: AgentRequest): any {
 
         case "import_image":
             return importImage(params);
+
+        case "import_font":
+            return importFont(params);
 
         case "create_button":
             return createButton(params);

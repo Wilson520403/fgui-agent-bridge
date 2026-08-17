@@ -41,9 +41,9 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 ### 2. 创建、修改和保存
 
 - 新建组件使用 `fgui_create_component`，明确包、目录、名称、宽高、导出状态和冲突策略。
-- 图片导入使用绝对本地路径；`replace` 是磁盘覆盖，不能由文档放弃回滚。
+- 图片与字体导入使用绝对本地路径（`fgui_import_image` / `fgui_import_font`）；`replace` 是磁盘覆盖，不能由文档放弃回滚。
 - 按钮状态图顺序固定为 `up/down/over/selectedOver/disabled/selectedDisabled`，非空值必须是工程内图片 `ui://` URL。
-- 属性修改进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
+- 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
 
 ### 3. 发布

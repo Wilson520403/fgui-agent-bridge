@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.6.0`
+- Bridge 版本：`0.7.0`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 验证版本：`6.1.4`
-- MCP 工具数：24，其中 22 个对应 Bridge Action，`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：25，其中 23 个对应 Bridge Action，`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -29,6 +29,7 @@
 | `fgui_open_document` | `package_name`, `item_name` | 打开已有组件文档 |
 | `fgui_create_component` | `package_name`, `component_name`, `width=800`, `height=600`, `folder_path=''`, `extension_id?`, `exported=True`, `auto_rename=False`, `create_folders=True`, `open_after_create=True` | 新建组件资源并可立即打开；不自动保存 |
 | `fgui_import_image` | `package_name`, `source_path`, `folder_path=''`, `resource_name?`, `conflict_policy='error'`, `exported=True`, `create_folders=True`, `timeout_seconds=120` | 从绝对本地路径导入图片；支持 `error/auto_rename/replace` |
+| `fgui_import_font` | `package_name`, `source_path`, `folder_path=''`, `resource_name?`, `conflict_policy='error'`, `exported=True`, `create_folders=True`, `timeout_seconds=120` | 从绝对本地路径导入字体；支持 `error/auto_rename/replace` |
 | `fgui_create_button` | `package_name`, `button_name`, `width=160`, `height=60`, `folder_path=''`, `mode='common'`, `image_urls?`, `create_text=True`, `create_icon=True`, `create_relations=True`, `as_list_item=False`, `exported=True`, `auto_rename=False`, `create_folders=True`, `open_after_create=True`, `extension_id?` | 创建 Common/Check/Radio 标准 Button 组件 |
 | `fgui_get_active_document` | 无 | 读取活动文档、修改状态和选择数量 |
 | `fgui_get_tree` | `max_depth=12` | 读取对象树、ID、路径和常用属性 |
@@ -53,11 +54,11 @@
 - 缺失目录默认创建；名称冲突默认拒绝，可选择自动追加 `_1`、`_2`。
 - 创建结果返回实际名称、资源描述、`ui://` URL、文档状态和 `requiresSave=true`。
 
-### 图片
+### 图片与字体
 
-- `source_path` 由 Python 端展开为绝对路径，编辑器端再次验证绝对路径、文件存在和图片类型。
-- 导入名称按源扩展名落盘；图片资源默认 `exported=true`。
-- `error` 拒绝同名；`auto_rename` 生成唯一名称；`replace` 仅允许替换同名图片。
+- `source_path` 由 Python 端展开为绝对路径，编辑器端再次验证绝对路径、文件存在和对应资源类型（图片/字体）。
+- 导入名称按源扩展名落盘；图片和字体资源默认 `exported=true`。
+- `error` 拒绝同名；`auto_rename` 生成唯一名称；`replace` 仅允许替换同名同类型资源（图片替换图片、字体替换字体）。
 - 导入/替换包含磁盘写入并返回 `diskWrite=true`；包元数据仍需保存。
 
 ### 按钮
@@ -74,6 +75,7 @@
 - `status`、`ping`、`project`、`packages`、`items`、`open`
 - `create-component PACKAGE NAME [--width] [--height] [--folder] [--extension] [--not-exported] [--auto-rename] [--no-create-folders] [--no-open]`
 - `import-image PACKAGE SOURCE [--folder] [--name] [--conflict error|auto_rename|replace] [--not-exported] [--no-create-folders] [--import-timeout]`
+- `import-font PACKAGE SOURCE [--folder] [--name] [--conflict error|auto_rename|replace] [--not-exported] [--no-create-folders] [--import-timeout]`
 - `create-button PACKAGE NAME [--width] [--height] [--folder] [--mode common|check|radio] [--image URL] [--no-text] [--no-icon] [--no-relations] [--as-list-item] [--not-exported] [--auto-rename] [--no-create-folders] [--no-open] [--extension]`
 - `active`、`tree`、`select`、`set`、`insert`、`remove`
 - `save`、`discard`、`save-all`、`history`、`undo`、`redo`
@@ -92,6 +94,7 @@ list_items
 open_document
 create_component
 import_image
+import_font
 create_button
 get_active_document
 get_tree
@@ -119,7 +122,7 @@ redo
 - 创建组件/按钮、导入图片、插入/删除对象不进入 Agent 属性事务栈。
 - 图片导入是磁盘写入；`discard_document` 不能回滚已导入资源。
 - 发布期间阻止打开文档、资源创建/导入、对象修改、保存、放弃和撤销/重做。
-- 仍未提供非图片资源导入，以及包资源删除、移动、重命名工具。
+- 仍未提供音频、Spine 等非图片/字体资源导入，以及包资源删除、移动、重命名工具。
 - Windows 真实环境端到端验证仍未执行。
 
 ## 文件变动同步矩阵

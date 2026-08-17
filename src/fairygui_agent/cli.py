@@ -88,6 +88,21 @@ def build_parser() -> argparse.ArgumentParser:
     import_image_parser.add_argument("--no-create-folders", action="store_true")
     import_image_parser.add_argument("--import-timeout", type=float, default=120.0)
 
+    import_font_parser = subparsers.add_parser("import-font", help="从本地路径导入字体")
+    import_font_parser.add_argument("package_name")
+    import_font_parser.add_argument("source_path")
+    import_font_parser.add_argument("--folder", dest="folder_path", default="")
+    import_font_parser.add_argument("--name", dest="resource_name")
+    import_font_parser.add_argument(
+        "--conflict",
+        dest="conflict_policy",
+        choices=("error", "auto_rename", "replace"),
+        default="error",
+    )
+    import_font_parser.add_argument("--not-exported", action="store_true")
+    import_font_parser.add_argument("--no-create-folders", action="store_true")
+    import_font_parser.add_argument("--import-timeout", type=float, default=120.0)
+
     create_button_parser = subparsers.add_parser("create-button", help="创建标准 FairyGUI Button 组件")
     create_button_parser.add_argument("package_name")
     create_button_parser.add_argument("button_name")
@@ -204,6 +219,20 @@ def main() -> int:
                 params["extensionId"] = args.extension_id
         elif args.command == "import-image":
             action = "import_image"
+            source_path = str(Path(args.source_path).expanduser().resolve())
+            params = {
+                "packageName": args.package_name,
+                "sourcePath": source_path,
+                "folderPath": args.folder_path,
+                "conflictPolicy": args.conflict_policy,
+                "exported": not args.not_exported,
+                "createFolders": not args.no_create_folders,
+            }
+            if args.resource_name:
+                params["resourceName"] = args.resource_name
+            command_timeout = args.import_timeout
+        elif args.command == "import-font":
+            action = "import_font"
             source_path = str(Path(args.source_path).expanduser().resolve())
             params = {
                 "packageName": args.package_name,

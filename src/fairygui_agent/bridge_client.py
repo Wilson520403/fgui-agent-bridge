@@ -23,6 +23,7 @@ REQUIRED_CAPABILITIES = frozenset(
         "open_document",
         "create_component",
         "import_image",
+        "import_font",
         "create_button",
         "get_active_document",
         "get_tree",

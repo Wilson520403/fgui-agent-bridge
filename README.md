@@ -2,7 +2,7 @@
 
 通过 MCP 或 CLI，让 CodeX之类的Agent 以结构化指令操作 FairyGUI Editor，从而实现自动拼UI界面
 
-- 版本：`0.6.0`
+- 版本：`0.7.0`
 - 队列协议：`1.0`
 - 已验证 FairyGUI Editor：`6.1.4`
 - 通信：本地 JSON 队列 + MCP stdio
@@ -139,6 +139,7 @@ uv run fgui-agent publish --scope active
 ```bash
 uv run fgui-agent create-component ViewHub NewPanel --width 1920 --height 1080
 uv run fgui-agent import-image ViewHub /absolute/path/button.png
+uv run fgui-agent import-font ViewHub /absolute/path/font.ttf
 uv run fgui-agent create-button ViewHub NewButton --mode common
 ```
 
@@ -156,7 +157,7 @@ uv run fgui-agent \
 
 - **连接与读取**：`fgui_status`、`fgui_ping`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_get_history`
 - **导航与修改**：`fgui_open_document`、`fgui_select_object`、`fgui_set_property`、`fgui_insert_object`、`fgui_remove_object`
-- **创建资源**：`fgui_create_component`、`fgui_import_image`、`fgui_create_button`
+- **创建资源**：`fgui_create_component`、`fgui_import_image`、`fgui_import_font`、`fgui_create_button`
 - **保存与回退**：`fgui_save_document`、`fgui_save_all`、`fgui_discard_document`、`fgui_undo`、`fgui_redo`
 - **发布**：`fgui_get_publish_settings`、`fgui_publish`
 
@@ -164,7 +165,7 @@ MCP 只提供显式工具；CLI 的 `call` 仅用于调试原始 Action。
 
 ## 当前限制
 
-- 暂不支持字体、音频、Spine 等非图片资源导入。
+- 暂不支持音频、Spine 等非图片/字体资源导入。
 - 暂不支持删除、移动或重命名包资源。
 - 暂不支持批量布局和批量属性事务。
 - Windows 尚未完成真实环境端到端验证。
