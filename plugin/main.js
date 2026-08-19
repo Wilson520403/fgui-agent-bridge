@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.7.0";
+const BRIDGE_VERSION = "0.8.0";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_INTERVAL_FRAMES = 60;
@@ -27,6 +27,7 @@ let statusFile = "";
 let logFile = "";
 let initialized = false;
 let publishInProgress = false;
+const animationPreviewContexts = {};
 function nowIso() {
     return new Date().toISOString();
 }
@@ -100,6 +101,19 @@ function writeStatus() {
             "import_image",
             "import_font",
             "create_button",
+            "import_sound",
+            "create_movieclip",
+            "get_movieclip",
+            "update_movieclip",
+            "remove_movieclip",
+            "list_transitions",
+            "get_transition",
+            "upsert_transition",
+            "remove_transition",
+            "add_transition_item",
+            "update_transition_item",
+            "remove_transition_item",
+            "preview_animation",
             "get_active_document",
             "get_tree",
             "select_object",
@@ -165,7 +179,9 @@ function describeDocument(doc) {
         packageName: doc.packageItem && doc.packageItem.owner ? doc.packageItem.owner.name : null,
         modified: doc.isModified,
         savedVersion: doc.savedVersion,
-        selectionCount: doc.GetSelection().Count
+        selectionCount: doc.GetSelection().Count,
+        transitionCount: doc.content && doc.content.transitions ? doc.content.transitions.items.Count : 0,
+        transitions: summarizeTransitions(doc)
     };
 }
 function safeRequestId(value) {
@@ -207,6 +223,22 @@ function describeObject(obj, depth, maxDepth) {
         text: obj.text || "",
         icon: obj.icon || ""
     };
+    if (String(obj.objectType) === FairyEditor.FObjectType.MOVIECLIP) {
+        const movieClip = obj;
+        result.playing = Boolean(movieClip.playing);
+        result.frame = Number(movieClip.frame);
+        result.frameCount = movieClip.frameCount === undefined ? null : Number(movieClip.frameCount);
+        if ((result.frameCount === null || !Number.isFinite(result.frameCount)) && obj.resourceURL) {
+            try {
+                const resource = resolveItem({ url: obj.resourceURL });
+                const asset = resource.GetAsset();
+                if (asset && asset.animation)
+                    result.frameCount = Number(asset.animation.frameCount);
+            }
+            catch (_) { /* 资源尚未加载时保留 null。 */ }
+        }
+        result.color = movieClip.color ? colorToValue(movieClip.color) : null;
+    }
     const component = obj;
     if (typeof component.numChildren === "number")
         result.opaque = component.opaque;
@@ -593,6 +625,15 @@ function findObjectById(root, id) {
     }
     return null;
 }
+function findObjectsByResourceUrl(root, resourceUrl, result) {
+    if (String(root.resourceURL || "") === resourceUrl)
+        result.push(root);
+    const component = root;
+    if (typeof component.numChildren !== "number")
+        return;
+    for (let i = 0; i < component.numChildren; i++)
+        findObjectsByResourceUrl(component.GetChildAt(i), resourceUrl, result);
+}
 function findObjectsByName(root, name, result) {
     if (root.name === name)
         result.push(root);
@@ -645,6 +686,963 @@ function resolveObject(doc, locator) {
         return matches[0];
     }
     throw new Error("对象定位信息缺失，请提供 target.path、target.id 或 target.name");
+}
+// Animation bridge helpers. FairyGUI Editor 6.1.4 exposes these APIs through Puerts.
+const TRANSITION_TYPES = [
+    "XY", "Size", "Pivot", "Scale", "Skew", "Alpha", "Rotation", "Color",
+    "Animation", "Visible", "Sound", "Transition", "Shake", "ColorFilter", "Text", "Icon"
+];
+const TRANSITION_TYPE_SET = {};
+for (const transitionType of TRANSITION_TYPES)
+    TRANSITION_TYPE_SET[transitionType] = true;
+function numberValue(value, label, minimum = -1000000, maximum = 1000000) {
+    const result = Number(value);
+    if (!Number.isFinite(result) || result < minimum || result > maximum)
+        throw new Error(`${label}必须是 ${minimum} 到 ${maximum} 之间的有限数字`);
+    return result;
+}
+function nonNegativeInt(value, label, fallback = 0) {
+    const result = value === undefined || value === null ? fallback : Number(value);
+    if (!Number.isInteger(result) || result < 0 || result > 1000000)
+        throw new Error(`${label}必须是 0 到 1000000 之间的整数`);
+    return result;
+}
+function normalizeTransitionName(value) {
+    return validateResourceName(value, "transitionName");
+}
+function normalizeTransitionType(value) {
+    const type = String(value || "").trim();
+    if (!TRANSITION_TYPE_SET[type])
+        throw new Error(`不支持的 Transition 轨道类型：${type}`);
+    return type;
+}
+function normalizeEase(value) {
+    const ease = String(value || "Quad.Out").trim();
+    const normalized = ease.replace(/\./g, "");
+    const allowed = [
+        "Linear", "SineIn", "SineOut", "SineInOut", "QuadIn", "QuadOut", "QuadInOut",
+        "CubicIn", "CubicOut", "CubicInOut", "QuartIn", "QuartOut", "QuartInOut",
+        "QuintIn", "QuintOut", "QuintInOut", "ExpoIn", "ExpoOut", "ExpoInOut",
+        "CircIn", "CircOut", "CircInOut", "ElasticIn", "ElasticOut", "ElasticInOut",
+        "BackIn", "BackOut", "BackInOut", "BounceIn", "BounceOut", "BounceInOut", "Custom"
+    ];
+    if (allowed.indexOf(normalized) < 0)
+        throw new Error(`不支持的缓动类型：${ease}`);
+    if (normalized === "Linear" || normalized === "Custom")
+        return normalized;
+    return normalized.replace(/(InOut|In|Out)$/, ".$1");
+}
+function transitionValueObject(raw) {
+    if (raw === null || raw === undefined)
+        return {};
+    if (typeof raw === "number" || typeof raw === "boolean" || typeof raw === "string")
+        return { value: raw };
+    if (typeof raw !== "object" || Array.isArray(raw))
+        throw new Error("Transition value 必须是对象、数字、布尔值或字符串");
+    return raw;
+}
+function assertKnownKeys(value, allowed, label) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        return;
+    for (const key of Object.keys(value)) {
+        if (allowed.indexOf(key) < 0)
+            throw new Error(`${label} 包含未知字段：${key}`);
+    }
+}
+function validateTransitionValueKeys(type, raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        return;
+    const common2 = ["x", "y", "f1", "f2", "b1", "b2"];
+    const allowed = {
+        XY: common2.concat(["percent", "b3"]), Size: common2, Pivot: common2, Scale: common2, Skew: common2,
+        Alpha: ["value", "f1"], Rotation: ["value", "f1"], Color: ["r", "g", "b", "a"],
+        Animation: ["playing", "frame", "animationName", "skinName"], Visible: ["visible", "value"],
+        Sound: ["soundUrl", "volume", "s", "i"], Transition: ["transitionName", "playTimes", "stopTime", "s", "i", "f1"],
+        Shake: ["amplitude", "duration", "f1", "f2"],
+        ColorFilter: ["brightness", "contrast", "saturation", "hue", "f1", "f2", "f3", "f4"],
+        Text: ["text", "value", "s"], Icon: ["text", "value", "s"]
+    };
+    assertKnownKeys(raw, allowed[type] || [], `${type} value`);
+}
+function describePathPoints(points) {
+    const result = [];
+    if (!points)
+        return result;
+    for (let index = 0; index < points.Count; index++) {
+        const point = points.get_Item(index);
+        result.push({
+            x: Number(point.pos.x), y: Number(point.pos.y), curveType: String(point.curveType), smooth: Boolean(point.smooth),
+            control1: point.control1 ? { x: Number(point.control1.x), y: Number(point.control1.y) } : null,
+            control2: point.control2 ? { x: Number(point.control2.x), y: Number(point.control2.y) } : null
+        });
+    }
+    return result;
+}
+function applyPathPoints(item, raw, custom) {
+    if (raw === undefined || raw === null)
+        return;
+    if (typeof raw === "string" || (typeof raw === "object" && !Array.isArray(raw) && raw.encoded !== undefined)) {
+        const encoded = typeof raw === "string" ? raw : String(raw.encoded || "");
+        if (custom)
+            item.customEaseData = encoded;
+        else
+            item.pathData = encoded;
+        return;
+    }
+    if (!Array.isArray(raw))
+        throw new Error(`${custom ? "customEase" : "path"} 必须是路径点数组、{encoded, points}、内部编码字符串或 null`);
+    if (custom) {
+        const customEase = item.customEase;
+        customEase.points.Clear();
+        const PointType = CS.FairyGUI.GPathPoint;
+        const Vector3Type = CS.UnityEngine.Vector3;
+        for (let index = 0; index < raw.length; index++) {
+            const point = raw[index];
+            assertKnownKeys(point, ["x", "y", "curveType", "smooth", "control1", "control2", "near"], `customEase[${index}]`);
+            const pos = new Vector3Type(numberValue(point.x, `customEase[${index}].x`), numberValue(point.y, `customEase[${index}].y`), 0);
+            let value;
+            if (point.control1 && point.control2) {
+                const c1 = new Vector3Type(numberValue(point.control1.x, "control1.x"), numberValue(point.control1.y, "control1.y"), 0);
+                const c2 = new Vector3Type(numberValue(point.control2.x, "control2.x"), numberValue(point.control2.y, "control2.y"), 0);
+                value = new PointType(pos, c1, c2);
+            }
+            else if (point.control1) {
+                const c = new Vector3Type(numberValue(point.control1.x, "control1.x"), numberValue(point.control1.y, "control1.y"), 0);
+                value = new PointType(pos, c);
+            }
+            else
+                value = new PointType(pos);
+            value.smooth = Boolean(point.smooth);
+            customEase.points.Add(value);
+        }
+        customEase.Update();
+        return;
+    }
+    item.usePath = true;
+    for (let index = 0; index < raw.length; index++) {
+        const point = raw[index];
+        assertKnownKeys(point, ["x", "y", "curveType", "smooth", "control1", "control2", "near"], `path[${index}]`);
+        item.AddPathPoint(numberValue(point.x, `path[${index}].x`), numberValue(point.y, `path[${index}].y`), Boolean(point.near));
+        if (point.control1)
+            item.UpdateControlPoint(index, 1, numberValue(point.control1.x, "control1.x"), numberValue(point.control1.y, "control1.y"));
+        if (point.control2)
+            item.UpdateControlPoint(index, 2, numberValue(point.control2.x, "control2.x"), numberValue(point.control2.y, "control2.y"));
+        if (point.smooth !== undefined && item.pathPoints && item.pathPoints.Count > index) {
+            const stored = item.pathPoints.get_Item(index);
+            stored.smooth = Boolean(point.smooth);
+            item.pathPoints.set_Item(index, stored);
+        }
+    }
+}
+function colorFromValue(raw) {
+    const value = transitionValueObject(raw);
+    const r = numberValue(value.r, "color.r", 0, 1);
+    const g = numberValue(value.g, "color.g", 0, 1);
+    const b = numberValue(value.b, "color.b", 0, 1);
+    const a = value.a === undefined ? 1 : numberValue(value.a, "color.a", 0, 1);
+    return new CS.UnityEngine.Color(r, g, b, a);
+}
+function colorToValue(color) {
+    if (!color)
+        return null;
+    return { r: Number(color.r), g: Number(color.g), b: Number(color.b), a: Number(color.a) };
+}
+function applyTransitionValue(doc, type, destination, raw) {
+    validateTransitionValueKeys(type, raw);
+    const value = transitionValueObject(raw);
+    switch (type) {
+        case "XY":
+        case "Size":
+        case "Pivot":
+        case "Scale":
+        case "Skew":
+            destination.f1 = numberValue(value.x === undefined ? value.f1 : value.x, `${type}.x`);
+            destination.f2 = numberValue(value.y === undefined ? value.f2 : value.y, `${type}.y`);
+            destination.b1 = value.b1 === undefined ? true : Boolean(value.b1);
+            destination.b2 = value.b2 === undefined ? true : Boolean(value.b2);
+            if (type === "XY")
+                destination.b3 = Boolean(value.percent === undefined ? value.b3 : value.percent);
+            break;
+        case "Alpha":
+        case "Rotation":
+            destination.f1 = numberValue(value.value === undefined ? value.f1 : value.value, `${type}.value`);
+            break;
+        case "Color":
+            destination.iu = colorFromValue(value);
+            break;
+        case "Animation":
+            destination.b1 = Boolean(value.playing);
+            destination.i = nonNegativeInt(value.frame, "Animation.frame", 0);
+            destination.s = value.animationName === undefined || value.animationName === null ? "" : String(value.animationName);
+            destination.s2 = value.skinName === undefined || value.skinName === null ? "" : String(value.skinName);
+            break;
+        case "Visible":
+            destination.b1 = Boolean(value.visible === undefined ? value.value : value.visible);
+            break;
+        case "Sound":
+            destination.s = String(value.soundUrl === undefined ? value.s || "" : value.soundUrl);
+            if (!destination.s)
+                throw new Error("Sound.soundUrl 不能为空");
+            const soundItem = resolveItem({ url: destination.s });
+            if (soundItem.type !== FairyEditor.FPackageItemType.SOUND)
+                throw new Error(`Sound.soundUrl 不是声音资源：${destination.s}`);
+            const volume = value.volume === undefined ? 1 : numberValue(value.volume, "Sound.volume", 0, 1);
+            destination.i = Math.round(volume * 100);
+            break;
+        case "Transition":
+            destination.s = normalizeTransitionName(value.transitionName === undefined ? value.s : value.transitionName);
+            if (!doc.content.transitions.GetItem(destination.s))
+                throw new Error(`嵌套 Transition 不存在：${destination.s}`);
+            destination.i = value.playTimes === undefined ? 1 : Number(value.playTimes);
+            if (!Number.isInteger(destination.i) || destination.i < -1 || destination.i > 1000000)
+                throw new Error("Transition.playTimes 必须是 -1 到 1000000 之间的整数");
+            destination.f1 = value.stopTime === undefined ? 0 : numberValue(value.stopTime, "Transition.stopTime", -1);
+            break;
+        case "Shake":
+            destination.f1 = numberValue(value.amplitude === undefined ? value.f1 : value.amplitude, "Shake.amplitude", 0);
+            destination.f2 = numberValue(value.duration === undefined ? value.f2 : value.duration, "Shake.duration", 0);
+            break;
+        case "ColorFilter":
+            destination.f1 = numberValue(value.brightness === undefined ? value.f1 : value.brightness, "ColorFilter.brightness");
+            destination.f2 = numberValue(value.contrast === undefined ? value.f2 : value.contrast, "ColorFilter.contrast");
+            destination.f3 = numberValue(value.saturation === undefined ? value.f3 : value.saturation, "ColorFilter.saturation");
+            destination.f4 = numberValue(value.hue === undefined ? value.f4 : value.hue, "ColorFilter.hue");
+            break;
+        case "Text":
+        case "Icon":
+            destination.s = String(value.text === undefined ? (value.value === undefined ? value.s || "" : value.value) : value.text);
+            break;
+    }
+}
+function describeTransitionValue(type, source) {
+    if (!source)
+        return null;
+    switch (type) {
+        case "XY":
+        case "Size":
+        case "Pivot":
+        case "Scale":
+        case "Skew":
+            return { x: source.f1, y: source.f2, b1: source.b1, b2: source.b2, percent: type === "XY" ? source.b3 : undefined };
+        case "Alpha":
+        case "Rotation":
+            return source.f1;
+        case "Color":
+            return colorToValue(source.iu);
+        case "Animation":
+            return { playing: source.b1, frame: source.i, animationName: source.s || "", skinName: source.s2 || "" };
+        case "Visible":
+            return { visible: source.b1 };
+        case "Sound":
+            return { soundUrl: source.s || "", volume: Number(source.i) / 100 };
+        case "Transition":
+            return { transitionName: source.s || "", playTimes: source.i, stopTime: source.f1 };
+        case "Shake":
+            return { amplitude: source.f1, duration: source.f2 };
+        case "ColorFilter":
+            return { brightness: source.f1, contrast: source.f2, saturation: source.f3, hue: source.f4 };
+        case "Text":
+        case "Icon":
+            return { text: source.s || "" };
+    }
+    return null;
+}
+function resolveTransition(doc, name) {
+    const transitionName = normalizeTransitionName(name);
+    const transition = doc.content.transitions.GetItem(transitionName);
+    if (!transition)
+        throw new Error(`当前组件中不存在 Transition：${transitionName}`);
+    return transition;
+}
+function isSyntheticTweenEndpoint(item) {
+    return Boolean(item && item.prevItem && item.prevItem.tween && !item.tween);
+}
+function describeTransitionItem(item) {
+    const type = String(item.type);
+    const result = {
+        targetId: item.targetId || "",
+        type,
+        frame: item.frame,
+        label: item.label || "",
+        value: describeTransitionValue(type, item.value),
+        tween: null
+    };
+    if (item.tween) {
+        const next = item.nextItem;
+        if (!next)
+            throw new Error(`Transition Tween 缺少结束关键帧：${type}@${item.frame}`);
+        result.tween = {
+            duration: Math.max(0, Number(next.frame) - Number(item.frame)),
+            ease: item.easeName || item.easeType || "Quad.Out",
+            repeat: item.repeat || 0,
+            yoyo: Boolean(item.yoyo),
+            start: describeTransitionValue(type, item.value),
+            end: describeTransitionValue(type, next.value),
+            path: item.usePath ? { encoded: item.pathData, points: describePathPoints(item.pathPoints) } : null,
+            customEase: String(item.easeType || "").replace(/\./g, "") === "Custom" ? { encoded: item.customEaseData, points: describePathPoints(item.customEase.points) } : null
+        };
+    }
+    return result;
+}
+function describeTransition(transition) {
+    const items = [];
+    for (let index = 0; index < transition.items.Count; index++) {
+        const item = transition.items.get_Item(index);
+        if (!isSyntheticTweenEndpoint(item))
+            items.push(describeTransitionItem(item));
+    }
+    return {
+        name: transition.name,
+        options: transition.options,
+        autoPlay: transition.autoPlay,
+        autoPlayDelay: transition.autoPlayDelay,
+        autoPlayRepeat: transition.autoPlayRepeat,
+        frameRate: transition.frameRate,
+        playTimes: transition.playTimes,
+        maxFrame: transition.maxFrame,
+        playing: transition.playing,
+        items
+    };
+}
+function summarizeTransitions(doc) {
+    const result = [];
+    if (!doc || !doc.content || !doc.content.transitions)
+        return result;
+    const transitions = doc.content.transitions.items;
+    for (let index = 0; index < transitions.Count; index++) {
+        const transition = transitions.get_Item(index);
+        let publicItemCount = 0;
+        for (let itemIndex = 0; itemIndex < transition.items.Count; itemIndex++) {
+            if (!isSyntheticTweenEndpoint(transition.items.get_Item(itemIndex)))
+                publicItemCount++;
+        }
+        result.push({ name: transition.name, frameRate: transition.frameRate, maxFrame: transition.maxFrame, itemCount: publicItemCount, autoPlay: transition.autoPlay });
+    }
+    return result;
+}
+function listTransitions(doc) {
+    const list = [];
+    const transitions = doc.content.transitions.items;
+    for (let index = 0; index < transitions.Count; index++)
+        list.push(describeTransition(transitions.get_Item(index)));
+    return list;
+}
+function validateTransitionTarget(doc, targetId, type) {
+    const id = targetId === undefined || targetId === null ? "" : String(targetId);
+    const target = id ? findObjectById(doc.content, id) : doc.content;
+    if (!target)
+        throw new Error(`Transition targetId 不存在：${id}`);
+    if (type && !FairyEditor.FTransition.GetAllowType(target, type))
+        throw new Error(`目标 ${id || "root"} 不支持 Transition 轨道：${type}`);
+    return id;
+}
+function getOrCreateTransitionItem(transition, targetId, type, frame) {
+    for (let index = 0; index < transition.items.Count; index++) {
+        const existing = transition.items.get_Item(index);
+        if (Number(existing.frame) === frame && String(existing.targetId || "") === targetId && String(existing.type) === type)
+            return existing;
+    }
+    const item = transition.CreateItem(targetId, type, frame);
+    if (!item)
+        throw new Error(`无法创建 Transition 轨道：${type}@${frame}`);
+    return item;
+}
+function applyTransitionItem(doc, transition, raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        throw new Error("Transition item 必须是对象");
+    assertKnownKeys(raw, ["targetId", "type", "frame", "label", "value", "tween"], "Transition item");
+    const type = normalizeTransitionType(raw.type);
+    const targetId = validateTransitionTarget(doc, raw.targetId, type);
+    const frame = nonNegativeInt(raw.frame, "item.frame", 0);
+    const item = getOrCreateTransitionItem(transition, targetId, type, frame);
+    item.label = raw.label === undefined || raw.label === null ? "" : String(raw.label);
+    if (raw.tween !== undefined && raw.tween !== null && raw.tween !== false) {
+        const tween = raw.tween;
+        if (typeof tween !== "object" || Array.isArray(tween))
+            throw new Error("item.tween 必须是对象");
+        assertKnownKeys(tween, ["duration", "ease", "repeat", "yoyo", "start", "end", "path", "customEase"], "Transition tween");
+        const duration = nonNegativeInt(tween.duration, "tween.duration", 1);
+        if (duration <= 0)
+            throw new Error("tween.duration 必须大于 0");
+        const endItem = getOrCreateTransitionItem(transition, targetId, type, frame + duration);
+        item.tween = true;
+        const ease = normalizeEase(tween.ease);
+        const easeParts = ease.split(".");
+        item.easeType = easeParts[0];
+        if (easeParts.length > 1 && String(item.easeInOutType || "") !== easeParts[1])
+            item.easeInOutType = easeParts[1];
+        item.repeat = tween.repeat === undefined ? 0 : Number(tween.repeat);
+        if (!Number.isInteger(item.repeat) || item.repeat < -1 || item.repeat > 1000000)
+            throw new Error("tween.repeat 必须是 -1 到 1000000 之间的整数");
+        item.yoyo = Boolean(tween.yoyo);
+        applyPathPoints(item, tween.path, false);
+        applyPathPoints(item, tween.customEase, true);
+        applyTransitionValue(doc, type, item.value, tween.start === undefined ? raw.value : tween.start);
+        applyTransitionValue(doc, type, endItem.value, tween.end === undefined ? raw.value : tween.end);
+    }
+    else {
+        item.tween = false;
+        applyTransitionValue(doc, type, item.value, raw.value);
+    }
+    return item;
+}
+function applyTransitionDefinition(doc, transition, raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        throw new Error("Transition 定义必须是对象");
+    assertKnownKeys(raw, ["name", "options", "autoPlay", "autoPlayDelay", "autoPlayRepeat", "frameRate", "playTimes", "items", "maxFrame", "playing"], "Transition");
+    const name = normalizeTransitionName(raw.name || transition.name);
+    if (transition.name !== name)
+        transition.name = name;
+    transition.frameRate = nonNegativeInt(raw.frameRate, "frameRate", 60);
+    if (transition.frameRate < 1 || transition.frameRate > 255)
+        throw new Error("frameRate 必须是 1 到 255 之间的整数");
+    transition.options = raw.options === undefined ? 0 : Number(raw.options);
+    if (!Number.isInteger(transition.options) || transition.options < 0 || transition.options > 0xffff)
+        throw new Error("options 必须是 0 到 65535 之间的整数");
+    transition.autoPlay = Boolean(raw.autoPlay);
+    transition.autoPlayDelay = raw.autoPlayDelay === undefined ? 0 : numberValue(raw.autoPlayDelay, "autoPlayDelay", 0);
+    transition.autoPlayRepeat = raw.autoPlayRepeat === undefined ? 1 : Number(raw.autoPlayRepeat);
+    if (!Number.isInteger(transition.autoPlayRepeat) || transition.autoPlayRepeat < -1 || transition.autoPlayRepeat > 1000000)
+        throw new Error("autoPlayRepeat 必须是 -1 到 1000000 之间的整数");
+    if (raw.playTimes !== undefined) {
+        transition.playTimes = Number(raw.playTimes);
+        if (!Number.isInteger(transition.playTimes) || transition.playTimes < -1 || transition.playTimes > 1000000)
+            throw new Error("playTimes 必须是 -1 到 1000000 之间的整数");
+    }
+    const existing = [];
+    for (let index = 0; index < transition.items.Count; index++)
+        existing.push(transition.items.get_Item(index));
+    for (const item of existing)
+        transition.DeleteItem(item);
+    const items = raw.items === undefined ? [] : raw.items;
+    if (!Array.isArray(items))
+        throw new Error("Transition.items 必须是数组");
+    for (const item of items)
+        applyTransitionItem(doc, transition, item);
+    transition.Validate();
+    return transition;
+}
+function restoreTransitions(doc, snapshot) {
+    const XmlType = CS.FairyGUI.Utils.XML;
+    const xml = new XmlType(snapshot);
+    doc.UpdateTransitions(xml);
+    doc.RefreshTransition();
+    doc.RefreshInspectors();
+}
+function transitionSnapshot(doc) {
+    return String(doc.content.transitions.Write().ToXMLString(false));
+}
+function pushAnimationHistory(doc, before, documentModifiedBefore) {
+    const after = transitionSnapshot(doc);
+    if (JSON.stringify(before) === JSON.stringify(after))
+        return;
+    agentUndoStack.push({ kind: "animation", documentUrl: doc.docURL, before, after, documentModifiedBefore });
+    agentRedoStack.length = 0;
+}
+function applyAnimationHistory(entry, undo) {
+    const doc = openDocumentByUrl(entry.documentUrl);
+    const expected = undo ? entry.after : entry.before;
+    const next = undo ? entry.before : entry.after;
+    if (JSON.stringify(transitionSnapshot(doc)) !== JSON.stringify(expected))
+        throw new Error("动画结构已被其他操作修改，拒绝撤销或重做");
+    restoreTransitions(doc, next);
+    doc.SetModified(undo ? entry.documentModifiedBefore : true);
+    return { mode: "agent-animation", document: describeDocument(doc), transitions: listTransitions(doc) };
+}
+function mutateTransitions(params, operation, mutate) {
+    const doc = getActiveDocument();
+    const before = transitionSnapshot(doc);
+    const documentModifiedBefore = doc.isModified;
+    try {
+        const result = mutate(doc);
+        doc.RefreshTransition();
+        doc.RefreshInspectors();
+        doc.SetModified(true);
+        pushAnimationHistory(doc, before, documentModifiedBefore);
+        return { operation, result, document: describeDocument(doc), transitions: listTransitions(doc) };
+    }
+    catch (error) {
+        try {
+            restoreTransitions(doc, before);
+            doc.SetModified(documentModifiedBefore);
+        }
+        catch (_) { /* preserve the original editor error */ }
+        throw error;
+    }
+}
+function upsertTransition(params) {
+    const definition = params.transition;
+    if (!definition || typeof definition !== "object" || Array.isArray(definition))
+        throw new Error("transition 必须是对象");
+    const name = normalizeTransitionName(definition.name || params.name);
+    return mutateTransitions(params, "upserted", (doc) => {
+        const transitions = doc.content.transitions;
+        const existing = transitions.GetItem(name);
+        const transition = existing || transitions.AddItem(name);
+        return describeTransition(applyTransitionDefinition(doc, transition, { ...definition, name }));
+    });
+}
+function addTransitionItem(params) {
+    return mutateTransitions(params, "item_added", (doc) => {
+        const transition = resolveTransition(doc, params.name);
+        const definition = describeTransition(transition);
+        definition.items.push(params.item);
+        applyTransitionDefinition(doc, transition, definition);
+        return describeTransition(transition);
+    });
+}
+function publicTransitionItem(definition, index) {
+    const itemIndex = nonNegativeInt(index, "itemIndex");
+    if (itemIndex >= definition.items.length)
+        throw new Error(`Transition itemIndex 超出范围：${itemIndex}`);
+    return { itemIndex, item: definition.items[itemIndex] };
+}
+function mergePlainObjects(base, patch) {
+    if (!base || typeof base !== "object" || Array.isArray(base) || !patch || typeof patch !== "object" || Array.isArray(patch))
+        return patch;
+    const result = { ...base };
+    for (const key of Object.keys(patch))
+        result[key] = mergePlainObjects(base[key], patch[key]);
+    return result;
+}
+function updateTransitionItem(params) {
+    return mutateTransitions(params, "item_updated", (doc) => {
+        const transition = resolveTransition(doc, params.name);
+        const definition = describeTransition(transition);
+        const found = publicTransitionItem(definition, params.itemIndex);
+        const raw = params.item;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+            throw new Error("item 必须是对象");
+        const replacement = mergePlainObjects(found.item, raw);
+        definition.items[found.itemIndex] = replacement;
+        applyTransitionDefinition(doc, transition, definition);
+        return describeTransition(transition);
+    });
+}
+function removeTransitionItem(params) {
+    return mutateTransitions(params, "item_removed", (doc) => {
+        const transition = resolveTransition(doc, params.name);
+        const definition = describeTransition(transition);
+        const found = publicTransitionItem(definition, params.itemIndex);
+        definition.items.splice(found.itemIndex, 1);
+        applyTransitionDefinition(doc, transition, definition);
+        return found.item;
+    });
+}
+function removeTransition(params) {
+    return mutateTransitions(params, "removed", (doc) => {
+        const transition = resolveTransition(doc, params.name);
+        const removed = describeTransition(transition);
+        doc.content.transitions.RemoveItem(transition);
+        return removed;
+    });
+}
+async function importSound(params) {
+    const pkg = resolvePackage(params);
+    const rawSourcePath = String(params.sourcePath || "").trim();
+    if (!rawSourcePath || !IOPath.IsPathRooted(rawSourcePath))
+        throw new Error("sourcePath 必须是存在的绝对路径");
+    const sourcePath = IOPath.GetFullPath(rawSourcePath);
+    if (!IOFile.Exists(sourcePath))
+        throw new Error(`声音文件不存在：${sourcePath}`);
+    if (FairyEditor.FPackageItemType.GetFileType(sourcePath) !== FairyEditor.FPackageItemType.SOUND)
+        throw new Error(`文件不是 FairyGUI 支持的声音资源：${sourcePath}`);
+    const folderPath = normalizePackagePath(params.folderPath);
+    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    let requestedName = params.resourceName ? String(params.resourceName).trim() : String(IOPath.GetFileNameWithoutExtension(sourcePath));
+    if (IOPath.GetExtension(requestedName))
+        requestedName = String(IOPath.GetFileNameWithoutExtension(requestedName));
+    requestedName = validateResourceName(requestedName, "resourceName");
+    const policy = normalizeConflictPolicy(params.conflictPolicy);
+    let existing = findItemInFolder(pkg, folder, requestedName);
+    let actualName = requestedName;
+    if (existing && policy === "error")
+        throw new Error(`资源已存在：${requestedName}`);
+    if (existing && policy === "auto_rename") {
+        actualName = resolveNewItemName(pkg, folder, requestedName, true);
+        existing = null;
+    }
+    if (existing && policy === "replace") {
+        if (existing.type !== FairyEditor.FPackageItemType.SOUND)
+            throw new Error(`同名资源不是声音，不能替换：${requestedName}`);
+        await puerts.$promise(pkg.UpdateResource(existing, sourcePath));
+        existing.exported = params.exported !== false;
+        existing.SetChanged();
+        markPackageChanged(pkg);
+        return { operation: "replaced", requestedName, actualName: existing.name, sourcePath, folderPath, item: describeItem(existing), packageModified: true, requiresSave: true, diskWrite: true };
+    }
+    const item = await puerts.$promise(pkg.ImportResource(sourcePath, folderPath, `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`));
+    if (!item || item.type !== FairyEditor.FPackageItemType.SOUND)
+        throw new Error(`导入声音失败：${sourcePath}`);
+    item.exported = params.exported !== false;
+    item.SetChanged();
+    markPackageChanged(pkg);
+    return { operation: "imported", requestedName, actualName: item.name, sourcePath, folderPath, item: describeItem(item), packageModified: true, requiresSave: true, diskWrite: true };
+}
+function normalizeFramePaths(value) {
+    if (!Array.isArray(value) || value.length === 0)
+        throw new Error("framePaths 必须是至少包含一帧的绝对图片路径数组");
+    return value.map((raw, index) => {
+        const path = String(raw || "").trim();
+        if (!path || !IOPath.IsPathRooted(path))
+            throw new Error(`framePaths[${index}] 必须是绝对路径`);
+        const fullPath = IOPath.GetFullPath(path);
+        if (!IOFile.Exists(fullPath) || FairyEditor.FPackageItemType.GetFileType(fullPath) !== FairyEditor.FPackageItemType.IMAGE)
+            throw new Error(`framePaths[${index}] 不是 FairyGUI 支持的图片：${fullPath}`);
+        return fullPath;
+    });
+}
+function movieClipAsset(item) {
+    if (!item || item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
+        throw new Error("目标资源不是 MovieClip");
+    const asset = item.GetAsset();
+    if (!asset)
+        throw new Error(`无法加载 MovieClip 资源：${item.name}`);
+    return asset;
+}
+async function ensureMovieClipAsset(item) {
+    const asset = movieClipAsset(item);
+    if (asset.Load)
+        await puerts.$promise(asset.Load());
+    if (!asset.animation)
+        throw new Error(`MovieClip 动画数据不可用：${item.name}`);
+    return asset;
+}
+function describeLoadedMovieClip(item, asset) {
+    const animation = asset.animation;
+    const frames = [];
+    for (let index = 0; index < animation.frameList.Count; index++) {
+        const frame = animation.frameList.get_Item(index);
+        frames.push({ index, spriteIndex: frame.spriteIndex, delay: frame.delay, rect: frame.rect ? { x: frame.rect.x, y: frame.rect.y, width: frame.rect.width, height: frame.rect.height } : null });
+    }
+    return { item: describeItem(item), fps: animation.fps, speed: animation.speed, repeatDelay: animation.repeatDelay, swing: animation.swing, frameCount: animation.frameCount, frames };
+}
+async function getMovieClip(params) {
+    const item = resolveItem(params.movieClip || params);
+    return describeLoadedMovieClip(item, await ensureMovieClipAsset(item));
+}
+function movieClipFileState(item) {
+    const Convert = CS.System.Convert;
+    return {
+        fileBase64: IOFile.Exists(item.file) ? String(Convert.ToBase64String(IOFile.ReadAllBytes(item.file))) : null,
+        width: Number(item.width),
+        height: Number(item.height),
+        exported: Boolean(item.exported)
+    };
+}
+function movieClipStatesEqual(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+function pushMovieClipHistory(item, before) {
+    const after = movieClipFileState(item);
+    if (movieClipStatesEqual(before, after))
+        return;
+    agentUndoStack.push({ kind: "movieclip", packageId: item.owner.id, itemId: item.id, before, after });
+    agentRedoStack.length = 0;
+}
+function applyMovieClipHistory(entry, undo) {
+    const item = App.project.GetItem(entry.packageId, entry.itemId);
+    if (!item || item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
+        throw new Error("MovieClip 资源不存在，无法撤销或重做");
+    const expected = undo ? entry.after : entry.before;
+    const next = undo ? entry.before : entry.after;
+    if (!movieClipStatesEqual(movieClipFileState(item), expected))
+        throw new Error("MovieClip 资源已被其他操作修改，拒绝撤销或重做");
+    if (next.fileBase64 === null)
+        throw new Error("MovieClip 历史缺少可恢复的资源数据");
+    const Convert = CS.System.Convert;
+    IOFile.WriteAllBytes(item.file, Convert.FromBase64String(next.fileBase64));
+    item.width = next.width;
+    item.height = next.height;
+    item.exported = next.exported;
+    item.UnloadAsset();
+    item.SetChanged();
+    item.owner.SetChanged();
+    App.project.SetChanged();
+    return { mode: "agent-movieclip", item: describeItem(item), requiresSave: true, diskWrite: true };
+}
+async function configureMovieClip(item, params) {
+    if (!item || item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
+        throw new Error("目标资源不是 MovieClip");
+    const recordHistory = params.recordHistory === true;
+    const beforeFileState = movieClipFileState(item);
+    const asset = await ensureMovieClipAsset(item);
+    const animation = asset.animation;
+    const framePaths = params.framePaths === undefined ? null : normalizeFramePaths(params.framePaths);
+    if (params.fps !== undefined) {
+        const fps = nonNegativeInt(params.fps, "fps");
+        if (fps < 1 || fps > 255)
+            throw new Error("fps 必须是 1 到 255 之间的整数");
+    }
+    if (params.speed !== undefined)
+        numberValue(params.speed, "speed", 0.001, 1000);
+    if (params.repeatDelay !== undefined) {
+        const repeatDelay = nonNegativeInt(params.repeatDelay, "repeatDelay");
+        if (repeatDelay > 255)
+            throw new Error("repeatDelay 必须是 0 到 255 之间的额外延迟帧数");
+    }
+    if (params.frameDelays !== undefined && !Array.isArray(params.frameDelays))
+        throw new Error("frameDelays 必须是数组");
+    const AniDataType = FairyEditor.AniData;
+    const backup = new AniDataType();
+    backup.CopyFrom(animation);
+    try {
+        if (framePaths)
+            animation.ImportImages(toCsStringArray(framePaths), Boolean(params.compressPng));
+        if (!animation.frameCount)
+            throw new Error("MovieClip 至少需要一帧图片");
+        if (params.fps !== undefined)
+            animation.fps = Number(params.fps);
+        if (params.speed !== undefined)
+            animation.speed = Number(params.speed);
+        if (params.repeatDelay !== undefined)
+            animation.repeatDelay = Number(params.repeatDelay);
+        if (params.swing !== undefined)
+            animation.swing = Boolean(params.swing);
+        if (params.frameDelays !== undefined) {
+            if (params.frameDelays.length !== animation.frameList.Count)
+                throw new Error("frameDelays 必须与 MovieClip 帧数相同");
+            for (let index = 0; index < animation.frameList.Count; index++) {
+                const delay = nonNegativeInt(params.frameDelays[index], `frameDelays[${index}]`);
+                if (delay > 255)
+                    throw new Error(`frameDelays[${index}] 必须是 0 到 255 之间的整数`);
+                animation.frameList.get_Item(index).delay = delay;
+            }
+        }
+        animation.CalculateBoundsRect();
+        if (animation.boundsRect) {
+            item.width = Number(animation.boundsRect.width);
+            item.height = Number(animation.boundsRect.height);
+        }
+        if (params.exported !== undefined)
+            item.exported = Boolean(params.exported);
+        animation.Save(item.file);
+        item.SetChanged();
+        item.owner.SetChanged();
+        App.project.SetChanged();
+    }
+    catch (error) {
+        animation.CopyFrom(backup);
+        item.width = beforeFileState.width;
+        item.height = beforeFileState.height;
+        item.exported = beforeFileState.exported;
+        try {
+            const Convert = CS.System.Convert;
+            if (beforeFileState.fileBase64 === null) {
+                if (IOFile.Exists(item.file))
+                    IOFile.Delete(item.file);
+            }
+            else {
+                IOFile.WriteAllBytes(item.file, Convert.FromBase64String(beforeFileState.fileBase64));
+            }
+            item.UnloadAsset();
+        }
+        catch (_) { /* 尽力恢复磁盘快照，保留原始错误。 */ }
+        throw error;
+    }
+    if (recordHistory)
+        pushMovieClipHistory(item, beforeFileState);
+    const result = describeLoadedMovieClip(item, asset);
+    result.frameSources = framePaths || [];
+    result.resourceChanges = framePaths ? framePaths.map((sourcePath, index) => ({ index, sourcePath, operation: "embedded" })) : [];
+    return result;
+}
+async function createMovieClip(params) {
+    const pkg = resolvePackage(params);
+    const requestedName = validateResourceName(params.movieClipName, "movieClipName");
+    const folderPath = normalizePackagePath(params.folderPath);
+    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const policy = normalizeConflictPolicy(params.conflictPolicy);
+    let name = requestedName;
+    let item = findItemInFolder(pkg, folder, name);
+    if (item && policy === "error")
+        throw new Error(`资源已存在：${name}`);
+    if (item && policy === "auto_rename") {
+        name = resolveNewItemName(pkg, folder, name, true);
+        item = null;
+    }
+    if (item && item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
+        throw new Error(`同名资源不是 MovieClip：${requestedName}`);
+    const created = !item;
+    if (!item)
+        item = pkg.CreateMovieClipItem(name, folderPath, false);
+    if (!item)
+        throw new Error(`创建 MovieClip 失败：${name}`);
+    try {
+        const result = await configureMovieClip(item, { ...params, exported: params.exported !== false, recordHistory: !created });
+        if (created)
+            clearAgentHistory();
+        return {
+            operation: created ? "created" : "replaced",
+            requestedName,
+            actualName: item.name,
+            folderPath,
+            movieClip: result,
+            resourceChanges: [{ operation: created ? "created" : "replaced", item: describeItem(item) }].concat(result.resourceChanges || []),
+            packageModified: true,
+            requiresSave: true,
+            diskWrite: true,
+            undoable: !created
+        };
+    }
+    catch (error) {
+        if (created) {
+            try {
+                if (IOFile.Exists(item.file))
+                    IOFile.Delete(item.file);
+                pkg.DeleteItem(item);
+                markPackageChanged(pkg);
+            }
+            catch (_) { /* 尽力清理本次新建资源，保留原始错误。 */ }
+        }
+        throw error;
+    }
+}
+async function updateMovieClip(params) {
+    const item = resolveItem(params.movieClip || params);
+    const updateKeys = ["framePaths", "fps", "speed", "repeatDelay", "swing", "frameDelays", "exported", "compressPng"];
+    if (!updateKeys.some((key) => params[key] !== undefined))
+        throw new Error("update_movieclip 至少需要提供一个更新字段");
+    const result = await configureMovieClip(item, { ...params, recordHistory: true });
+    return { operation: "updated", movieClip: result, resourceChanges: result.resourceChanges || [], packageModified: true, requiresSave: true, diskWrite: true, undoable: true };
+}
+function findMovieClipReferences(item) {
+    const references = [];
+    const seen = {};
+    const add = (value) => {
+        if (!seen[value]) {
+            seen[value] = true;
+            references.push(value);
+        }
+    };
+    try {
+        const activeDoc = App.activeDoc;
+        if (activeDoc) {
+            const matches = [];
+            findObjectsByResourceUrl(activeDoc.content, item.GetURL(), matches);
+            for (const match of matches)
+                add(`${activeDoc.docURL}#${match.id || match.name}`);
+        }
+    }
+    catch (_) { /* 继续执行磁盘引用扫描。 */ }
+    const files = IODirectory.GetFiles(App.project.assetsPath, "*.xml", IOSearchOption.AllDirectories);
+    const ownBasePath = String(item.owner.basePath || "");
+    const url = String(item.GetURL());
+    for (let index = 0; index < files.Length; index++) {
+        const file = String(files.GetValue(index));
+        if (String(IOPath.GetFileName(file)).toLowerCase() === "package.xml")
+            continue;
+        let text = "";
+        try {
+            text = String(IOFile.ReadAllText(file));
+        }
+        catch (_) {
+            continue;
+        }
+        const samePackage = ownBasePath && file.indexOf(ownBasePath) === 0;
+        const localReference = samePackage && (text.indexOf(`src="${item.id}"`) >= 0 || text.indexOf(`src='${item.id}'`) >= 0);
+        const urlReference = text.indexOf(url) >= 0;
+        const crossPackageReference = (text.indexOf(`pkg="${item.owner.id}"`) >= 0 || text.indexOf(`pkg='${item.owner.id}'`) >= 0)
+            && (text.indexOf(`src="${item.id}"`) >= 0 || text.indexOf(`src='${item.id}'`) >= 0);
+        if (localReference || urlReference || crossPackageReference)
+            add(file);
+    }
+    return references;
+}
+async function removeMovieClip(params) {
+    const item = resolveItem(params.movieClip || params);
+    if (item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
+        throw new Error("目标资源不是 MovieClip");
+    if (params.force !== true)
+        throw new Error("删除 MovieClip 是不可逆包资源操作；请显式传 force=true 确认");
+    const references = findMovieClipReferences(item);
+    if (references.length > 0)
+        throw new Error(`MovieClip 正在被引用，不能删除：${references.join(", ")}`);
+    const pkg = item.owner;
+    const removed = describeLoadedMovieClip(item, await ensureMovieClipAsset(item));
+    clearAgentHistory();
+    pkg.DeleteItem(item);
+    markPackageChanged(pkg);
+    return { operation: "removed", movieClip: removed, references, packageModified: true, requiresSave: true, diskWrite: true, undoable: false };
+}
+async function previewAnimation(params) {
+    const kind = String(params.kind || "").toLowerCase();
+    const operation = String(params.operation || "").toLowerCase();
+    if (["play", "pause", "stop", "seek", "next", "previous", "status"].indexOf(operation) < 0)
+        throw new Error(`不支持的预览操作：${operation}`);
+    if (kind === "transition") {
+        const doc = params.target && params.target.documentUrl ? openDocumentByUrl(String(params.target.documentUrl)) : getActiveDocument();
+        const transition = resolveTransition(doc, params.target ? params.target.name : params.name);
+        const contextKey = `transition:${doc.docURL}:${transition.name}`;
+        const context = animationPreviewContexts[contextKey] || { frame: Number(doc.head) || 0, paused: false };
+        let frame = params.frame === undefined
+            ? (params.startFrame === undefined ? (context.paused ? context.frame : Number(doc.head) || 0) : nonNegativeInt(params.startFrame, "startFrame"))
+            : nonNegativeInt(params.frame, "frame");
+        if (operation === "play") {
+            const times = params.times === undefined ? 1 : Number(params.times);
+            if (!Number.isInteger(times) || times < -1 || times > 1000000)
+                throw new Error("times 必须是 -1 到 1000000 之间的整数");
+            const delay = params.delay === undefined ? 0 : numberValue(params.delay, "delay", 0);
+            const endFrame = params.endFrame === undefined ? -1 : Number(params.endFrame);
+            if (!Number.isInteger(endFrame) || endFrame < -1)
+                throw new Error("endFrame 必须是 -1 或非负整数");
+            transition.Play(undefined, times, delay, frame, endFrame, true);
+            animationPreviewContexts[contextKey] = { frame, paused: false, endFrame };
+        }
+        else if (operation === "pause") {
+            transition.Stop(false, false);
+            frame = Number(doc.head) || context.frame || 0;
+            animationPreviewContexts[contextKey] = { ...context, frame, paused: true };
+        }
+        else if (operation === "stop") {
+            transition.Stop(false, false);
+            doc.EnterTimelineMode(transition.name);
+            doc.head = 0;
+            frame = 0;
+            delete animationPreviewContexts[contextKey];
+        }
+        else if (operation !== "status") {
+            doc.EnterTimelineMode(transition.name);
+            frame = operation === "next" ? frame + 1 : operation === "previous" ? Math.max(0, frame - 1) : frame;
+            doc.head = frame;
+            animationPreviewContexts[contextKey] = { ...context, frame, paused: true };
+        }
+        else {
+            frame = Number(doc.head) || context.frame || 0;
+        }
+        return { kind, operation, transition: describeTransition(transition), frame, playing: Boolean(transition.playing), paused: Boolean(animationPreviewContexts[contextKey] && animationPreviewContexts[contextKey].paused), document: describeDocument(doc), persisted: false };
+    }
+    if (kind === "movieclip") {
+        const doc = getActiveDocument();
+        const object = resolveObject(doc, params.target);
+        if (String(object.objectType) !== FairyEditor.FObjectType.MOVIECLIP)
+            throw new Error("预览目标不是 MovieClip 对象");
+        const movieClip = object;
+        let frameCount = null;
+        if (object.resourceURL) {
+            const resourceItem = resolveItem({ url: object.resourceURL });
+            const asset = await ensureMovieClipAsset(resourceItem);
+            frameCount = Number(asset.animation.frameCount);
+        }
+        if (operation === "play")
+            movieClip.playing = true;
+        if (operation === "pause")
+            movieClip.playing = false;
+        if (operation === "stop") {
+            movieClip.playing = false;
+            movieClip.frame = 0;
+        }
+        if (operation === "seek")
+            movieClip.frame = nonNegativeInt(params.frame, "frame");
+        if (operation === "next")
+            movieClip.frame = Number(movieClip.frame) + 1;
+        if (operation === "previous")
+            movieClip.frame = Math.max(0, Number(movieClip.frame) - 1);
+        if (frameCount !== null && movieClip.frame >= frameCount)
+            movieClip.frame = Math.max(0, frameCount - 1);
+        return { kind, operation, target: { id: object.id, name: object.name, resourceURL: object.resourceURL || null }, playing: Boolean(movieClip.playing), frame: Number(movieClip.frame), frameCount, persisted: false };
+    }
+    throw new Error("kind 必须是 transition 或 movieclip");
 }
 const writableProperties = {
     name: true,
@@ -1017,6 +2015,15 @@ function handleCommand(request) {
         import_image: true,
         import_font: true,
         create_button: true,
+        import_sound: true,
+        create_movieclip: true,
+        update_movieclip: true,
+        remove_movieclip: true,
+        upsert_transition: true,
+        remove_transition: true,
+        add_transition_item: true,
+        update_transition_item: true,
+        remove_transition_item: true,
         select_object: true,
         set_property: true,
         insert_object: true,
@@ -1086,6 +2093,32 @@ function handleCommand(request) {
             doc.SelectObject(obj, params.scrollToView !== false, true);
             return describeObject(obj, 0, 0);
         }
+        case "import_sound":
+            return importSound(params);
+        case "create_movieclip":
+            return createMovieClip(params);
+        case "get_movieclip":
+            return getMovieClip(params);
+        case "update_movieclip":
+            return updateMovieClip(params);
+        case "remove_movieclip":
+            return removeMovieClip(params);
+        case "list_transitions":
+            return listTransitions(getActiveDocument());
+        case "get_transition":
+            return describeTransition(resolveTransition(getActiveDocument(), params.name));
+        case "upsert_transition":
+            return upsertTransition(params);
+        case "remove_transition":
+            return removeTransition(params);
+        case "add_transition_item":
+            return addTransitionItem(params);
+        case "update_transition_item":
+            return updateTransitionItem(params);
+        case "remove_transition_item":
+            return removeTransitionItem(params);
+        case "preview_animation":
+            return previewAnimation(params);
         case "set_property": {
             const doc = getActiveDocument();
             const obj = resolveObject(doc, params.target);
@@ -1205,7 +2238,11 @@ function handleCommand(request) {
             if (agentUndoStack.length > 0) {
                 const entry = agentUndoStack.pop();
                 try {
-                    const result = applyAgentHistory(entry, true);
+                    const result = entry.kind === "animation"
+                        ? applyAnimationHistory(entry, true)
+                        : entry.kind === "movieclip"
+                            ? applyMovieClipHistory(entry, true)
+                            : applyAgentHistory(entry, true);
                     agentRedoStack.push(entry);
                     return { changed: true, ...result };
                 }
@@ -1222,7 +2259,11 @@ function handleCommand(request) {
             if (agentRedoStack.length > 0) {
                 const entry = agentRedoStack.pop();
                 try {
-                    const result = applyAgentHistory(entry, false);
+                    const result = entry.kind === "animation"
+                        ? applyAnimationHistory(entry, false)
+                        : entry.kind === "movieclip"
+                            ? applyMovieClipHistory(entry, false)
+                            : applyAgentHistory(entry, false);
                     agentUndoStack.push(entry);
                     return { changed: true, ...result };
                 }

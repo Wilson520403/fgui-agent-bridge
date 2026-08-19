@@ -42,6 +42,24 @@ REQUIRED_CAPABILITIES = frozenset(
     }
 )
 
+ANIMATION_CAPABILITIES = frozenset(
+    {
+        "import_sound",
+        "create_movieclip",
+        "get_movieclip",
+        "update_movieclip",
+        "remove_movieclip",
+        "list_transitions",
+        "get_transition",
+        "upsert_transition",
+        "remove_transition",
+        "add_transition_item",
+        "update_transition_item",
+        "remove_transition_item",
+        "preview_animation",
+    }
+)
+
 
 class BridgeError(RuntimeError):
     """桥接器连接、协议或命令错误。"""
@@ -167,7 +185,15 @@ class BridgeClient:
         timeout: float | None = None,
     ) -> dict[str, Any]:
         context = self.project_context()
-        self.ensure_ready()
+        status = self.ensure_ready()
+        if action in ANIMATION_CAPABILITIES:
+            capabilities = {str(item) for item in status.get("capabilities", [])}
+            if action not in capabilities:
+                bridge_version = status.get("bridgeVersion", "unknown")
+                raise BridgeError(
+                    f"FairyGUI Agent Bridge 缺少动画能力：{action} "
+                    f"(编辑器 bridge {bridge_version})。请更新并重新加载 0.8.0 或更高版本插件。"
+                )
 
         request_dir = context.queue_root / "requests"
         response_dir = context.queue_root / "responses"

@@ -253,14 +253,18 @@ wheels = [
 
 [[package]]
 name = "fairygui-agent-bridge"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
+    { name = "typing-extensions" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mcp", specifier = ">=1.27,<2" }]
+requires-dist = [
+    { name = "mcp", specifier = ">=1.27,<2" },
+    { name = "typing-extensions", specifier = ">=4.12" },
+]
 
 [[package]]
 name = "h11"

@@ -2,7 +2,7 @@
 
 通过 MCP 或 CLI，让 CodeX之类的Agent 以结构化指令操作 FairyGUI Editor，从而实现自动拼UI界面
 
-- 版本：`0.7.0`
+- 版本：`0.8.0`
 - 队列协议：`1.0`
 - 已验证 FairyGUI Editor：`6.1.4`
 - 通信：本地 JSON 队列 + MCP stdio
@@ -140,7 +140,11 @@ uv run fgui-agent publish --scope active
 uv run fgui-agent create-component ViewHub NewPanel --width 1920 --height 1080
 uv run fgui-agent import-image ViewHub /absolute/path/button.png
 uv run fgui-agent import-font ViewHub /absolute/path/font.ttf
+uv run fgui-agent import-sound ViewHub /absolute/path/click.mp3
+uv run fgui-agent create-movieclip ViewHub Loading --frame /absolute/path/loading_01.png --frame /absolute/path/loading_02.png --fps 12
 uv run fgui-agent create-button ViewHub NewButton --mode common
+uv run fgui-agent upsert-transition '{"name":"fadeIn","frameRate":60,"items":[{"type":"Alpha","frame":0,"tween":{"duration":12,"start":0,"end":1}}]}'
+uv run fgui-agent preview-transition play fadeIn
 ```
 
 全局参数必须放在子命令前，例如：
@@ -157,17 +161,25 @@ uv run fgui-agent \
 
 - **连接与读取**：`fgui_status`、`fgui_ping`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_get_history`
 - **导航与修改**：`fgui_open_document`、`fgui_select_object`、`fgui_set_property`、`fgui_insert_object`、`fgui_remove_object`
-- **创建资源**：`fgui_create_component`、`fgui_import_image`、`fgui_import_font`、`fgui_create_button`
+- **创建资源**：`fgui_create_component`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound`、`fgui_create_button`、`fgui_create_movieclip`、`fgui_update_movieclip`、`fgui_get_movieclip`、`fgui_remove_movieclip`
+- **Transition**：`fgui_list_transitions`、`fgui_get_transition`、`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item`
+- **动画预览**：`fgui_preview_animation`（Transition 与 MovieClip 的播放、暂停、停止、跳帧和状态查询；不保存）
 - **保存与回退**：`fgui_save_document`、`fgui_save_all`、`fgui_discard_document`、`fgui_undo`、`fgui_redo`
 - **发布**：`fgui_get_publish_settings`、`fgui_publish`
+
+Transition 使用类型化 JSON 和 FairyGUI frame 时间单位，覆盖 XY、Size、Pivot、Scale、Skew、Alpha、Rotation、Color、Animation、Visible、Sound、Transition、Shake、ColorFilter、Text、Icon 全部原生轨道。一次 Transition 声明式更新或关键帧原子操作形成一个 Agent 事务，可通过 `fgui_undo` / `fgui_redo` 回退。Tween 的路径和自定义缓动读取结果同时包含 `encoded` 与 `points`；再次写入时优先复用 `encoded`，以保留 Editor 规范化后的完整数据。`playTimes` 是 Editor 运行态字段，不写入组件 XML。
+
+MovieClip 接受有序本地图片序列并通过 FairyGUI `AniData.ImportImages` 嵌入 `.jta`，不会为每帧额外创建包内图片 `ui://` 资源。创建/更新响应会返回本次 `frameSources` 和 `resourceChanges`；重新读取只能得到 `.jta` 中的帧、矩形和延迟信息。FPS 范围为 `1..255`，Repeat Delay 与每帧 Delay 为 `0..255` 的额外延迟帧数，并支持 Speed、Swing。声音资源可用 `fgui_import_sound` 导入并在 Sound 轨道中引用。
+
+资源导入和 MovieClip 帧处理会写磁盘，`fgui_discard_document` 不会自动删除它们。已有 MovieClip 的更新或 `replace` 会记录文件快照，可通过 Agent undo/redo 回退；全新 MovieClip 创建和删除属于不可逆资源生命周期操作。创建失败会尽力清理本次新建的 `.jta` 与包资源。MovieClip 删除要求显式 `force=True`，且检测到组件引用时仍会拒绝删除。
 
 MCP 只提供显式工具；CLI 的 `call` 仅用于调试原始 Action。
 
 ## 当前限制
 
-- 暂不支持音频、Spine 等非图片/字体资源导入。
-- 暂不支持删除、移动或重命名包资源。
-- 暂不支持批量布局和批量属性事务。
+- 动画兼容基线为 FairyGUI Editor `6.1.4`；尚未完成其他 6.x 的真实环境兼容矩阵。
+- 不支持 Spine、DragonBones、Loader3D、SWF 或运行时游戏代码层动画控制。
+- 通用包资源的删除、移动和重命名仍不支持；仅提供带 `force` 且带引用检查的 MovieClip 删除。
 - Windows 尚未完成真实环境端到端验证。
 
 ## 更新

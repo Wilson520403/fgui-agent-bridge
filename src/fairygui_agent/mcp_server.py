@@ -9,6 +9,7 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
+from .animation_models import TransitionDefinition, TransitionItem
 from .bridge_client import BridgeClient
 from .editor_launcher import EditorLauncher
 from .project_locator import ProjectLocator
@@ -17,8 +18,9 @@ mcp = FastMCP(
     "FairyGUI Agent Bridge",
     instructions=(
         "先读取工程、包和对象树，再执行修改。文档属性和对象修改默认不保存；"
-        "创建组件或按钮会新增包资源，导入/替换图片会写入磁盘，调用前必须确认包、目录、名称和冲突策略。"
-        "结构与资源修改不能由 Agent 属性事务栈完整撤销，且图片导入不能由 fgui_discard_document 回滚。"
+        "创建组件或按钮会新增包资源，导入/替换图片、声音和 MovieClip 会写入磁盘，调用前必须确认包、目录、名称和冲突策略。"
+        "Transition 编辑与已有 MovieClip 更新支持 Agent undo/redo；新建/删除资源不能完整撤销，且资源写入不能由 fgui_discard_document 回滚。"
+        "动画预览只改变 Editor 当前状态，不保存资源默认属性。"
         "只有用户明确要求时才调用保存工具。发布前先调用 fgui_get_publish_settings，"
         "并确认用户要求的包范围后再调用 fgui_publish。"
     ),
@@ -54,6 +56,25 @@ def _target(
         raise ValueError("object_id、object_path、object_name 必须且只能提供一个")
     key, value = selected[0]
     return {key: value}
+
+def _resource_target(
+    url: str | None,
+    package_name: str | None,
+    item_name: str | None,
+    item_path: str | None,
+) -> dict[str, str]:
+    if url and url.strip():
+        if package_name or item_name or item_path:
+            raise ValueError("url 不能与 package_name/item_name/item_path 同时提供")
+        return {"url": url.strip()}
+    if not package_name or not package_name.strip():
+        raise ValueError("必须提供 url，或 package_name 与 item_name/item_path")
+    choices = [("itemName", item_name), ("itemPath", item_path)]
+    selected = [(key, value.strip()) for key, value in choices if value and value.strip()]
+    if len(selected) != 1:
+        raise ValueError("使用 package_name 时，item_name、item_path 必须且只能提供一个")
+    key, value = selected[0]
+    return {"packageName": package_name.strip(), key: value}
 
 
 @mcp.tool()
@@ -241,6 +262,216 @@ def fgui_get_tree(max_depth: int = 12) -> dict[str, Any]:
     if max_depth < 0 or max_depth > 64:
         raise ValueError("max_depth 必须在 0 到 64 之间")
     return _client.call("get_tree", {"maxDepth": max_depth})
+
+
+@mcp.tool()
+def fgui_import_sound(
+    package_name: str,
+    source_path: str,
+    folder_path: str = "",
+    resource_name: str | None = None,
+    conflict_policy: Literal["error", "auto_rename", "replace"] = "error",
+    exported: bool = True,
+    create_folders: bool = True,
+    timeout_seconds: float = 120,
+) -> dict[str, Any]:
+    """从绝对本地路径导入声音资源；支持替换同名声音，属于磁盘写入。"""
+    if timeout_seconds <= 0 or timeout_seconds > 1800:
+        raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
+    params: dict[str, Any] = {
+        "packageName": package_name,
+        "sourcePath": str(Path(source_path).expanduser().resolve()),
+        "folderPath": folder_path,
+        "conflictPolicy": conflict_policy,
+        "exported": exported,
+        "createFolders": create_folders,
+    }
+    if resource_name:
+        params["resourceName"] = resource_name
+    return _client.call("import_sound", params, timeout=timeout_seconds)
+
+
+@mcp.tool()
+def fgui_create_movieclip(
+    package_name: str,
+    movieclip_name: str,
+    frame_paths: list[str],
+    folder_path: str = "",
+    fps: int = 12,
+    repeat_delay: int = 0,
+    swing: bool = False,
+    frame_delays: list[int] | None = None,
+    conflict_policy: Literal["error", "auto_rename", "replace"] = "error",
+    exported: bool = True,
+    create_folders: bool = True,
+    timeout_seconds: float = 120,
+) -> dict[str, Any]:
+    """用有序绝对图片路径创建或替换 MovieClip；图片序列由 FairyGUI 原生动画资源处理。"""
+    if not frame_paths:
+        raise ValueError("frame_paths 至少需要一帧")
+    if not 1 <= fps <= 255 or not 0 <= repeat_delay <= 255:
+        raise ValueError("fps 必须是 1 到 255，repeat_delay 必须是 0 到 255 的额外延迟帧数")
+    if timeout_seconds <= 0 or timeout_seconds > 1800:
+        raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
+    params: dict[str, Any] = {
+        "packageName": package_name,
+        "movieClipName": movieclip_name,
+        "framePaths": [str(Path(path).expanduser().resolve()) for path in frame_paths],
+        "folderPath": folder_path,
+        "fps": fps,
+        "repeatDelay": repeat_delay,
+        "swing": swing,
+        "conflictPolicy": conflict_policy,
+        "exported": exported,
+        "createFolders": create_folders,
+    }
+    if frame_delays is not None:
+        if len(frame_delays) != len(frame_paths) or any(delay < 0 or delay > 255 for delay in frame_delays):
+            raise ValueError("frame_delays 必须与 frame_paths 等长，且每项在 0 到 255 之间")
+        params["frameDelays"] = frame_delays
+    return _client.call("create_movieclip", params, timeout=timeout_seconds)
+
+
+@mcp.tool()
+def fgui_get_movieclip(
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+) -> dict[str, Any]:
+    """读取 MovieClip 的帧、FPS、Swing 和 RepeatDelay 设置。"""
+    return _client.call("get_movieclip", _resource_target(url, package_name, item_name, item_path))
+
+
+@mcp.tool()
+def fgui_update_movieclip(
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+    frame_paths: list[str] | None = None,
+    fps: int | None = None,
+    speed: float | None = None,
+    repeat_delay: int | None = None,
+    swing: bool | None = None,
+    frame_delays: list[int] | None = None,
+    exported: bool | None = None,
+    timeout_seconds: float = 120,
+) -> dict[str, Any]:
+    """更新已有 MovieClip；传入 frame_paths 时使用新的有序图片序列替换动画帧。"""
+    if timeout_seconds <= 0 or timeout_seconds > 1800:
+        raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
+    if fps is not None and not 1 <= fps <= 255:
+        raise ValueError("fps 必须是 1 到 255 之间的整数")
+    if repeat_delay is not None and not 0 <= repeat_delay <= 255:
+        raise ValueError("repeat_delay 必须是 0 到 255 的额外延迟帧数")
+    params = _resource_target(url, package_name, item_name, item_path)
+    if frame_paths is not None:
+        if not frame_paths:
+            raise ValueError("frame_paths 至少需要一帧")
+        params["framePaths"] = [str(Path(path).expanduser().resolve()) for path in frame_paths]
+    if speed is not None and not 0.001 <= speed <= 1000:
+        raise ValueError("speed 必须在 0.001 到 1000 之间")
+    if frame_delays is not None and any(delay < 0 or delay > 255 for delay in frame_delays):
+        raise ValueError("frame_delays 每项必须在 0 到 255 之间")
+    updates = (("fps", fps), ("speed", speed), ("repeatDelay", repeat_delay), ("swing", swing), ("frameDelays", frame_delays), ("exported", exported))
+    for key, value in updates:
+        if value is not None:
+            params[key] = value
+    if not any(value is not None for _, value in updates) and frame_paths is None:
+        raise ValueError("至少需要提供一个 MovieClip 更新字段")
+    return _client.call("update_movieclip", params, timeout=timeout_seconds)
+
+
+@mcp.tool()
+def fgui_remove_movieclip(
+    force: bool = False,
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+) -> dict[str, Any]:
+    """删除 MovieClip 包资源；这是不可逆资源操作，必须显式 force=True。"""
+    params = _resource_target(url, package_name, item_name, item_path)
+    params["force"] = force
+    return _client.call("remove_movieclip", params)
+
+
+@mcp.tool()
+def fgui_list_transitions() -> list[dict[str, Any]]:
+    """读取当前组件的全部 Transition 及类型化关键帧。"""
+    return _client.call("list_transitions")
+
+
+@mcp.tool()
+def fgui_get_transition(name: str) -> dict[str, Any]:
+    """按名称读取当前组件的一个 Transition。"""
+    return _client.call("get_transition", {"name": name})
+
+
+@mcp.tool()
+def fgui_upsert_transition(transition: TransitionDefinition) -> dict[str, Any]:
+    """声明式创建或完整替换一个 Transition；一次调用可由 fgui_undo/redo 原子回退。"""
+    return _client.call("upsert_transition", {"transition": transition})
+
+
+@mcp.tool()
+def fgui_remove_transition(name: str) -> dict[str, Any]:
+    """删除当前组件中的一个 Transition；可由 fgui_undo 恢复。"""
+    return _client.call("remove_transition", {"name": name})
+
+
+@mcp.tool()
+def fgui_add_transition_item(name: str, item: TransitionItem) -> dict[str, Any]:
+    """向 Transition 添加一个类型化关键帧轨道项。"""
+    return _client.call("add_transition_item", {"name": name, "item": item})
+
+
+@mcp.tool()
+def fgui_update_transition_item(name: str, item_index: int, item: TransitionItem) -> dict[str, Any]:
+    """替换 Transition 指定索引的关键帧项；可用 fgui_undo/redo 回退。"""
+    if item_index < 0:
+        raise ValueError("item_index 不能小于 0")
+    return _client.call("update_transition_item", {"name": name, "itemIndex": item_index, "item": item})
+
+
+@mcp.tool()
+def fgui_remove_transition_item(name: str, item_index: int) -> dict[str, Any]:
+    """删除 Transition 指定索引的关键帧项；可用 fgui_undo 恢复。"""
+    if item_index < 0:
+        raise ValueError("item_index 不能小于 0")
+    return _client.call("remove_transition_item", {"name": name, "itemIndex": item_index})
+
+
+@mcp.tool()
+def fgui_preview_animation(
+    kind: Literal["transition", "movieclip"],
+    operation: Literal["play", "pause", "stop", "seek", "next", "previous", "status"],
+    name: str | None = None,
+    document_url: str | None = None,
+    frame: int | None = None,
+    times: int | None = None,
+    delay: float | None = None,
+    start_frame: int | None = None,
+    end_frame: int | None = None,
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+) -> dict[str, Any]:
+    """在 Editor 中播放、暂停、停止、跳帧或查询预览状态；预览不会保存到 FairyGUI 资源。"""
+    params: dict[str, Any] = {"kind": kind, "operation": operation}
+    if kind == "transition":
+        if not name:
+            raise ValueError("Transition 预览需要 name")
+        params["target"] = {"name": name}
+        if document_url:
+            params["target"]["documentUrl"] = document_url
+    else:
+        params["target"] = _target(object_id, object_path, object_name)
+    for key, value in (("frame", frame), ("times", times), ("delay", delay), ("startFrame", start_frame), ("endFrame", end_frame)):
+        if value is not None:
+            params[key] = value
+    return _client.call("preview_animation", params)
 
 
 @mcp.tool()

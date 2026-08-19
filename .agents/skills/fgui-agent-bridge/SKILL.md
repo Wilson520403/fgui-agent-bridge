@@ -41,7 +41,10 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 ### 2. 创建、修改和保存
 
 - 新建组件使用 `fgui_create_component`，明确包、目录、名称、宽高、导出状态和冲突策略。
-- 图片与字体导入使用绝对本地路径（`fgui_import_image` / `fgui_import_font`）；`replace` 是磁盘覆盖，不能由文档放弃回滚。
+- 图片、字体与声音导入使用绝对本地路径（`fgui_import_image` / `fgui_import_font` / `fgui_import_sound`）；`replace` 是磁盘覆盖，不能由文档放弃回滚。
+- 动画编辑先用 `fgui_list_transitions` / `fgui_get_transition` 读取，再用 `fgui_upsert_transition` 进行整段声明式更新，或用关键帧原子工具局部修改；时间单位是 frame。全部原生 Transition 轨道均使用类型化 JSON。
+- MovieClip 用 `fgui_create_movieclip` 的有序绝对图片路径创建，或通过 `fgui_update_movieclip` 更新帧与播放参数；帧由 FairyGUI 嵌入 `.jta`，不会自动生成逐帧图片 `ui://` 资源。已有 MovieClip 更新/替换可 Agent undo/redo，全新创建和删除不可逆。
+- 用 `fgui_preview_animation` 播放、暂停、停止、跳帧或查询 Transition/MovieClip 预览状态。预览不保存，不能把预览状态描述为资源默认属性。
 - 按钮状态图顺序固定为 `up/down/over/selectedOver/disabled/selectedDisabled`，非空值必须是工程内图片 `ui://` URL。
 - 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
@@ -159,7 +162,8 @@ git diff --check
 
 - `.agent/` 是目标 FairyGUI 工程的运行时队列与日志，不纳入 Git。
 - 同一请求不要重复写入；响应必须按请求 ID 匹配。
-- 图片导入和发布是磁盘写入，执行前确认目标和冲突策略。
+- 图片、声音、MovieClip 图片序列导入和发布是磁盘写入，执行前确认目标和冲突策略。Transition 声明式/关键帧修改与已有 MovieClip 更新/替换可由 Agent undo/redo 回退；全新资源创建、声音/图片导入和删除不能。
+- MovieClip 删除即使传 `force=true` 也会执行引用检查；仍被组件使用时必须先移除引用。
 - 不允许删除根组件；不要把 `discard`、`undo` 和 `save` 混为同一语义。
 - 根组件点击穿透使用可序列化的 `opaque=false`；不要把无法持久化的根 `touchable` 宣称成功。
 - 不在代码、配置、文档或示例中提交个人绝对路径、密钥或真实 MCP 配置。
