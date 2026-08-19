@@ -193,8 +193,7 @@ git pull
 uv sync --frozen
 uv run python scripts/sync_to_project.py --choose-project --apply
 ```
-
-更新插件后重新打开 FairyGUI 工程。只有 MCP 启动命令或 Bridge 仓库路径变化时，才需要重新登记 MCP。
+有或者直接和你的 agent 说“/fgui-agent-bridge更新这个技能”。更新插件后重新打开 FairyGUI 工程。只有 MCP 启动命令或 Bridge 仓库路径变化时，才需要重新登记 MCP。
 
 ## 开发维护
 
