@@ -5,7 +5,7 @@
       "args": [
         "run",
         "--project",
-        "/ABSOLUTE/PATH/TO/FGUI-AGENT-BRIDGE",
+        "/ABSOLUTE/PATH/TO/fgui-agent-bridge",
         "fgui-agent-mcp"
       ],
       "env": {
