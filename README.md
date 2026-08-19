@@ -256,7 +256,7 @@ uv sync --frozen
 uv run python scripts/sync_to_project.py --choose-project --apply
 ```
 
-> **提示**：也可以直接对你的 Agent 说 `“/fgui-agent-bridge 更新这个技能”`。更新插件后重新打开 FairyGUI 工程即可。只有当 Bridge 仓库路径或启动命令变更时才需更新 MCP 配置。
+> **提示**：也可以直接对你的 Agent 说 `“/fgui-agent-bridge 帮我更新”`。更新插件后重新打开 FairyGUI 工程即可。只有当 Bridge 仓库路径或启动命令变更时才需更新 MCP 配置。
 
 ---
 
