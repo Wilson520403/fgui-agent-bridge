@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.0";
+const BRIDGE_VERSION = "0.8.1";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_INTERVAL_FRAMES = 60;
@@ -156,6 +156,31 @@ function describePackage(pkg) {
         itemCount: pkg.items.Count
     };
 }
+const LARGE_IMAGE_LONG_SIDE_MIN = 1920;
+const LARGE_IMAGE_SHORT_SIDE_MIN = 1080;
+const LARGE_IMAGE_2K_SIDE_MIN = 2048;
+const LARGE_IMAGE_ATLAS = "alone";
+function isLargeImageDimensions(width, height) {
+    const normalizedWidth = Number(width);
+    const normalizedHeight = Number(height);
+    if (!isFinite(normalizedWidth) || !isFinite(normalizedHeight) || normalizedWidth <= 0 || normalizedHeight <= 0)
+        return false;
+    const longSide = Math.max(normalizedWidth, normalizedHeight);
+    const shortSide = Math.min(normalizedWidth, normalizedHeight);
+    // 覆盖 1920x1080 及以上屏幕大图，或任一边达到 2K（2048）的纹理。
+    return (longSide >= LARGE_IMAGE_LONG_SIDE_MIN && shortSide >= LARGE_IMAGE_SHORT_SIDE_MIN)
+        || longSide >= LARGE_IMAGE_2K_SIDE_MIN;
+}
+function applyLargeImageAtlasRule(item) {
+    if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE || !isLargeImageDimensions(item.width, item.height))
+        return false;
+    if (String(item.folderAtlas || "") === LARGE_IMAGE_ATLAS)
+        return false;
+    // FairyGUI 的 alone 纹理集会为每张图片单独生成图集，不会与小图混排。
+    item.folderAtlas = LARGE_IMAGE_ATLAS;
+    item.SetChanged();
+    return true;
+}
 function describeItem(item) {
     return {
         id: item.id,
@@ -167,6 +192,7 @@ function describeItem(item) {
         width: item.width,
         height: item.height,
         exported: item.exported,
+        folderAtlas: item.folderAtlas || "",
         url: item.GetURL()
     };
 }
@@ -438,6 +464,7 @@ async function importImage(params) {
         await puerts.$promise(pkg.UpdateResource(existing, sourcePath));
         existing.exported = params.exported !== false;
         existing.SetChanged();
+        const largeImageAtlasApplied = applyLargeImageAtlasRule(existing);
         markPackageChanged(pkg);
         return {
             operation: "replaced",
@@ -446,6 +473,7 @@ async function importImage(params) {
             autoRenamed: false,
             sourcePath,
             folderPath,
+            largeImageAtlasApplied,
             item: describeItem(existing),
             packageModified: true,
             requiresSave: true,
@@ -460,6 +488,7 @@ async function importImage(params) {
         throw new Error(`导入结果不是图片资源：${item.name}`);
     item.exported = params.exported !== false;
     item.SetChanged();
+    const largeImageAtlasApplied = applyLargeImageAtlasRule(item);
     markPackageChanged(pkg);
     return {
         operation: "imported",
@@ -468,6 +497,7 @@ async function importImage(params) {
         autoRenamed: item.name !== requestedName,
         sourcePath,
         folderPath,
+        largeImageAtlasApplied,
         item: describeItem(item),
         packageModified: true,
         requiresSave: true,
@@ -1841,6 +1871,12 @@ function describePublishSettings(params) {
         });
     }
     return {
+        largeImageAtlasRule: {
+            longSideMin: LARGE_IMAGE_LONG_SIDE_MIN,
+            shortSideMin: LARGE_IMAGE_SHORT_SIDE_MIN,
+            side2kMin: LARGE_IMAGE_2K_SIDE_MIN,
+            atlas: LARGE_IMAGE_ATLAS
+        },
         activeBranch: App.project.activeBranch,
         branches: stringListToArray(App.project.allBranches),
         global: {
@@ -1933,6 +1969,33 @@ function diffSnapshots(before, after) {
         deleted: returnedDeleted
     };
 }
+function forEachPackageItem(items, visit) {
+    if (!items)
+        return;
+    for (let i = 0; i < items.Count; i++) {
+        const item = items.get_Item(i);
+        visit(item);
+        forEachPackageItem(item.children, visit);
+    }
+}
+function enforceLargeImageAtlasRule(pkg) {
+    const changed = [];
+    forEachPackageItem(pkg.items, (item) => {
+        if (!applyLargeImageAtlasRule(item))
+            return;
+        changed.push({
+            id: item.id,
+            name: item.name,
+            width: item.width,
+            height: item.height,
+            folderAtlas: LARGE_IMAGE_ATLAS,
+            url: item.GetURL()
+        });
+    });
+    if (changed.length > 0)
+        pkg.SetChanged();
+    return changed;
+}
 async function publishPackages(params) {
     if (publishInProgress)
         throw new Error("已有 FairyGUI 发布任务正在执行");
@@ -1941,6 +2004,18 @@ async function publishPackages(params) {
     const saveBeforePublish = params.saveBeforePublish !== false;
     const publishDescOnly = params.publishDescOnly === true;
     validatePublishBranch(branch);
+    const largeImageAtlasChanges = [];
+    for (let i = 0; i < packages.length; i++) {
+        const changes = enforceLargeImageAtlasRule(packages[i]);
+        for (let j = 0; j < changes.length; j++) {
+            largeImageAtlasChanges.push({
+                package: packages[i].name,
+                ...changes[j]
+            });
+        }
+    }
+    if (largeImageAtlasChanges.length > 0)
+        App.project.SetChanged();
     publishInProgress = true;
     const startedAt = nowIso();
     const startedMs = Date.now();
@@ -1995,6 +2070,14 @@ async function publishPackages(params) {
             finishedAt: nowIso(),
             durationMs: Date.now() - startedMs,
             packages: published,
+            largeImageAtlasRule: {
+                longSideMin: LARGE_IMAGE_LONG_SIDE_MIN,
+                shortSideMin: LARGE_IMAGE_SHORT_SIDE_MIN,
+                side2kMin: LARGE_IMAGE_2K_SIDE_MIN,
+                atlas: LARGE_IMAGE_ATLAS,
+                changedCount: largeImageAtlasChanges.length,
+                changes: largeImageAtlasChanges
+            },
             fileChanges: diffSnapshots(before, after)
         };
     }

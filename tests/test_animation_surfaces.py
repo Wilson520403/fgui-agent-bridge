@@ -92,6 +92,19 @@ class McpAnimationSurfaceTests(unittest.TestCase):
                 client.call_raw("list_transitions")
 
 
+class LargeImageAtlasSurfaceTests(unittest.TestCase):
+    def test_large_image_atlas_rule_is_compiled_into_plugin(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        generated = (root / "plugin/main.js").read_text(encoding="utf-8")
+        for text in (source, generated):
+            self.assertIn("LARGE_IMAGE_LONG_SIDE_MIN = 1920", text)
+            self.assertIn("LARGE_IMAGE_2K_SIDE_MIN = 2048", text)
+            self.assertIn('LARGE_IMAGE_ATLAS = "alone"', text)
+            self.assertIn("function enforceLargeImageAtlasRule", text)
+            self.assertIn("largeImageAtlasRule", text)
+
+
 class CliAnimationSurfaceTests(unittest.TestCase):
     def test_parser_exposes_all_animation_commands(self) -> None:
         parser = build_parser()
@@ -131,9 +144,9 @@ class CapabilityConsistencyTests(unittest.TestCase):
         init = (root / "src/fairygui_agent/__init__.py").read_text(encoding="utf-8")
         plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
         generated = (root / "plugin/main.js").read_text(encoding="utf-8")
-        self.assertEqual(package_version, "0.8.0")
+        self.assertEqual(package_version, "0.8.1")
         for text in (pyproject, init, plugin, generated):
-            self.assertIn("0.8.0", text)
+            self.assertIn("0.8.1", text)
 
     def test_documented_mcp_tool_count_is_current(self) -> None:
         root = Path(__file__).resolve().parents[1]

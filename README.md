@@ -2,7 +2,7 @@
 
 通过 MCP 或 CLI，让 CodeX之类的Agent 以结构化指令操作 FairyGUI Editor，从而实现自动拼UI界面
 
-- 版本：`0.8.0`
+- 版本：`0.8.1`
 - 队列协议：`1.0`
 - 已验证 FairyGUI Editor：`6.1.4`
 - 通信：本地 JSON 队列 + MCP stdio
@@ -172,6 +172,10 @@ Transition 使用类型化 JSON 和 FairyGUI frame 时间单位，覆盖 XY、Si
 MovieClip 接受有序本地图片序列并通过 FairyGUI `AniData.ImportImages` 嵌入 `.jta`，不会为每帧额外创建包内图片 `ui://` 资源。创建/更新响应会返回本次 `frameSources` 和 `resourceChanges`；重新读取只能得到 `.jta` 中的帧、矩形和延迟信息。FPS 范围为 `1..255`，Repeat Delay 与每帧 Delay 为 `0..255` 的额外延迟帧数，并支持 Speed、Swing。声音资源可用 `fgui_import_sound` 导入并在 Sound 轨道中引用。
 
 资源导入和 MovieClip 帧处理会写磁盘，`fgui_discard_document` 不会自动删除它们。已有 MovieClip 的更新或 `replace` 会记录文件快照，可通过 Agent undo/redo 回退；全新 MovieClip 创建和删除属于不可逆资源生命周期操作。创建失败会尽力清理本次新建的 `.jta` 与包资源。MovieClip 删除要求显式 `force=True`，且检测到组件引用时仍会拒绝删除。
+
+### 大图图集限制
+
+图片资源如果达到 `1920×1080`，或任一边达到 2K（`2048`），会自动设置 FairyGUI 的 `alone` 纹理集。这样每张大图都会单独生成图集，不会和小图混排。通过 `fgui_import_image` 导入/替换时立即应用；执行 `fgui_publish` 时还会扫描目标包并补齐历史资源的设置。发布响应和 `fgui_get_publish_settings` 会返回该规则及本次被修正的资源。
 
 MCP 只提供显式工具；CLI 的 `call` 仅用于调试原始 Action。
 

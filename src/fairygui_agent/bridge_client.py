@@ -192,7 +192,7 @@ class BridgeClient:
                 bridge_version = status.get("bridgeVersion", "unknown")
                 raise BridgeError(
                     f"FairyGUI Agent Bridge 缺少动画能力：{action} "
-                    f"(编辑器 bridge {bridge_version})。请更新并重新加载 0.8.0 或更高版本插件。"
+                    f"(编辑器 bridge {bridge_version})。请更新并重新加载 0.8.1 或更高版本插件。"
                 )
 
         request_dir = context.queue_root / "requests"
