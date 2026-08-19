@@ -27,7 +27,7 @@ class CopyEntry:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="预览或执行 FGUI Agent Bridge 插件与 Skill 同步。"
+        description="预览或执行 FGUI Agent Bridge 插件与 Skill 同步，支持拉取源仓库最新更新。"
     )
     project_group = parser.add_mutually_exclusive_group(required=True)
     project_group.add_argument(
@@ -40,6 +40,11 @@ def parse_args() -> argparse.Namespace:
         help="打开目录选择器，选择目标 FairyGUI 工程。",
     )
     parser.add_argument(
+        "--pull",
+        action="store_true",
+        help="在同步前从 Git 源仓库执行 git pull --ff-only 并更新依赖环境。",
+    )
+    parser.add_argument(
         "--skill-root",
         help="可选：安装 Skill 的目标仓库根目录。",
     )
@@ -49,6 +54,45 @@ def parse_args() -> argparse.Namespace:
         help="实际写入；省略时仅输出预览。",
     )
     return parser.parse_args()
+
+
+def pull_source_repository(repo_root: Path = REPOSITORY_ROOT) -> tuple[bool, str]:
+    """从 Git 远端拉取最新代码并同步依赖环境。"""
+    git_dir = repo_root / ".git"
+    if not git_dir.exists():
+        return False, f"未在 {repo_root} 发现 .git 目录，跳过远端拉取。"
+
+    git = shutil.which("git")
+    if not git:
+        return False, "未找到 git 命令，跳过远端拉取。"
+
+    print(f"正在从源仓库拉取最新提交: {repo_root} ...")
+    pull_result = subprocess.run(
+        [git, "-C", str(repo_root), "pull", "--ff-only"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if pull_result.returncode != 0:
+        error_msg = pull_result.stderr.strip() or pull_result.stdout.strip()
+        raise RuntimeError(f"从源仓库拉取更新失败 (git pull --ff-only)：\n{error_msg}")
+
+    pull_output = pull_result.stdout.strip()
+    print(f"Git 状态：{pull_output}")
+
+    uv = shutil.which("uv")
+    if uv and (repo_root / "pyproject.toml").exists():
+        print("正在同步 Python 依赖环境 (uv sync --frozen) ...")
+        sync_result = subprocess.run(
+            [uv, "sync", "--frozen", "--project", str(repo_root)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if sync_result.returncode != 0:
+            print(f"提示：uv sync 警告：{sync_result.stderr.strip()}", file=sys.stderr)
+
+    return True, pull_output
 
 
 def _run_directory_picker(command: list[str]) -> Path | None:
@@ -201,16 +245,72 @@ def classify(entry: CopyEntry) -> str:
     return "UPDATE"
 
 
-def sync(entries: list[CopyEntry], *, apply: bool) -> tuple[int, int, int]:
+def sync_entries(
+    entries: list[CopyEntry],
+    plugin_count: int,
+    *,
+    apply: bool,
+) -> tuple[int, int, int, bool]:
     counts = {"CREATE": 0, "UPDATE": 0, "UNCHANGED": 0}
-    for entry in entries:
+    plugin_modified = False
+    for i, entry in enumerate(entries):
         action = classify(entry)
         counts[action] += 1
         print(f"{action:9} {entry.destination}")
+        if action != "UNCHANGED" and i < plugin_count:
+            plugin_modified = True
         if apply and action != "UNCHANGED":
             entry.destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(entry.source, entry.destination)
-    return counts["CREATE"], counts["UPDATE"], counts["UNCHANGED"]
+    return counts["CREATE"], counts["UPDATE"], counts["UNCHANGED"], plugin_modified
+
+
+def sync(entries: list[CopyEntry], *, apply: bool) -> tuple[int, int, int]:
+    created, updated, unchanged, _ = sync_entries(entries, len(entries), apply=apply)
+    return created, updated, unchanged
+
+
+def perform_sync(
+    project_value: str,
+    skill_root_value: str | None = None,
+    *,
+    apply: bool = False,
+    pull: bool = False,
+    repo_root: Path = REPOSITORY_ROOT,
+) -> tuple[int, int, int, bool]:
+    """执行插件与可选 Skill 的同步。返回 (created, updated, unchanged, plugin_modified)。"""
+    if pull:
+        pull_source_repository(repo_root)
+
+    plugin_source = repo_root / "plugin"
+    skill_source = repo_root / ".agents" / "skills" / "fgui-agent-bridge"
+
+    project_file = resolve_project_file(project_value)
+    plugin_destination = project_file.parent / "plugins" / "agent-bridge"
+    entries = build_entries(plugin_source, plugin_destination)
+    plugin_entries_count = len(entries)
+
+    if skill_root_value:
+        skill_root = Path(skill_root_value).expanduser().resolve()
+        if not skill_root.is_dir():
+            raise ValueError(f"Skill 根目录不存在或不是目录：{skill_root}")
+        skill_destination = skill_root / ".agents" / "skills" / "fgui-agent-bridge"
+        entries.extend(build_entries(skill_source, skill_destination))
+
+    created, updated, unchanged, plugin_modified = sync_entries(
+        entries, plugin_count=plugin_entries_count, apply=apply
+    )
+    mode = "已写入" if apply else "预览"
+    print(
+        f"{mode}完成：create={created}, update={updated}, unchanged={unchanged}; "
+        "脚本不会删除目标目录中的其他文件。"
+    )
+    if not apply:
+        print("如需执行，请在确认目标后追加 --apply。")
+    elif plugin_modified:
+        print("\n⚠️ 提示：FairyGUI Editor 插件已写入/更新，请在编辑器中重新打开工程以加载新版插件。")
+
+    return created, updated, unchanged, plugin_modified
 
 
 def main() -> int:
@@ -226,25 +326,12 @@ def main() -> int:
     else:
         project_value = args.project
 
-    project_file = resolve_project_file(project_value)
-    plugin_destination = project_file.parent / "plugins" / "agent-bridge"
-    entries = build_entries(PLUGIN_SOURCE, plugin_destination)
-
-    if args.skill_root:
-        skill_root = Path(args.skill_root).expanduser().resolve()
-        if not skill_root.is_dir():
-            raise ValueError(f"Skill 根目录不存在或不是目录：{skill_root}")
-        skill_destination = skill_root / ".agents" / "skills" / "fgui-agent-bridge"
-        entries.extend(build_entries(SKILL_SOURCE, skill_destination))
-
-    created, updated, unchanged = sync(entries, apply=args.apply)
-    mode = "已写入" if args.apply else "预览"
-    print(
-        f"{mode}完成：create={created}, update={updated}, unchanged={unchanged}; "
-        "脚本不会删除目标目录中的其他文件。"
+    perform_sync(
+        project_value=project_value,
+        skill_root_value=args.skill_root,
+        apply=args.apply,
+        pull=args.pull,
     )
-    if not args.apply:
-        print("如需执行，请在确认目标后追加 --apply。")
     return 0
 
 

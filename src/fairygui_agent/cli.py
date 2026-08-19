@@ -244,6 +244,15 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("undo", help="撤销")
     subparsers.add_parser("redo", help="重做")
 
+    update_parser = subparsers.add_parser("update", help="从源仓库拉取最新代码并同步插件与 Skill 到工程")
+    update_parser.add_argument(
+        "--pull",
+        action="store_true",
+        help="在同步前从 Git 源仓库执行 git pull --ff-only 并更新依赖",
+    )
+    update_parser.add_argument("--skill-root", help="可选：安装 Skill 的目标仓库根目录")
+    update_parser.add_argument("--apply", action="store_true", help="实际写入；省略时仅输出预览")
+
     call_parser = subparsers.add_parser("call", help="调试用：调用原始 action")
     call_parser.add_argument("action")
     call_parser.add_argument("--params", default="{}", help="JSON 对象")
@@ -258,6 +267,35 @@ def main() -> int:
     try:
         if args.command == "status":
             print_result(client.describe_status())
+            return 0
+
+        if args.command == "update":
+            context = locator.resolve()
+            repo_root = Path(__file__).resolve().parents[2]
+            if str(repo_root) not in sys.path:
+                sys.path.insert(0, str(repo_root))
+            try:
+                from scripts.sync_to_project import perform_sync
+            except ImportError:
+                import importlib.util
+
+                sync_script = repo_root / "scripts" / "sync_to_project.py"
+                if not sync_script.is_file():
+                    raise RuntimeError(f"未找到同步脚本：{sync_script}")
+                spec = importlib.util.spec_from_file_location("sync_to_project", sync_script)
+                if spec is None or spec.loader is None:
+                    raise RuntimeError(f"无法加载同步脚本：{sync_script}")
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                perform_sync = mod.perform_sync
+
+            perform_sync(
+                project_value=str(context.project_file),
+                skill_root_value=args.skill_root,
+                apply=args.apply,
+                pull=args.pull,
+                repo_root=repo_root,
+            )
             return 0
 
         action = args.command

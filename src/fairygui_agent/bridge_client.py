@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import PROTOCOL_VERSION
+from . import PROTOCOL_VERSION, __version__
 from .editor_launcher import EditorLauncher
 from .project_locator import ProjectContext, ProjectLocator
 
@@ -91,13 +91,13 @@ class BridgeClient:
     def __init__(
         self,
         locator: ProjectLocator,
-        launcher: EditorLauncher,
+        launcher: EditorLauncher | None = None,
         *,
         timeout: float = 10.0,
         heartbeat_max_age: float = 5.0,
     ) -> None:
         self.locator = locator
-        self.launcher = launcher
+        self.launcher = launcher if launcher is not None else EditorLauncher()
         self.timeout = timeout
         self.heartbeat_max_age = heartbeat_max_age
 
@@ -117,13 +117,24 @@ class BridgeClient:
     def describe_status(self) -> dict[str, Any]:
         context = self.project_context()
         status = self.read_status()
-        return {
+        plugin_version = status.get("bridgeVersion") if status else None
+        version_match = (plugin_version == __version__) if plugin_version else None
+        result: dict[str, Any] = {
             "project": context.as_dict(),
             "statusFile": str(context.queue_root / "status.json"),
             "heartbeatAgeSeconds": status_age(status),
             "online": status is not None and status_age(status) <= self.heartbeat_max_age,
+            "bridgeClientVersion": __version__,
+            "pluginVersion": plugin_version,
+            "versionMatch": version_match,
             "status": status,
         }
+        if status and plugin_version and not version_match:
+            result["updateWarning"] = (
+                f"编辑器插件版本 (v{plugin_version}) 与 Bridge 客户端版本 (v{__version__}) 不一致，"
+                "建议执行更新同步并在 FairyGUI Editor 中重新打开工程。"
+            )
+        return result
 
     def _validate_status(self, status: dict[str, Any]) -> None:
         protocol = str(status.get("protocolVersion", ""))

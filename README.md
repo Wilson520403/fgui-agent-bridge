@@ -154,6 +154,28 @@ uv run python scripts/sync_to_project.py \
 
 ---
 
+## 🔄 检查与拉取更新
+
+当 Bridge 源仓库有功能更新或 Bug 修复时，可通过一条命令自动从源仓库安全拉取最新代码（`git pull --ff-only`）、同步 Python 环境（`uv sync`），并将最新插件与 Skill 刷新到目标工程：
+
+```bash
+# 从源仓库拉取最新代码并同步到 FairyGUI 工程与业务代码仓库
+uv run python scripts/sync_to_project.py \
+  --pull \
+  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
+  --skill-root /ABSOLUTE/PATH/TO/YOUR-CODE-REPOSITORY \
+  --apply
+
+# 或通过 CLI update 子命令执行
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT update --pull --apply
+```
+
+> **提示**：
+> - `fgui_status` 会自动比对当前 Bridge 服务端与 FairyGUI 编辑器内运行的插件版本，若版本不一致会在状态中返回 `updateWarning` 提示。
+> - 若插件文件被更新，请在 **FairyGUI Editor 中重新打开工程**以加载新版插件。
+
+---
+
 ## 🛠️ 常用 CLI 指令
 
 在 `fgui-agent-bridge` 仓库根目录下执行（也可以通过 `--project PATH` 指定工程）：

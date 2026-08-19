@@ -26,13 +26,20 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 查看包、资源、活动文档、对象树、对象 ID/路径、属性或撤销状态。
 - 修改组件属性、插入/删除已有 `ui://` 资源、保存、放弃、撤销或重做。
 - 发布当前包、指定包或全部包，或检查发布设置。
+- 检查 Bridge/插件版本一致性，或从源仓库拉取最新代码并同步到目标工程。
 - 修改插件、MCP、CLI、版本、协议、白名单、队列语义、同步脚本或 README。
 
 ## 使用工作流
 
+### 0. 检查更新与同步（按需）
+
+- 当用户要求“检查更新”、“拉取最新 Bridge 版本”，或 `fgui_status` 返回 `versionMatch: false` / 协议不兼容提示时：
+  1. 运行 `uv run python scripts/sync_to_project.py --pull --project PATH --skill-root PATH --apply`（或 `uv run fgui-agent update --pull --apply`）；
+  2. 若插件更新，提醒用户在 FairyGUI Editor 中重新打开工程生效。
+
 ### 1. 连接与定位
 
-1. 使用 `fgui_status` 查看当前会话是否已选择工程、编辑器是否在线以及心跳年龄；它不会唤醒编辑器。
+1. 使用 `fgui_status` 查看当前会话是否已选择工程、编辑器是否在线、插件版本是否匹配以及心跳年龄；它不会唤醒编辑器。
 2. 工程未选择时调用 `fgui_use_project`，参数可为 `.fairy` 文件、FairyGUI 工程目录或包含 `FairyGUI/FairyGUI.fairy` 的仓库目录。
 3. 需要唤醒或验证编辑器时调用 `fgui_ping`。不要把“请求已写入队列”当作 FairyGUI 已完成。
 4. 不知道包名时先 `fgui_list_packages`；不知道资源时用 `fgui_list_items`。
@@ -117,22 +124,26 @@ cp -R .agents/skills/fgui-agent-bridge \
 
 完成安装后先执行低风险读取：`status → ping → project → packages`，不要以创建、导入、保存或发布作为首次连接测试。
 
-### 同步脚本
+### 同步与更新脚本
 
-`scripts/sync_to_project.py` 支持目录选择和显式路径，两种方式都默认 dry-run，必须传入 `--apply` 才写入：
+`scripts/sync_to_project.py` 支持目录选择和显式路径，两种方式都默认 dry-run，必须传入 `--apply` 才写入；支持 `--pull` 自动从源仓库拉取最新代码并同步 Python 环境：
 
 ```bash
 # 打开目录选择器并安装插件
 uv run python scripts/sync_to_project.py --choose-project --apply
 
-# 自动化环境，并可同时安装 Skill
+# 从源仓库拉取更新并同步插件与 Skill
 uv run python scripts/sync_to_project.py \
+  --pull \
   --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
   --skill-root /ABSOLUTE/PATH/TO/TARGET-REPOSITORY \
   --apply
+
+# 或通过 CLI update 命令执行
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT update --pull --apply
 ```
 
-`--project` 与 `--choose-project` 互斥。脚本不创建 Git 元数据、不复制缓存、不删除目标目录中的其他文件。
+`--project` 与 `--choose-project` 互斥。脚本不创建 Git 元数据、不复制缓存、不删除目标目录中的其他文件。若更新了插件文件，需重新打开 FairyGUI Editor 工程加载。
 
 ## 开发与变更同步
 
