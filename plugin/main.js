@@ -11,14 +11,18 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.1";
+const BRIDGE_VERSION = "0.8.2";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
-const STATUS_INTERVAL_FRAMES = 60;
+const STATUS_MIN_INTERVAL_MS = 1000;
 const MAX_COMMANDS_PER_POLL = 4;
+// 超过该时长仍未被认领的请求视为残留（客户端可能已中断），拒绝执行。
+const REQUEST_MAX_AGE_MS = 60000;
+const DOTNET_EPOCH_TICKS = 62135596800000;
 const agentUndoStack = [];
 const agentRedoStack = [];
 let frameCount = 0;
+let lastStatusWrittenMs = 0;
 let queueRoot = "";
 let requestFolder = "";
 let processingFolder = "";
@@ -61,6 +65,7 @@ function initializeBridge() {
     ensureDirectory(requestFolder);
     ensureDirectory(processingFolder);
     ensureDirectory(responseFolder);
+    sweepStaleQueueFiles();
     initialized = true;
     appendLog(`bridge initialized: ${App.project.basePath}`);
     writeStatus();
@@ -73,6 +78,29 @@ function writeJsonAtomic(path, data) {
     if (IOFile.Exists(path))
         IOFile.Delete(path);
     IOFile.Move(tempPath, path);
+}
+function isStaleFile(path) {
+    try {
+        const ticks = Number(IOFile.GetLastWriteTimeUtc(path).Ticks);
+        return ticks < (Date.now() - REQUEST_MAX_AGE_MS + DOTNET_EPOCH_TICKS) * 10000;
+    }
+    catch (_) {
+        return false;
+    }
+}
+function sweepStaleQueueFiles() {
+    const folders = [requestFolder, processingFolder, responseFolder];
+    for (const folder of folders) {
+        try {
+            const files = IODirectory.GetFiles(folder, "*.json");
+            for (let i = 0; i < files.Length; i++) {
+                const path = String(files.GetValue(i));
+                if (isStaleFile(path))
+                    IOFile.Delete(path);
+            }
+        }
+        catch (_) { /* 清理失败不阻断桥接初始化。 */ }
+    }
 }
 function writeStatus() {
     if (!initialized || !App.project || !App.project.opened)
@@ -130,6 +158,7 @@ function writeStatus() {
             "redo"
         ]
     });
+    lastStatusWrittenMs = Date.now();
 }
 function describeProject() {
     const project = App.project;
@@ -2402,6 +2431,10 @@ function processRequestFile(sourcePath) {
         if (IOFile.Exists(claimedPath))
             IOFile.Delete(claimedPath);
         IOFile.Move(sourcePath, claimedPath);
+        if (isStaleFile(claimedPath)) {
+            completeRequestError(claimedPath, requestId, action, new Error(`请求已过期（超过 ${REQUEST_MAX_AGE_MS / 1000} 秒未被认领，可能来自已中断的客户端）`));
+            return;
+        }
         request = JSON.parse(IOFile.ReadAllText(claimedPath));
         requestId = safeRequestId(String(request.id || requestId));
         action = String(request.action || "unknown");
@@ -2439,7 +2472,8 @@ function onUpdate() {
     }
     if (frameCount % POLL_INTERVAL_FRAMES === 0)
         pollRequests();
-    if (frameCount % STATUS_INTERVAL_FRAMES === 0)
+    // 心跳按真实时间写入，编辑器帧率下降时不再被客户端误判为离线。
+    if (Date.now() - lastStatusWrittenMs >= STATUS_MIN_INTERVAL_MS)
         writeStatus();
 }
 function onProjectOpened() {

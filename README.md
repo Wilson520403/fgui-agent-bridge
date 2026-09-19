@@ -2,12 +2,14 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-- **版本**：`0.8.1`
+- **版本**：`0.8.2`
 - **队列协议**：`1.0`
 - **已验证 FairyGUI Editor**：`6.1.4`
 - **通信方式**：本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
+>
+> **队列自愈**：超过 60 秒未被编辑器认领的请求视为残留（客户端可能已中断），插件会拒绝执行并在 Bridge 初始化时清理过期队列文件。客户端命令超时不代表操作未执行，重试前先检查状态。
 
 ---
 

@@ -137,17 +137,6 @@ class CapabilityConsistencyTests(unittest.TestCase):
             self.assertIn(f'case "{action}"', plugin)
             self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
 
-    def test_version_is_synchronized(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        package_version = json.loads((root / "plugin/package.json").read_text(encoding="utf-8"))["version"]
-        pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
-        init = (root / "src/fairygui_agent/__init__.py").read_text(encoding="utf-8")
-        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
-        generated = (root / "plugin/main.js").read_text(encoding="utf-8")
-        self.assertEqual(package_version, "0.8.1")
-        for text in (pyproject, init, plugin, generated):
-            self.assertIn("0.8.1", text)
-
     def test_documented_mcp_tool_count_is_current(self) -> None:
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")

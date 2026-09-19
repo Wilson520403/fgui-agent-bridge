@@ -174,6 +174,7 @@ git diff --check
 
 - `.agent/` 是目标 FairyGUI 工程的运行时队列与日志，不纳入 Git。
 - 同一请求不要重复写入；响应必须按请求 ID 匹配。
+- 插件会拒绝执行超过 60 秒未被认领的过期请求，并在 Bridge 初始化时清理残留队列文件；客户端命令超时不代表操作未执行，重试前先检查状态（如 `fgui_status` / `fgui_get_active_document`），避免写操作重复执行。
 - 图片、声音、MovieClip 图片序列导入和发布是磁盘写入，执行前确认目标和冲突策略。Transition 声明式/关键帧修改与已有 MovieClip 更新/替换可由 Agent undo/redo 回退；全新资源创建、声音/图片导入和删除不能。
 - MovieClip 删除即使传 `force=true` 也会执行引用检查；仍被组件使用时必须先移除引用。
 - 不允许删除根组件；不要把 `discard`、`undo` 和 `save` 混为同一语义。

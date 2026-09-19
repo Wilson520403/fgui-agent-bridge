@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖并静态检查
+        run: |
+          uv sync --frozen
+          uv run python -m compileall -q src scripts
+          uv run python -m unittest discover -s tests -v
+
+      - name: 编译插件 TypeScript
+        run: npx -y -p typescript@5.4.5 tsc -p plugin/tsconfig.json --pretty false
+
+      # tsc 的 outDir 是插件目录本身：提交的 main.js 与编译产物不一致时此处失败
+      - name: 检查 main.js 与 main.ts 同步
+        run: git diff --exit-code --ignore-cr-at-eol -- plugin/main.js

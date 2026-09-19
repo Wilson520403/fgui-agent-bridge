@@ -94,12 +94,16 @@ class BridgeClient:
         launcher: EditorLauncher | None = None,
         *,
         timeout: float = 10.0,
-        heartbeat_max_age: float = 5.0,
+        heartbeat_max_age: float = 15.0,
+        timeout_grace: float = 2.0,
     ) -> None:
         self.locator = locator
         self.launcher = launcher if launcher is not None else EditorLauncher()
         self.timeout = timeout
+        # 插件心跳按真实时间写入；阈值放宽以容忍编辑器低帧率和短暂主线程停顿。
         self.heartbeat_max_age = heartbeat_max_age
+        # 超时后的宽限期：请求可能已被认领并刚好在超时后完成。
+        self.timeout_grace = timeout_grace
 
     def project_context(self) -> ProjectContext:
         return self.locator.resolve()
@@ -226,26 +230,42 @@ class BridgeClient:
         temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(temp_path, request_path)
 
+        def read_response() -> dict[str, Any] | None:
+            if not response_path.exists():
+                return None
+            try:
+                response = json.loads(response_path.read_text(encoding="utf-8"))
+            finally:
+                response_path.unlink(missing_ok=True)
+            if not isinstance(response, dict):
+                raise BridgeError(f"FairyGUI 返回了无效响应：{action}")
+            return response
+
         call_timeout = self.timeout if timeout is None else timeout
         deadline = time.monotonic() + call_timeout
         wake_again_at = time.monotonic() + min(1.0, call_timeout / 2)
         woke_again = False
         while time.monotonic() < deadline:
-            if response_path.exists():
-                try:
-                    response = json.loads(response_path.read_text(encoding="utf-8"))
-                finally:
-                    response_path.unlink(missing_ok=True)
-                if not isinstance(response, dict):
-                    raise BridgeError(f"FairyGUI 返回了无效响应：{action}")
+            response = read_response()
+            if response is not None:
                 return response
             if not woke_again and time.monotonic() >= wake_again_at:
                 self.launcher.wake(context.project_file)
                 woke_again = True
             time.sleep(0.05)
 
+        grace_deadline = time.monotonic() + self.timeout_grace
+        while time.monotonic() < grace_deadline:
+            response = read_response()
+            if response is not None:
+                return response
+            time.sleep(0.05)
+
         request_path.unlink(missing_ok=True)
-        raise TimeoutError(f"等待 FairyGUI 响应超时：{action} ({call_timeout:.1f}s)")
+        raise TimeoutError(
+            f"等待 FairyGUI 响应超时：{action} ({call_timeout:.1f}s)。"
+            "请求可能已被编辑器认领并继续执行，重试前请先检查状态，避免写操作重复执行。"
+        )
 
     def call(
         self,

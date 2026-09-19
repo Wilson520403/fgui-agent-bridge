@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -137,6 +139,24 @@ class TestSyncAndUpdate(unittest.TestCase):
         self.assertTrue(args.pull)
         self.assertTrue(args.apply)
         self.assertEqual(args.skill_root, "/fake/repo")
+
+
+class TestVersionConsistency(unittest.TestCase):
+    def test_versions_match_across_all_sources(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+        package_json = json.loads((repo_root / "plugin" / "package.json").read_text(encoding="utf-8"))
+        main_ts = (repo_root / "plugin" / "main.ts").read_text(encoding="utf-8")
+        main_js = (repo_root / "plugin" / "main.js").read_text(encoding="utf-8")
+        versions = {
+            "src/fairygui_agent/__init__.py": __version__,
+            "pyproject.toml": re.search(r'(?m)^version = "([^"]+)"', pyproject).group(1),
+            "plugin/package.json": package_json["version"],
+            "plugin/main.ts": re.search(r'BRIDGE_VERSION = "([^"]+)"', main_ts).group(1),
+            "plugin/main.js": re.search(r'BRIDGE_VERSION = "([^"]+)"', main_js).group(1),
+        }
+        mismatched = {name: value for name, value in versions.items() if value != __version__}
+        self.assertEqual(mismatched, {}, f"版本号不同步（应为 {__version__}）")
 
 
 if __name__ == "__main__":

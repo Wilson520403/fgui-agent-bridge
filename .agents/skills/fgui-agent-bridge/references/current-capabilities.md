@@ -4,7 +4,7 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.1`
+- Bridge 版本：`0.8.2`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
