@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-- **版本**：`0.8.2`
+- **版本**：`0.8.3`
 - **队列协议**：`1.0`
 - **已验证 FairyGUI Editor**：`6.1.4`
 - **通信方式**：本地 JSON 队列 + MCP stdio
@@ -303,3 +303,20 @@ uv run python scripts/sync_to_project.py --choose-project --apply
 ## 📄 许可证
 
 [MIT License](LICENSE)
+
+## P0 对象资源与文本样式 API
+
+### 0.8.3 可信持久化验证
+
+`--save` 现在会检查保存后文档状态，并读取组件 XML 对比 `before/after` 相关预期字段。`verify-document` 支持 `--expected '{"fontSize":40}'` 和 `--editor-only`。未执行自动 external reload；Button 六状态资源替换仍未开放。
+
+P0 新增了类型化的对象资源和文本样式操作，写入仍由 FairyGUI Editor API 执行：
+
+```bash
+uv run fgui-agent replace-object-resource --id n12_ox87 ui://package/resource --expected-type image --save
+uv run fgui-agent get-text-style --path root/title
+uv run fgui-agent set-text-style --path root/title '{"fontSize":40,"color":"#FFFFFF","align":"center"}' --save
+uv run fgui-agent verify-document --max-depth 12
+```
+
+对应 MCP 工具为 `fgui_replace_object_resource`、`fgui_get_text_style`、`fgui_set_text_style` 和 `fgui_verify_document`。响应包含目标、before/after、保存状态和 Editor 回读状态。`verify-document --expected` 会读取组件 XML 并进行磁盘回读；`externalReload` 仍明确为 `false`，因为本轮未实现自动关闭/重开文档；Python 单元测试和静态编译不替代真实 Editor 验收。

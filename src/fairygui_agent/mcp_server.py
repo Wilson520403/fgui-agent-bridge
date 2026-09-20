@@ -511,7 +511,7 @@ def fgui_set_property(
 
 @mcp.tool()
 def fgui_replace_object_resource(resource_url: str, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected_type: str = "image", state: str | None = None, save: bool = False, verify: bool = True) -> dict[str, Any]:
-    """通过 FairyGUI Editor API 替换 Image、Loader 或 Button 的资源引用。"""
+    """通过 Editor API 替换 Image/Loader 图片引用；保存后默认比对磁盘 XML。Button 状态暂不支持。"""
     params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "resourceURL": resource_url, "expectedType": expected_type, "save": save, "verify": verify}
     if state: params["state"] = state
     return _client.call("replace_object_resource", params)
@@ -530,9 +530,13 @@ def fgui_set_text_style(style: dict[str, Any], object_id: str | None = None, obj
 
 
 @mcp.tool()
-def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None) -> dict[str, Any]:
-    """重新读取活动文档对象树并返回 Editor 回读状态。"""
-    params: dict[str, Any] = {"maxDepth": max_depth}
+def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected: dict[str, Any] | None = None, read_xml: bool = True) -> dict[str, Any]:
+    """只读验证 target 的 expected 属性；默认比对磁盘 XML，不保存、不重载。无 expected 时仅返回快照。"""
+    params: dict[str, Any] = {"maxDepth": max_depth, "readXml": read_xml}
+    if expected is not None:
+        if not any((object_id, object_path, object_name)):
+            raise ValueError("expected 必须提供 target")
+        params["expected"] = expected
     if any((object_id, object_path, object_name)): params["target"] = _target(object_id, object_path, object_name)
     return _client.call("verify_document", params)
 

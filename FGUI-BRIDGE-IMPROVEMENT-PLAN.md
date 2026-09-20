@@ -6,6 +6,34 @@
 >
 > 目标：让 FairyGUI 的常规 UI 拼装、Lanhu 设计还原、资源替换、文字样式调整、动画配置和发布验证尽可能通过 Bridge 完成，减少对 Computer Use 原生界面操作的依赖。
 
+## 当前完成情况（2026-09-20 核查）
+
+以本仓库当前实现（本轮工作树、版本 `0.8.3`）、`tests/reports/` 中的既有 Editor 报告及本次 Python 测试为依据。
+
+**标记约定：** `[x]` 表示该工作项已实现；`[ ]` 表示未完成，带“部分完成”说明的项目不可按整项验收。实现完成不等于 Editor、Unity 或真机验收通过。下文背景保留为规划提出时的问题描述，不代表所有问题仍完全未处理。
+
+| 阶段 | 当前状态 | 已有能力与主要缺口 |
+| --- | --- | --- |
+| Phase 0 | 部分完成 | 有夹具目录、版本基线声明、sample 回归报告和单测命令；八类对象完整隔离夹具、初始快照及自动 JSON 报告未完成。 |
+| Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；external reload、所有写 Action 统一语义仍未完成。 |
+| Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
+| Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
+| Phase 4 | 未完成 | 未找到计划中的 List/Group/Relation/Controller/gearDisplay 专用 Action。 |
+| Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API 已实现；自动同步关键帧、专用验证及截图未完成。 |
+| Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
+| Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。 |
+
+### 核查证据与验收边界
+
+- 本次执行 `uv run python -m unittest discover -s tests -q`：**23 项通过**（含新增 4 项 Python/模拟宿主入口测试；模拟宿主内部另有 24 项回归）；这是 Python/协议与静态接口测试，不是真实 Editor 全流程验收。
+- 既有 Editor 记录：`tests/reports/sample-p0-validation.json`、`sample-p0-retest.json`、`sample-p0-color-errors-retest.json`。较新的报告修复了早期颜色和错误码失败，但仍列出 Button 状态、自动 XML 回读、自动重载、批量原子性、lineGap 响应等缺口。
+- 最后一次报告的重载证据来自用户报告及 `savedVersion` 重置，**没有自动关闭/重开测试**。本次未重新操作 Editor、发布资源、刷新 Unity 或执行 Play Mode/真机测试。
+- **本轮已处理：** `writeVerification` 现在检查保存状态并可读取组件 XML 与 expected 比对；`verifyDocument` 支持 expected 校验。**仍未完成：** external reload、完整 XML 对象矩阵和所有写 Action 的统一语义，因此 P0/切片 A 仍只能标为部分完成。
+- `tests/fixtures/phase0/initial-tree.json`、`initial-resources.json` 仍为空数组，`initial-xml.xml` 仍为占位注释，不能按完整夹具验收。
+- capability 文档实际路径为 `.agents/skills/fgui-agent-bridge/references/current-capabilities.md`，而非仓库根目录 `references/`。
+
+---
+
 ## 1. 背景与当前问题
 
 本次拳击 HUD UI 拼装验证了 Bridge 的基础能力，但也暴露出以下问题：
@@ -210,8 +238,8 @@ Lanhu 设计中的：
 
 ### 工作项
 
-- [ ] 固定 FairyGUI Editor 版本和 Bridge 插件版本。
-- [ ] 创建隔离测试工程，包含：
+- [ ] 固定 FairyGUI Editor 版本和 Bridge 插件版本。（部分完成：manifest 声明 Editor 6.1.4，仓库 Bridge 为 0.8.3；夹具尚未锁定完整版本组合。）
+- [ ] 创建隔离测试工程，包含：（部分完成：有 sample 实测报告和夹具定义，未见以下八类对象完整覆盖。）
   - 一个普通 Image；
   - 一个 Loader；
   - 一个 Button；
@@ -220,10 +248,10 @@ Lanhu 设计中的：
   - 一个 Group；
   - 一个 Controller；
   - 一个 Transition。
-- [ ] 为每个对象记录初始 XML、对象树和资源 URL。
-- [ ] 补充 Action 的“请求成功但未持久化”回归测试。
-- [ ] 将测试夹具放在独立 Bridge 仓库，不污染业务工程。
-- [ ] 建立统一的测试命令和 JSON 报告格式。
+- [ ] 为每个对象记录初始 XML、对象树和资源 URL。（快照文件仍为占位。）
+- [ ] 补充 Action 的“请求成功但未持久化”回归测试。（部分完成：已有人工 Editor 回归报告，未形成自动持久化断言。）
+- [x] 将测试夹具放在独立 Bridge 仓库，不污染业务工程。（目录 `tests/fixtures/phase0/` 已建立；内容完整性见上。）
+- [ ] 建立统一的测试命令和 JSON 报告格式。（部分完成：有 unittest 命令和 JSON 报告，但没有统一报告生成器/schema。）
 
 ### 验收标准
 
@@ -241,13 +269,13 @@ Lanhu 设计中的：
 
 ### 工作项
 
-- [ ] 统一 target locator：
+- [x] 统一 target locator（`resolveObject` 已支持以下定位，name/resourceURL 有唯一性检查；不代表所有路径歧义均已回归）：
   - `id`；
   - `path`；
   - `name`；
   - `resourceURL`；
   - 唯一性校验。
-- [ ] 所有写 Action 返回统一结构：
+- [ ] 所有写 Action 返回统一结构：（部分完成：新增 P0 写接口使用 `writeVerification`，旧接口未全面统一，持久化标记仍不可靠。）
 
 ```json
 {
@@ -269,14 +297,14 @@ Lanhu 设计中的：
 }
 ```
 
-- [ ] 增加 `verify_document` Action：
+- [ ] 增加 `verify_document` Action：（部分完成：插件/MCP/CLI 入口已存在，仅返回当前文档快照，以下比对尚未完整实现。）
   - 重新读取活动文档；
   - 对比对象树；
   - 对比关键属性；
   - 检查 XML 是否包含预期值。
-- [ ] 保存后支持可选的 external reload 验证。
-- [ ] 避免只返回请求队列已写入；必须等待编辑器响应。
-- [ ] 统一错误类型：target not found、ambiguous target、unsupported property、editor rejected、persistence failed、publish failed。
+- [ ] 保存后支持可选的 external reload 验证。（当前明确返回 `externalReload: false`。）
+- [x] 避免只返回请求队列已写入；必须等待编辑器响应。（Python Bridge client 按请求 ID 等待响应。）
+- [ ] 统一错误类型：target not found、ambiguous target、unsupported property、editor rejected、persistence failed、publish failed。（部分完成：结构化错误映射和 Python 透传已实现，缺目标/非文本/非法颜色有 Editor 证据；真实持久化失败检测未完成。）
 
 ### 验收标准
 
@@ -287,6 +315,8 @@ Lanhu 设计中的：
 ---
 
 ## Phase 2：资源引用与状态资源管理
+
+**状态：部分完成。** `replace_object_resource` 已贯通插件、Python capability、MCP、CLI；Image 使用 Editor `ReplaceSelection`，Loader 设置 `url`。下述支持矩阵及安全校验仍是目标，不能因为接口存在就视为全部完成。Button 的 `state` 参数尚不构成可靠的逐状态替换实现。
 
 ### 目标
 
@@ -339,6 +369,8 @@ replace_object_resource
 ---
 
 ## Phase 3：文本样式和排版 API
+
+**状态：部分完成。** `set_text_style` / `get_text_style` 已贯通各入口；文本类型与颜色检查已实现。尚无严格完整字段白名单/样式 schema，描边阴影完整语义及数值范围、批量事务尚待补齐；`lineGap` 写入映射为 `leading`，读取未对称返回。
 
 ### 目标
 
@@ -395,6 +427,8 @@ get_text_style
 ---
 
 ## Phase 4：List、Group、Relation 和 Controller
+
+**状态：未完成。** 以下专用 Action 尚未实现；已有通用属性或按钮状态能力不等于本阶段完成。
 
 ### 目标
 
@@ -467,14 +501,14 @@ set_gear_display
 
 ### 工作项
 
-- [ ] 增加 transition schema 校验；
-- [ ] 修改关键帧前自动保存 before 快照；
-- [ ] 对 XY、Size、Scale、Alpha、Color、Text、Icon 等轨道提供类型化 API；
+- [x] 增加 transition schema 校验（已有类型、字段、target 和参数校验）；
+- [x] 修改关键帧前自动保存 before 快照（内存事务快照及 Agent undo/redo，不等同于磁盘备份）；
+- [x] 对 XY、Size、Scale、Alpha、Color、Text、Icon 等轨道提供类型化 API；
 - [ ] 支持根据节点属性变化自动更新相关关键帧；
 - [ ] 增加 `verify_transition`：检查 target 是否存在、关键帧是否超出对象范围；
 - [ ] 预览后导出指定帧截图；
-- [ ] MovieClip 支持帧尺寸、透明边界、FPS 和循环参数报告；
-- [ ] 对大图和大帧集给出 atlas/alone 建议。
+- [ ] MovieClip 支持帧尺寸、透明边界、FPS 和循环参数报告（部分完成：已有创建/更新/读取/预览能力，未覆盖完整报告）；
+- [ ] 对大图和大帧集给出 atlas/alone 建议。（部分完成：已有发布前大图 alone 处理，未见完整大帧集分析建议。）
 
 ### 验收标准
 
@@ -485,6 +519,8 @@ set_gear_display
 ---
 
 ## Phase 6：Lanhu 设计到 FairyGUI 的标准映射工作流
+
+**状态：未完成。** 尚未找到下述标准工作流实现及端到端报告。
 
 ### 目标
 
@@ -700,6 +736,8 @@ Bridge 改进应在独立仓库完成：
 
 ### 切片 A：可靠资源替换 + 文本样式
 
+**状态：部分完成，不能整体验收。** 四个 Action 的入口已落地；自动持久化验证、完整 Button 状态和批量回滚仍缺失，业务工程与 Unity 验收未确认。
+
 新增：
 
 ```text
@@ -711,15 +749,15 @@ verify_document
 
 同时完成：
 
-- 插件 TypeScript 实现；
-- 编译生成 `plugin/main.js`；
-- Python Bridge client capability；
-- MCP 工具；
-- CLI 子命令；
-- README、Skill、capability 文档；
-- 隔离工程测试；
-- 业务工程同步；
-- 用 `ComMenuBtn`、`ComScore`、`Slider2` 做回归样本。
+- [x] 插件 TypeScript 实现（基础入口，完整语义见上述缺口）；
+- [x] 编译生成 `plugin/main.js`（仓库已有对应实现，本次未重新编译）；
+- [x] Python Bridge client capability；
+- [x] MCP 工具；
+- [x] CLI 子命令；
+- [ ] README、Skill、capability 文档（README/capability 已列出 API；Skill 主文档仍需补齐新接口工作流与实际验证限制）；
+- [ ] 隔离工程测试（已有部分 sample 回归报告，完整矩阵未完成）；
+- [ ] 业务工程同步（本次未核验安装快照，不标完成）；
+- [ ] 用 `ComMenuBtn`、`ComScore`、`Slider2` 做回归样本（现有报告主要使用 `BridgeTextTest`，未见三者完整验收记录）。
 
 ### 切片 A 的完成标准
 

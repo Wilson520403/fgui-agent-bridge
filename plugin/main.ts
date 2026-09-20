@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.2";
+const BRIDGE_VERSION = "0.8.3";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -36,6 +36,7 @@ interface AgentResponse {
         code?: string;
         message: string;
         stack?: string;
+        details?: any;
     };
     timestamp: string;
 }
@@ -938,36 +939,165 @@ function targetSummary(obj: any, target: any): any {
     return { id: obj.id || null, name: obj.name || null, path: target && target.path ? String(target.path) : null, type: String(obj.objectType || "unknown") };
 }
 
-function writeVerification(doc: any, obj: any, before: any, after: any, params: any): any {
-    const changed = JSON.stringify(before) !== JSON.stringify(after);
-    if (params.save) doc.Save();
-    const saved = Boolean(params.save);
-    return { ok: true, target: targetSummary(obj, params.target), before, after, documentModified: Boolean(doc.isModified), saved, persisted: saved, verification: { editorReadback: true, xmlReadback: saved, externalReload: false } };
+// Verification is deliberately limited to properties with a known serialized meaning.
+const VERIFIED_TEXT_KEYS = ["font", "fontSize", "color", "align", "vAlign", "autoSize", "lineGap", "letterSpacing", "width", "height", "x", "y"];
+const VERIFIED_KEYS = ["id", "name", "type", "resourceURL"].concat(VERIFIED_TEXT_KEYS);
+
+function verificationError(code: string, message: string, details: any): never {
+    const error: any = new Error(message);
+    error.code = code;
+    error.details = details;
+    throw error;
+}
+
+function validateExpectations(expected: any): any {
+    if (!expected || typeof expected !== "object" || Array.isArray(expected) || Object.keys(expected).length === 0)
+        verificationError("invalid_argument", "expected 必须是非空属性对象", { stage: "input" });
+    const result: any = {};
+    for (const key of Object.keys(expected)) {
+        if (VERIFIED_KEYS.indexOf(key) < 0)
+            verificationError("unsupported_property", `不支持验证属性：${key}`, { stage: "input", property: key });
+        const value = expected[key];
+        if (value !== null && typeof value !== "string" && typeof value !== "number")
+            verificationError("invalid_argument", `expected.${key} 必须是字符串、数字或 null`, { stage: "input" });
+        if (typeof value === "number" && !Number.isFinite(value))
+            verificationError("invalid_argument", `expected.${key} 必须是有限数字`, { stage: "input" });
+        result[key] = key === "color" ? normalizedColor(value, "color") : value;
+    }
+    return result;
+}
+
+function verifiedObjectValues(obj: any): any {
+    const value: any = { id: obj.id || "", name: obj.name || "", type: String(obj.objectType || "unknown").toLowerCase(), resourceURL: String(obj.objectType).toLowerCase() === "loader" ? (obj.url || null) : (obj.resourceURL || null) };
+    const aliases: any = { vAlign: "verticalAlign", lineGap: "leading" };
+    for (const key of VERIFIED_TEXT_KEYS) {
+        const property = aliases[key] || key;
+        value[key] = key === "color" ? colorHex(obj.color) : (obj[property] === undefined ? null : safeValue(obj[property]));
+    }
+    // An unspecified/default font is represented by the empty string in XML.
+    if (value.font === null) value.font = "";
+    return value;
+}
+
+function compareVerification(expected: any, actual: any, stage: string, obj: any): any {
+    const differences: any[] = [];
+    for (const key of Object.keys(expected)) {
+        const a = actual[key] === undefined ? null : actual[key];
+        const e = expected[key];
+        if (!(typeof e === "number" && typeof a === "number" ? Math.abs(e - a) <= 0.00001 : e === a))
+            differences.push({ property: key, expected: e, actual: a });
+    }
+    if (differences.length)
+        verificationError(stage === "xml" ? "persistence_failed" : "editor_rejected", `验证失败：${stage}`, { stage, target: targetSummary(obj, null), expected, actual, differences, mutationMayHaveOccurred: true });
+    return actual;
+}
+
+function persistedObjectValues(doc: any, obj: any): any {
+    const item = App.project.GetItemByURL(doc.content.resourceURL);
+    if (!item || !item.file || !IOFile.Exists(item.file))
+        verificationError("persistence_failed", "无法读取组件 XML", { stage: "xml", target: targetSummary(obj, null) });
+    const XmlType = (CS as any).FairyGUI.Utils.XML;
+    const xml = new XmlType(String(IOFile.ReadAllText(item.file)));
+    let node: any = null;
+    if (obj === doc.content) node = xml;
+    else {
+        // Only direct displayList children belong to this component's serialized document.
+        // Do not accidentally match a nested component or transition's target ID.
+        const list = xml.GetNode("displayList");
+        if (list) {
+            for (let i = 0; i < list.elements.Count; i++) {
+                const candidate = list.elements.get_Item(i);
+                if (String(candidate.GetAttribute("id")) === String(obj.id)) {
+                    if (node) verificationError("persistence_failed", "XML 对象 ID 不唯一", { stage: "xml", id: obj.id });
+                    node = candidate;
+                }
+            }
+        }
+    }
+    if (!node) verificationError("persistence_failed", "XML 中未找到目标对象", { stage: "xml", target: targetSummary(obj, null) });
+    const attr = (key: string): any => { const v = node.GetAttribute(key); return v === null || v === undefined ? null : String(v); };
+    const value: any = { id: attr("id") || "", name: attr("name") || "", type: String(node.name), resourceURL: null };
+    if (value.type === "loader") value.resourceURL = attr("url");
+    else if (attr("src")) value.resourceURL = `ui://${attr("pkg") || item.owner.id}${attr("src")}`;
+    for (const key of ["font", "fontSize", "color", "align", "vAlign", "autoSize", "letterSpacing"])
+        value[key] = attr(key);
+    value.font = value.font || "";
+    value.lineGap = attr("leading");
+    if (value.color !== null) value.color = normalizedColor(value.color, "XML color");
+    for (const key of ["fontSize", "letterSpacing", "lineGap"])
+        if (value[key] !== null) value[key] = Number(value[key]);
+    const xy = (attr("xy") || "0,0").split(",").map(Number);
+    value.x = xy[0]; value.y = xy[1];
+    let size = attr("size");
+    // Image size may be omitted when it equals the referenced resource's dimensions.
+    if (!size && value.type === "image" && value.resourceURL) {
+        const resource = App.project.GetItemByURL(value.resourceURL);
+        if (resource) size = `${resource.width},${resource.height}`;
+    }
+    const dimensions = size ? size.split(",").map(Number) : [null, null];
+    value.width = dimensions[0]; value.height = dimensions[1];
+    return { values: value, file: String(item.file) };
+}
+
+function verifyObject(doc: any, obj: any, expected: any, readXml: boolean): any {
+    const editor = compareVerification(expected, verifiedObjectValues(obj), "editor", obj);
+    let disk: any = null;
+    if (readXml) {
+        try {
+            disk = persistedObjectValues(doc, obj);
+            compareVerification(expected, disk.values, "xml", obj);
+        } catch (error) {
+            if (error.code) throw error;
+            verificationError("persistence_failed", "XML 读取或解析失败", { stage: "xml", target: targetSummary(obj, null), reason: String(error), expected });
+        }
+    }
+    return { editorReadback: true, xmlReadback: Boolean(disk), externalReload: false, expected, editor, xml: disk ? disk.values : null, file: disk ? disk.file : null };
+}
+
+function writeVerification(doc: any, obj: any, before: any, after: any, params: any, expected: any): any {
+    // Editor acceptance is checked even with verify=false; that flag only skips disk readback.
+    const verification = verifyObject(doc, obj, expected, false);
+    let saved = false;
+    if (params.save) {
+        try { doc.Save(); }
+        catch (error) { verificationError("persistence_failed", "保存失败", { stage: "save", target: targetSummary(obj, null), reason: String(error), expected }); }
+        saved = doc.isModified === false;
+        if (!saved) verificationError("persistence_failed", "保存后文档仍处于修改状态", { stage: "save", target: targetSummary(obj, null), expected });
+    }
+    const checked = saved && params.verify !== false ? verifyObject(doc, obj, expected, true) : verification;
+    return { ok: true, target: targetSummary(obj, params.target), before, after, documentModified: Boolean(doc.isModified), saved, persisted: saved && checked.xmlReadback, verification: checked, note: "仅验证 expected 中的字段；未执行 external reload。失败不自动回滚。" };
 }
 
 function replaceObjectResource(params: any): any {
     const doc = getActiveDocument();
-    const obj: any = resolveObject(doc, params.target);
+    let obj: any = resolveObject(doc, params.target);
+    if (params.externalReload) verificationError("unsupported_property", "暂不支持自动 external reload", { stage: "input" });
+    const type = String(obj.objectType || "").toLowerCase();
+    if (["image", "loader"].indexOf(type) < 0 || params.state)
+        verificationError("unsupported_property", "可信资源替换目前仅支持 Image/Loader；Button 状态请使用专用 API", { stage: "input" });
     const url = String(params.resourceURL || params.url || "").trim();
-    if (!url || url.indexOf("ui://") !== 0) throw new Error("resourceURL 必须是 ui:// URL");
-    const expectedType = params.expectedType ? String(params.expectedType).toLowerCase() : "image";
-    const actualType = String(obj.objectType || "").toLowerCase();
-    if (expectedType === "image" && ["image", "loader", "button", "movieclip"].indexOf(actualType) < 0)
-        throw new Error(`对象类型不支持资源替换：${actualType}`);
-    const state = params.state ? String(params.state) : "";
-    const property = actualType === "loader" ? "url" : (actualType === "button" && state ? state : "src");
-    const before = { resourceURL: obj.resourceURL || null, property, value: obj[property] || null };
-    if (actualType === "loader") {
-        obj.url = url;
-    } else {
-        // FImage.resourceURL is read-only; replace the selected object through the Editor document.
-        doc.SetSelection(obj);
-        doc.ReplaceSelection(url);
+    if (url.indexOf("ui://") !== 0) verificationError("invalid_argument", "resourceURL 必须是 ui:// URL", { stage: "input" });
+    const resource = resolveItem({ url });
+    if (resource.type !== FairyEditor.FPackageItemType.IMAGE || (params.expectedType && String(params.expectedType).toLowerCase() !== "image"))
+        verificationError("invalid_argument", "本切片的资源类型必须是 image", { stage: "input", resourceURL: url });
+    const canonicalUrl = String(resource.GetURL());
+    const before = verifiedObjectValues(obj);
+    const expected: any = { id: before.id, name: before.name, type, resourceURL: canonicalUrl };
+    const preserveSize = params.preserveSize !== false;
+    if (preserveSize) { expected.width = obj.width; expected.height = obj.height; }
+    if (before.resourceURL !== canonicalUrl) {
+        if (type === "loader") obj.url = canonicalUrl;
+        else {
+            doc.SetSelection(obj);
+            doc.ReplaceSelection(canonicalUrl);
+            // ReplaceSelection can invalidate the old object reference. Re-resolve by stable ID.
+            obj = resolveObject(doc, { id: before.id });
+        }
+        if (preserveSize) { obj.width = expected.width; obj.height = expected.height; }
+        doc.SetModified(true);
+        doc.RefreshInspectors();
     }
-    doc.SetModified(true);
-    doc.RefreshInspectors();
-    const after = { resourceURL: obj.resourceURL || null, property, value: obj[property] || url };
-    return writeVerification(doc, obj, before, after, params);
+    return writeVerification(doc, obj, before, verifiedObjectValues(obj), params, expected);
 }
 
 function colorHex(value: any): any {
@@ -983,6 +1113,8 @@ function colorHex(value: any): any {
 function textStyle(obj: any): any {
     const value: any = {};
     ["font", "fontSize", "align", "verticalAlign", "autoSize", "lineSpacing", "letterSpacing", "stroke", "shadow", "width", "height"].forEach(k => { if (obj[k] !== undefined) value[k] = obj[k]; });
+    if (obj.leading !== undefined) value.lineGap = Number(obj.leading);
+    if (obj.verticalAlign !== undefined) value.vAlign = String(obj.verticalAlign);
     if (obj.color !== undefined) value.color = colorHex(obj.color);
     if (obj.strokeColor !== undefined) value.strokeColor = colorHex(obj.strokeColor);
     if (obj.shadowColor !== undefined) value.shadowColor = colorHex(obj.shadowColor);
@@ -1000,38 +1132,46 @@ function getTextStyle(params: any): any {
 function setTextStyle(params: any): any {
     const doc = getActiveDocument();
     const obj: any = resolveObject(doc, params.target);
+    if (params.externalReload) verificationError("unsupported_property", "暂不支持自动 external reload", { stage: "input" });
     const type = String(obj.objectType || "").toLowerCase();
     if (type.indexOf("text") < 0 && type.indexOf("rich") < 0) throw new Error("目标不是文本对象");
-    const style = params.style || params;
-    const before = textStyle(obj);
-    const numeric = ["fontSize", "lineSpacing", "letterSpacing"];
-    for (const key of numeric) if (style[key] !== undefined) numberValue(style[key], key, -1000, 10000);
-    if (style.color !== undefined) normalizedColor(style.color, "color");
-    if (style.stroke && style.stroke.color !== undefined) normalizedColor(style.stroke.color, "stroke.color");
-    if (style.shadow && style.shadow.color !== undefined) normalizedColor(style.shadow.color, "shadow.color");
-    const aliases: any = { vAlign: "verticalAlign", lineGap: "leading" };
-    if (style.color !== undefined) obj.color = unityColor(style.color, "color");
-    if (style.stroke && style.stroke.color !== undefined) obj.strokeColor = unityColor(style.stroke.color, "stroke.color");
-    if (style.shadow && style.shadow.color !== undefined) obj.shadowColor = unityColor(style.shadow.color, "shadow.color");
-    const excluded = ["color", "stroke", "shadow"];
+    const style = validateExpectations(params.style);
     for (const key of Object.keys(style)) {
-        if (["target", "style", "verify", "save", "externalReload"].indexOf(key) >= 0 || excluded.indexOf(key) >= 0) continue;
-        const property = aliases[key] || key;
-        if (style[key] !== undefined) obj[property] = style[key];
+        if (VERIFIED_TEXT_KEYS.indexOf(key) < 0) verificationError("unsupported_property", `不支持文本样式：${key}`, { stage: "input" });
+        if (["fontSize", "lineGap", "letterSpacing", "width", "height", "x", "y"].indexOf(key) >= 0) {
+            if (typeof style[key] !== "number") verificationError("invalid_argument", `${key} 必须是数字`, { stage: "input" });
+            numberValue(style[key], key, ["fontSize", "width", "height"].indexOf(key) >= 0 ? 0 : -10000, 10000);
+        } else if (typeof style[key] !== "string") verificationError("invalid_argument", `${key} 必须是字符串`, { stage: "input" });
     }
-    if (style.stroke) obj.stroke = style.stroke;
-    if (style.shadow) obj.shadow = style.shadow;
+    const enums: any = { align: ["left", "center", "right"], vAlign: ["top", "middle", "bottom"], autoSize: ["none", "both", "height", "shrink"] };
+    for (const key of Object.keys(enums)) if (style[key] !== undefined && enums[key].indexOf(style[key]) < 0)
+        verificationError("invalid_argument", `${key} 枚举值无效`, { stage: "input" });
+    if (style.font && style.font.indexOf("ui://") === 0) {
+        const font = resolveItem({ url: style.font });
+        if (font.type !== FairyEditor.FPackageItemType.FONT) verificationError("invalid_argument", "font 必须引用字体资源", { stage: "input" });
+        style.font = String(font.GetURL());
+    }
+    const before = textStyle(obj);
+    const aliases: any = { vAlign: "verticalAlign", lineGap: "leading" };
+    for (const key of Object.keys(style)) obj[aliases[key] || key] = key === "color" ? unityColor(style[key], "color") : style[key];
     doc.SetModified(true);
     doc.RefreshInspectors();
-    return writeVerification(doc, obj, before, textStyle(obj), params);
+    const expected = Object.assign({ id: obj.id, type }, style);
+    return writeVerification(doc, obj, before, textStyle(obj), params, expected);
 }
 
 function verifyDocument(params: any): any {
     const doc = getActiveDocument();
+    if (params.externalReload) verificationError("unsupported_property", "暂不支持自动 external reload", { stage: "input" });
     const tree = describeObject(doc.content, 0, params.maxDepth === undefined ? 12 : Number(params.maxDepth));
-    let target = null;
-    if (params.target) target = describeObject(resolveObject(doc, params.target), 0, 1);
-    return { ok: true, document: describeDocument(doc), target, tree, verification: { editorReadback: true, xmlReadback: false, externalReload: false }, persisted: false, note: "FairyGUI Editor API 未提供通用 XML 回读；请通过保存后重新打开文档完成 external reload 验证。" };
+    if (params.expected !== undefined) {
+        if (!params.target) verificationError("invalid_argument", "expected 必须提供 target", { stage: "input" });
+        const expected = validateExpectations(params.expected);
+        const obj = resolveObject(doc, params.target);
+        const verification = verifyObject(doc, obj, expected, params.readXml !== false);
+        return { ok: true, document: describeDocument(doc), target: targetSummary(obj, params.target), tree, verification, saved: !doc.isModified, persisted: !doc.isModified && verification.xmlReadback, note: "只验证 expected 字段；不会保存或重载文档。" };
+    }
+    return { ok: true, document: describeDocument(doc), target: params.target ? describeObject(resolveObject(doc, params.target), 0, 1) : null, tree, verification: { editorReadback: false, xmlReadback: false, externalReload: false }, persisted: false, note: "仅返回快照，未比对预期值。传入 target 和 expected 执行验证。" };
 }
 
 // Animation bridge helpers. FairyGUI Editor 6.1.4 exposes these APIs through Puerts.
@@ -2834,7 +2974,7 @@ function completeRequestError(claimedPath: string, requestId: string, action: st
         id: requestId,
         ok: false,
         action,
-        error: { code, message, stack },
+        error: { code: error && error.code ? String(error.code) : code, message, stack, details: error && error.details ? error.details : undefined },
         timestamp: nowIso()
     };
     writeJsonAtomic(IOPath.Combine(responseFolder, `${requestId}.json`), response);

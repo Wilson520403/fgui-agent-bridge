@@ -4,7 +4,7 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.2`
+- Bridge 版本：`0.8.3`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
@@ -107,3 +107,11 @@
 2. 插件 capability、Action 分发、Python 动画 capability 检查、MCP 工具、CLI parser 和文档清单一致。
 3. `plugin/main.ts` 与重新编译的 `plugin/main.js` 一致。
 4. 创建/导入/预览变更应在 FairyGUI Editor `6.1.4` 隔离工程副本中验证，避免污染正式工程。
+
+### P0 可信持久化验证（0.8.3）
+
+- `replace_object_resource` 本轮仅允许 Image/Loader，拒绝 Button `state`，避免把整个 Button 替换误报为状态资源替换。
+- 保存时检查 Editor 文档变为未修改；`save=false` 或 `verify=false` 不会声称磁盘已持久化。
+- `verify_document` 可传 `target + expected`，默认读取组件 XML 比对目标字段；无 `expected` 时只是快照。
+- 失败响应保留 `error.details`，包含 `stage`、expected、actual 和 differences（如有）。
+- 自动 external reload、真实 FairyGUI Editor 端到端和 Unity/真机验收仍未完成。

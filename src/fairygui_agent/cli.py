@@ -232,6 +232,8 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--path")
     verify_parser.add_argument("--id")
     verify_parser.add_argument("--name")
+    verify_parser.add_argument("--expected", help="预期属性 JSON 对象；必须指定目标")
+    verify_parser.add_argument("--editor-only", action="store_true", help="只比对 Editor，不读取 XML")
 
     insert_parser = subparsers.add_parser("insert", help="插入已有 FairyGUI 资源")
     insert_parser.add_argument("url", help="资源 URL，例如 ui://packageIditemId")
@@ -507,7 +509,11 @@ def main() -> int:
             params = {"target": target_from_args(args), "style": load_json_value(args.style), "save": args.save, "verify": True}
         elif args.command == "verify-document":
             action = "verify_document"
-            params = {"maxDepth": args.max_depth}
+            params = {"maxDepth": args.max_depth, "readXml": not args.editor_only}
+            if args.expected is not None:
+                if not any((args.path, args.id, args.name)):
+                    raise ValueError("--expected 必须指定目标")
+                params["expected"] = load_json_value(args.expected)
             target = {k: v for k, v in (("path", args.path), ("id", args.id), ("name", args.name)) if v}
             if len(target) > 1: raise ValueError("verify-document 的 target 参数只能提供一个")
             if target: params["target"] = target
