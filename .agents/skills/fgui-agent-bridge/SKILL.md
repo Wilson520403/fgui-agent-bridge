@@ -24,7 +24,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 
 - 使用 `fgui_*` MCP 工具或 `fgui-agent` CLI 操作 FairyGUI 组件。
 - 查看包、资源、活动文档、对象树、对象 ID/路径、属性或撤销状态。
-- 修改组件属性、插入/删除已有 `ui://` 资源、保存、放弃、撤销或重做。
+- 修改组件属性、插入/删除已有 `ui://` 资源、替换 Image/Loader 资源引用、读取或修改文本样式、验证文档结构与持久化、保存、放弃、撤销或重做。
 - 发布当前包、指定包或全部包，或检查发布设置。
 - 检查 Bridge/插件版本一致性，或从源仓库拉取最新代码并同步到目标工程。
 - 修改插件、MCP、CLI、版本、协议、白名单、队列语义、同步脚本或 README。
@@ -53,7 +53,10 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - MovieClip 用 `fgui_create_movieclip` 的有序绝对图片路径创建，或通过 `fgui_update_movieclip` 更新帧与播放参数；帧由 FairyGUI 嵌入 `.jta`，不会自动生成逐帧图片 `ui://` 资源。已有 MovieClip 更新/替换可 Agent undo/redo，全新创建和删除不可逆。
 - 用 `fgui_preview_animation` 播放、暂停、停止、跳帧或查询 Transition/MovieClip 预览状态。预览不保存，不能把预览状态描述为资源默认属性。
 - 按钮状态图顺序固定为 `up/down/over/selectedOver/disabled/selectedDisabled`，非空值必须是工程内图片 `ui://` URL。
+- 资源替换：替换显示对象引用的资源使用 `fgui_replace_object_resource`（当前仅支持 Image 与 Loader，不支持 Button 状态资源切换），支持传入 `expected_type` 校验并在 `--save` 时验证 Editor/XML 持久化。
+- 文本样式：文本对象的样式读取与修改优先使用 `fgui_get_text_style` 和 `fgui_set_text_style`（支持 `fontSize`、`color`、`strokeColor`、`shadowColor`、`lineGap`、`letterSpacing`、`align`、`vAlign`、`autoSize` 等白名单属性），并提供回读验证；暂不支持自动 external reload。
 - 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
+- 文档与持久化验证：使用 `fgui_verify_document` 重新读取活动文档对象树并可传入 `target + expected` 比对组件 XML 磁盘持久化内容；无 `expected` 时仅作为对象树快照。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
 
 ### 3. 发布
@@ -75,6 +78,10 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT status
 uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT ping
 uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT packages
 uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT tree
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT replace-object-resource --id n12_ox87 ui://package/resource --expected-type image --save
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT get-text-style --path root/title
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT set-text-style --path root/title '{"fontSize":40,"color":"#FFFFFF","align":"center"}' --save
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT verify-document --max-depth 12 --target root/title --expected '{"fontSize":40}'
 ```
 
 全局参数 `--project`、`--editor`、`--timeout` 必须位于子命令前。`call` 只用于调试原始 Action，不替代正式 MCP 工具。
@@ -177,6 +184,9 @@ git diff --check
 - 插件会拒绝执行超过 60 秒未被认领的过期请求，并在 Bridge 初始化时清理残留队列文件；客户端命令超时不代表操作未执行，重试前先检查状态（如 `fgui_status` / `fgui_get_active_document`），避免写操作重复执行。
 - 图片、声音、MovieClip 图片序列导入和发布是磁盘写入，执行前确认目标和冲突策略。Transition 声明式/关键帧修改与已有 MovieClip 更新/替换可由 Agent undo/redo 回退；全新资源创建、声音/图片导入和删除不能。
 - MovieClip 删除即使传 `force=true` 也会执行引用检查；仍被组件使用时必须先移除引用。
+- `replace_object_resource` 本轮仅允许 Image 与 Loader，拒绝 Button `state` 替换，避免误将整个按钮组件替换为单一资源。
+- 文本样式修改支持类型与枚举检查，暂不支持自动 external reload。
+- `verify_document` 可传入 `target + expected` 执行磁盘 XML 持久化比对，失败响应保留结构化 `error.details`（包含 `stage`、expected、actual、differences）。
 - 不允许删除根组件；不要把 `discard`、`undo` 和 `save` 混为同一语义。
 - 根组件点击穿透使用可序列化的 `opaque=false`；不要把无法持久化的根 `touchable` 宣称成功。
 - 不在代码、配置、文档或示例中提交个人绝对路径、密钥或真实 MCP 配置。
