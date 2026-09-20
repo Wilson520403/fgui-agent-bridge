@@ -213,6 +213,26 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser.add_argument("property")
     set_parser.add_argument("value", help="支持 JSON 值，例如 12、true、\"文本\"")
 
+    resource_parser = subparsers.add_parser("replace-object-resource", help="替换对象资源引用")
+    _add_target_arguments(resource_parser)
+    resource_parser.add_argument("resource_url")
+    resource_parser.add_argument("--expected-type", default="image")
+    resource_parser.add_argument("--state")
+    resource_parser.add_argument("--save", action="store_true")
+    resource_parser.add_argument("--no-verify", action="store_true")
+
+    text_get_parser = subparsers.add_parser("get-text-style", help="读取文本样式")
+    _add_target_arguments(text_get_parser)
+    text_set_parser = subparsers.add_parser("set-text-style", help="设置文本样式")
+    _add_target_arguments(text_set_parser)
+    text_set_parser.add_argument("style", help="文本样式 JSON 对象")
+    text_set_parser.add_argument("--save", action="store_true")
+    verify_parser = subparsers.add_parser("verify-document", help="验证当前文档")
+    verify_parser.add_argument("--max-depth", type=int, default=12)
+    verify_parser.add_argument("--path")
+    verify_parser.add_argument("--id")
+    verify_parser.add_argument("--name")
+
     insert_parser = subparsers.add_parser("insert", help="插入已有 FairyGUI 资源")
     insert_parser.add_argument("url", help="资源 URL，例如 ui://packageIditemId")
     insert_parser.add_argument("--x", type=float, default=0)
@@ -475,6 +495,22 @@ def main() -> int:
         elif args.command == "select":
             action = "select_object"
             params = {"target": target_from_args(args)}
+        elif args.command == "replace-object-resource":
+            action = "replace_object_resource"
+            params = {"target": target_from_args(args), "resourceURL": args.resource_url, "expectedType": args.expected_type, "verify": not args.no_verify, "save": args.save}
+            if args.state: params["state"] = args.state
+        elif args.command == "get-text-style":
+            action = "get_text_style"
+            params = {"target": target_from_args(args)}
+        elif args.command == "set-text-style":
+            action = "set_text_style"
+            params = {"target": target_from_args(args), "style": load_json_value(args.style), "save": args.save, "verify": True}
+        elif args.command == "verify-document":
+            action = "verify_document"
+            params = {"maxDepth": args.max_depth}
+            target = {k: v for k, v in (("path", args.path), ("id", args.id), ("name", args.name)) if v}
+            if len(target) > 1: raise ValueError("verify-document 的 target 参数只能提供一个")
+            if target: params["target"] = target
         elif args.command == "set":
             action = "set_property"
             params = {

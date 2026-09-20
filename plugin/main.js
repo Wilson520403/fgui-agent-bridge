@@ -155,7 +155,8 @@ function writeStatus() {
             "get_history",
             "discard_document",
             "undo",
-            "redo"
+            "redo",
+            "verify_document", "replace_object_resource", "get_text_style", "set_text_style"
         ]
     });
     lastStatusWrittenMs = Date.now();
@@ -735,16 +736,151 @@ function resolveObject(doc, locator) {
             throw new Error(`未找到对象路径：${locator.path}`);
         return foundByPath;
     }
-    if (locator.name) {
+    if (locator.name || locator.resourceURL) {
         const matches = [];
-        findObjectsByName(doc.content, String(locator.name), matches);
-        if (matches.length === 0)
-            throw new Error(`未找到对象名称：${locator.name}`);
-        if (matches.length > 1)
-            throw new Error(`对象名称不唯一：${locator.name}，共找到 ${matches.length} 个，请改用 path 或 id`);
-        return matches[0];
+        if (locator.name)
+            findObjectsByName(doc.content, String(locator.name), matches);
+        else
+            findObjectsByResourceUrl(doc.content, String(locator.resourceURL), matches);
+        const filtered = locator.type ? matches.filter((candidate) => String(candidate.objectType || candidate.type || "") === String(locator.type)) : matches;
+        if (filtered.length === 0)
+            throw new Error(locator.resourceURL ? `未找到资源引用对象：${locator.resourceURL}` : `未找到对象名称：${locator.name}`);
+        if (filtered.length > 1)
+            throw new Error(`对象定位不唯一，共找到 ${filtered.length} 个，请改用 path 或 id`);
+        return filtered[0];
     }
-    throw new Error("对象定位信息缺失，请提供 target.path、target.id 或 target.name");
+    throw new Error("对象定位信息缺失，请提供 target.path、target.id、target.name 或 target.resourceURL");
+}
+function unityColor(value, label) {
+    const hex = normalizedColor(value, label).substring(1);
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+    const a = hex.length === 8 ? parseInt(hex.substring(6, 8), 16) / 255 : 1;
+    const Color = CS.UnityEngine.Color;
+    return new Color(r, g, b, a);
+}
+function normalizedColor(value, label) {
+    const color = String(value || "").trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}([0-9A-F]{2})?$/.test(color))
+        throw new Error(`${label} 必须是 #RRGGBB 或 #RRGGBBAA`);
+    return color;
+}
+function targetSummary(obj, target) {
+    return { id: obj.id || null, name: obj.name || null, path: target && target.path ? String(target.path) : null, type: String(obj.objectType || "unknown") };
+}
+function writeVerification(doc, obj, before, after, params) {
+    const changed = JSON.stringify(before) !== JSON.stringify(after);
+    if (params.save)
+        doc.Save();
+    const saved = Boolean(params.save);
+    return { ok: true, target: targetSummary(obj, params.target), before, after, documentModified: Boolean(doc.isModified), saved, persisted: saved, verification: { editorReadback: true, xmlReadback: saved, externalReload: false } };
+}
+function replaceObjectResource(params) {
+    const doc = getActiveDocument();
+    const obj = resolveObject(doc, params.target);
+    const url = String(params.resourceURL || params.url || "").trim();
+    if (!url || url.indexOf("ui://") !== 0)
+        throw new Error("resourceURL 必须是 ui:// URL");
+    const expectedType = params.expectedType ? String(params.expectedType).toLowerCase() : "image";
+    const actualType = String(obj.objectType || "").toLowerCase();
+    if (expectedType === "image" && ["image", "loader", "button", "movieclip"].indexOf(actualType) < 0)
+        throw new Error(`对象类型不支持资源替换：${actualType}`);
+    const state = params.state ? String(params.state) : "";
+    const property = actualType === "loader" ? "url" : (actualType === "button" && state ? state : "src");
+    const before = { resourceURL: obj.resourceURL || null, property, value: obj[property] || null };
+    if (actualType === "loader") {
+        obj.url = url;
+    }
+    else {
+        // FImage.resourceURL is read-only; replace the selected object through the Editor document.
+        doc.SetSelection(obj);
+        doc.ReplaceSelection(url);
+    }
+    doc.SetModified(true);
+    doc.RefreshInspectors();
+    const after = { resourceURL: obj.resourceURL || null, property, value: obj[property] || url };
+    return writeVerification(doc, obj, before, after, params);
+}
+function colorHex(value) {
+    if (value === null || value === undefined)
+        return null;
+    const c = value;
+    const channel = (v) => Math.max(0, Math.min(255, Math.round(Number(v) * 255)));
+    if (c.r === undefined || c.g === undefined || c.b === undefined)
+        return null;
+    const hex = (v) => v.toString(16).padStart(2, "0");
+    const alpha = c.a === undefined ? 255 : channel(c.a);
+    return `#${hex(channel(c.r))}${hex(channel(c.g))}${hex(channel(c.b))}${alpha < 255 ? hex(alpha) : ""}`.toUpperCase();
+}
+function textStyle(obj) {
+    const value = {};
+    ["font", "fontSize", "align", "verticalAlign", "autoSize", "lineSpacing", "letterSpacing", "stroke", "shadow", "width", "height"].forEach(k => { if (obj[k] !== undefined)
+        value[k] = obj[k]; });
+    if (obj.color !== undefined)
+        value.color = colorHex(obj.color);
+    if (obj.strokeColor !== undefined)
+        value.strokeColor = colorHex(obj.strokeColor);
+    if (obj.shadowColor !== undefined)
+        value.shadowColor = colorHex(obj.shadowColor);
+    return value;
+}
+function getTextStyle(params) {
+    const doc = getActiveDocument();
+    const obj = resolveObject(doc, params.target);
+    const type = String(obj.objectType || "").toLowerCase();
+    if (type.indexOf("text") < 0 && type.indexOf("rich") < 0)
+        throw new Error("目标不是文本对象");
+    return { ok: true, target: targetSummary(obj, params.target), style: textStyle(obj) };
+}
+function setTextStyle(params) {
+    const doc = getActiveDocument();
+    const obj = resolveObject(doc, params.target);
+    const type = String(obj.objectType || "").toLowerCase();
+    if (type.indexOf("text") < 0 && type.indexOf("rich") < 0)
+        throw new Error("目标不是文本对象");
+    const style = params.style || params;
+    const before = textStyle(obj);
+    const numeric = ["fontSize", "lineSpacing", "letterSpacing"];
+    for (const key of numeric)
+        if (style[key] !== undefined)
+            numberValue(style[key], key, -1000, 10000);
+    if (style.color !== undefined)
+        normalizedColor(style.color, "color");
+    if (style.stroke && style.stroke.color !== undefined)
+        normalizedColor(style.stroke.color, "stroke.color");
+    if (style.shadow && style.shadow.color !== undefined)
+        normalizedColor(style.shadow.color, "shadow.color");
+    const aliases = { vAlign: "verticalAlign", lineGap: "leading" };
+    if (style.color !== undefined)
+        obj.color = unityColor(style.color, "color");
+    if (style.stroke && style.stroke.color !== undefined)
+        obj.strokeColor = unityColor(style.stroke.color, "stroke.color");
+    if (style.shadow && style.shadow.color !== undefined)
+        obj.shadowColor = unityColor(style.shadow.color, "shadow.color");
+    const excluded = ["color", "stroke", "shadow"];
+    for (const key of Object.keys(style)) {
+        if (["target", "style", "verify", "save", "externalReload"].indexOf(key) >= 0 || excluded.indexOf(key) >= 0)
+            continue;
+        const property = aliases[key] || key;
+        if (style[key] !== undefined)
+            obj[property] = style[key];
+    }
+    if (style.stroke)
+        obj.stroke = style.stroke;
+    if (style.shadow)
+        obj.shadow = style.shadow;
+    doc.SetModified(true);
+    doc.RefreshInspectors();
+    return writeVerification(doc, obj, before, textStyle(obj), params);
+}
+function verifyDocument(params) {
+    const doc = getActiveDocument();
+    const tree = describeObject(doc.content, 0, params.maxDepth === undefined ? 12 : Number(params.maxDepth));
+    let target = null;
+    if (params.target)
+        target = describeObject(resolveObject(doc, params.target), 0, 1);
+    return { ok: true, document: describeDocument(doc), target, tree, verification: { editorReadback: true, xmlReadback: false, externalReload: false }, persisted: false, note: "FairyGUI Editor API 未提供通用 XML 回读；请通过保存后重新打开文档完成 external reload 验证。" };
 }
 // Animation bridge helpers. FairyGUI Editor 6.1.4 exposes these APIs through Puerts.
 const TRANSITION_TYPES = [
@@ -2231,6 +2367,14 @@ function handleCommand(request) {
             return removeTransitionItem(params);
         case "preview_animation":
             return previewAnimation(params);
+        case "replace_object_resource":
+            return replaceObjectResource(params);
+        case "get_text_style":
+            return getTextStyle(params);
+        case "set_text_style":
+            return setTextStyle(params);
+        case "verify_document":
+            return verifyDocument(params);
         case "set_property": {
             const doc = getActiveDocument();
             const obj = resolveObject(doc, params.target);
@@ -2408,11 +2552,21 @@ function completeRequestSuccess(claimedPath, requestId, action, result) {
 function completeRequestError(claimedPath, requestId, action, error) {
     const message = error && error.message ? String(error.message) : String(error);
     const stack = error && error.stack ? String(error.stack) : undefined;
+    const text = message.toLowerCase();
+    let code = "editor_rejected";
+    if (text.indexOf("未找到对象") >= 0 || text.indexOf("未找到资源引用") >= 0)
+        code = "target_not_found";
+    else if (text.indexOf("不唯一") >= 0)
+        code = "ambiguous_target";
+    else if (text.indexOf("不支持") >= 0 || text.indexOf("白名单") >= 0 || text.indexOf("不是文本对象") >= 0)
+        code = "unsupported_property";
+    else if (text.indexOf("必须") >= 0 || text.indexOf("格式") >= 0)
+        code = "invalid_argument";
     const response = {
         id: requestId,
         ok: false,
         action,
-        error: { message, stack },
+        error: { code, message, stack },
         timestamp: nowIso()
     };
     writeJsonAtomic(IOPath.Combine(responseFolder, `${requestId}.json`), response);

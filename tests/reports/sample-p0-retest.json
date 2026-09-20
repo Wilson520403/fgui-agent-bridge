@@ -1,0 +1,201 @@
+{
+  "date": "2026-09-20",
+  "project": "sample/sample.fairy",
+  "externalReloadVerified": false,
+  "cases": [
+    {
+      "name": "Loader type preserved",
+      "passed": true,
+      "actual": "loader"
+    },
+    {
+      "name": "Loader URL persisted",
+      "passed": true,
+      "actual": "ui://qsezbqtwp93m2"
+    },
+    {
+      "name": "Text white persisted",
+      "passed": true,
+      "actual": "#ffffff"
+    },
+    {
+      "name": "Text line gap persisted",
+      "passed": true,
+      "actual": "4"
+    },
+    {
+      "name": "Repeated loader replacement leaves XML unchanged",
+      "passed": true
+    },
+    {
+      "name": "Color response normalized",
+      "passed": false,
+      "actual": {}
+    }
+  ],
+  "response": {
+    "id": "1789882605808-7d5d577f",
+    "ok": true,
+    "action": "replace_object_resource",
+    "result": {
+      "ok": true,
+      "target": {
+        "id": "n2_mvx6",
+        "name": "icon",
+        "path": null,
+        "type": "loader"
+      },
+      "before": {
+        "resourceURL": null,
+        "property": "url",
+        "value": "ui://qsezbqtwp93m2"
+      },
+      "after": {
+        "resourceURL": null,
+        "property": "url",
+        "value": "ui://qsezbqtwp93m2"
+      },
+      "documentModified": false,
+      "saved": true,
+      "persisted": true,
+      "verification": {
+        "editorReadback": true,
+        "xmlReadback": true,
+        "externalReload": false
+      }
+    },
+    "timestamp": "2026-09-20T05:36:45.827Z"
+  },
+  "tree": {
+    "document": {
+      "url": "ui://qsezbqtwmvx64",
+      "title": "BridgeTextTest",
+      "itemId": "mvx64",
+      "itemName": "BridgeTextTest",
+      "packageName": "Package1",
+      "modified": false,
+      "savedVersion": 4,
+      "selectionCount": 0,
+      "transitionCount": 0,
+      "transitions": []
+    },
+    "tree": {
+      "id": "",
+      "name": "DocContent",
+      "type": "component",
+      "resourceURL": "ui://qsezbqtwmvx64",
+      "x": 0,
+      "y": 0,
+      "width": 240,
+      "height": 100,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "touchable": true,
+      "grayed": false,
+      "enabled": true,
+      "locked": false,
+      "text": "",
+      "icon": "",
+      "opaque": true,
+      "children": [
+        {
+          "id": "n0_mvx6",
+          "name": "n0",
+          "type": "image",
+          "resourceURL": "ui://qsezbqtwp93m1",
+          "x": 88,
+          "y": 18,
+          "width": 64,
+          "height": 64,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": ""
+        },
+        {
+          "id": "n1_mvx6",
+          "name": "title",
+          "type": "text",
+          "resourceURL": null,
+          "x": 0,
+          "y": 0,
+          "width": 240,
+          "height": 100,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": ""
+        },
+        {
+          "id": "n2_mvx6",
+          "name": "icon",
+          "type": "loader",
+          "resourceURL": null,
+          "x": 0,
+          "y": 0,
+          "width": 240,
+          "height": 100,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": true,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": "ui://qsezbqtwp93m2"
+        }
+      ]
+    }
+  },
+  "textStyle": {
+    "ok": true,
+    "target": {
+      "id": "n1_mvx6",
+      "name": "title",
+      "path": null,
+      "type": "text"
+    },
+    "style": {
+      "font": null,
+      "fontSize": 40,
+      "color": {},
+      "align": "center",
+      "verticalAlign": "middle",
+      "autoSize": "none",
+      "letterSpacing": 0,
+      "stroke": false,
+      "shadow": false,
+      "width": 240,
+      "height": 100
+    }
+  },
+  "xml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"240,100\" extention=\"Button\">\n  <controller name=\"button\" pages=\"0,up,1,down,2,over,3,selectedOver\" selected=\"0\"/>\n  <displayList>\n    <image id=\"n0_mvx6\" name=\"n0\" src=\"p93m1\" fileName=\"Red.png\" xy=\"88,18\">\n      <relation target=\"\" sidePair=\"width-width,height-height\"/>\n    </image>\n    <text id=\"n1_mvx6\" name=\"title\" xy=\"0,0\" size=\"240,100\" fontSize=\"40\" color=\"#ffffff\" align=\"center\" vAlign=\"middle\" leading=\"4\" autoSize=\"none\" singleLine=\"true\" text=\"\">\n      <relation target=\"\" sidePair=\"width-width,height-height\"/>\n    </text>\n    <loader id=\"n2_mvx6\" name=\"icon\" xy=\"0,0\" size=\"240,100\" url=\"ui://qsezbqtwp93m2\" align=\"center\" vAlign=\"middle\">\n      <relation target=\"\" sidePair=\"width-width,height-height\"/>\n    </loader>\n  </displayList>\n  <Button/>\n</component>",
+  "remaining": [
+    "structured error codes",
+    "color and lineGap readback",
+    "automatic XML verification",
+    "Button state resources",
+    "external reload",
+    "batch rollback"
+  ]
+}

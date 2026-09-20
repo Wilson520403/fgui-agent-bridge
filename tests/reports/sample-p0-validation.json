@@ -1,0 +1,138 @@
+{
+  "date": "2026-09-20",
+  "project": "sample/sample.fairy",
+  "externalReloadVerified": false,
+  "cases": [
+    {
+      "name": "invalid target rejected",
+      "action": "get_text_style",
+      "response": {
+        "id": "1789882366780-b726d6ab",
+        "ok": false,
+        "action": "get_text_style",
+        "error": {
+          "message": "未找到对象 ID：no_such_object"
+        },
+        "timestamp": "2026-09-20T05:32:46.859Z"
+      },
+      "passed": true
+    },
+    {
+      "name": "non-text rejected",
+      "action": "get_text_style",
+      "response": {
+        "id": "1789882366891-83d02eca",
+        "ok": false,
+        "action": "get_text_style",
+        "error": {
+          "message": "目标不是文本对象"
+        },
+        "timestamp": "2026-09-20T05:32:47.064Z"
+      },
+      "passed": true
+    },
+    {
+      "name": "invalid color rejected",
+      "action": "set_text_style",
+      "response": {
+        "id": "1789882367102-97023a1f",
+        "ok": false,
+        "action": "set_text_style",
+        "error": {
+          "message": "color 必须是 #RRGGBB 或 #RRGGBBAA"
+        },
+        "timestamp": "2026-09-20T05:32:47.269Z"
+      },
+      "passed": true
+    },
+    {
+      "name": "structured error code",
+      "action": "get_text_style",
+      "response": {
+        "id": "1789882367317-b6dc7d0e",
+        "ok": false,
+        "action": "get_text_style",
+        "error": {
+          "message": "未找到对象 ID：no_such_object"
+        },
+        "timestamp": "2026-09-20T05:32:47.473Z"
+      },
+      "passed": false
+    },
+    {
+      "name": "color serialized as hex",
+      "action": "get_text_style",
+      "response": {
+        "id": "1789882367481-e7b12347",
+        "ok": true,
+        "action": "get_text_style",
+        "result": {
+          "ok": true,
+          "target": {
+            "id": "n1_mvx6",
+            "name": "title",
+            "path": null,
+            "type": "text"
+          },
+          "style": {
+            "font": null,
+            "fontSize": 40,
+            "color": {},
+            "align": "center",
+            "verticalAlign": "middle",
+            "autoSize": "none",
+            "letterSpacing": 0,
+            "stroke": false,
+            "shadow": false,
+            "width": 240,
+            "height": 100
+          }
+        },
+        "timestamp": "2026-09-20T05:32:47.678Z"
+      },
+      "passed": false
+    },
+    {
+      "name": "Image replacement persisted",
+      "file": "sample/assets/Package1/BridgeTestButton.xml",
+      "target": "n0_p93m",
+      "expected": "p93m2",
+      "actual": "p93m2",
+      "passed": true,
+      "xml": "<image id=\"n0_p93m\" name=\"n0\" src=\"p93m2\" fileName=\"Blue.png\" xy=\"68,8\">\n      <relation target=\"\" sidePair=\"width-width,height-height\" />\n    </image>\n    "
+    },
+    {
+      "name": "Loader type preserved",
+      "file": "sample/assets/Package1/BridgeTestButton.xml",
+      "target": "n1_p93m",
+      "expected": "loader",
+      "actual": "image",
+      "passed": false,
+      "xml": "<image id=\"n1_p93m\" name=\"icon\" src=\"p93m2\" fileName=\"Blue.png\" xy=\"0,0\" size=\"200,80\">\n      <relation target=\"\" sidePair=\"width-width,height-height\" />\n    </image>\n  "
+    },
+    {
+      "name": "Text font size persisted",
+      "file": "sample/assets/Package1/BridgeTextTest.xml",
+      "target": "n1_mvx6",
+      "expected": "40",
+      "actual": "40",
+      "passed": true,
+      "xml": "<text id=\"n1_mvx6\" name=\"title\" xy=\"0,0\" size=\"240,100\" fontSize=\"40\" color=\"#000000\" align=\"center\" vAlign=\"middle\" autoSize=\"none\" singleLine=\"true\" text=\"\">\n      <relation target=\"\" sidePair=\"width-width,height-height\" />\n    </text>\n    "
+    },
+    {
+      "name": "Text white color persisted",
+      "file": "sample/assets/Package1/BridgeTextTest.xml",
+      "target": "n1_mvx6",
+      "expected": "#FFFFFF",
+      "actual": "#000000",
+      "passed": false,
+      "xml": "<text id=\"n1_mvx6\" name=\"title\" xy=\"0,0\" size=\"240,100\" fontSize=\"40\" color=\"#000000\" align=\"center\" vAlign=\"middle\" autoSize=\"none\" singleLine=\"true\" text=\"\">\n      <relation target=\"\" sidePair=\"width-width,height-height\" />\n    </text>\n    "
+    }
+  ],
+  "notTested": [
+    "Button state resources",
+    "batch atomicity",
+    "MovieClip/font",
+    "external reload"
+  ]
+}

@@ -39,6 +39,10 @@ REQUIRED_CAPABILITIES = frozenset(
         "discard_document",
         "undo",
         "redo",
+        "verify_document",
+        "replace_object_resource",
+        "get_text_style",
+        "set_text_style",
     }
 )
 
@@ -68,10 +72,11 @@ class BridgeError(RuntimeError):
 class BridgeCommandError(BridgeError):
     """FairyGUI Editor 返回的业务错误。"""
 
-    def __init__(self, action: str, message: str) -> None:
+    def __init__(self, action: str, message: str, code: str | None = None) -> None:
         super().__init__(f"{action} 失败：{message}")
         self.action = action
         self.bridge_message = message
+        self.code = code
 
 
 def status_age(status: dict[str, Any] | None) -> float:
@@ -278,5 +283,5 @@ class BridgeClient:
         if not response.get("ok"):
             error = response.get("error")
             message = error.get("message") if isinstance(error, dict) else str(error or "未知错误")
-            raise BridgeCommandError(action, str(message))
+            raise BridgeCommandError(action, str(message), error.get("code") if isinstance(error, dict) else None)
         return response.get("result")

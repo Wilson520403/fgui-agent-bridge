@@ -1,0 +1,226 @@
+{
+  "date": "2026-09-20",
+  "project": "sample/sample.fairy",
+  "reloadEvidence": "User reported reload; editor savedVersion reset to 1. Automated close/reopen not tested.",
+  "cases": [
+    {
+      "name": "Text color readback after user reload",
+      "passed": true,
+      "response": {
+        "id": "1789883407029-3c36222e",
+        "ok": true,
+        "action": "get_text_style",
+        "result": {
+          "ok": true,
+          "target": {
+            "id": "n1_mvx6",
+            "name": "title",
+            "path": null,
+            "type": "text"
+          },
+          "style": {
+            "font": null,
+            "fontSize": 40,
+            "align": "center",
+            "verticalAlign": "middle",
+            "autoSize": "none",
+            "letterSpacing": 0,
+            "stroke": false,
+            "shadow": false,
+            "width": 240,
+            "height": 100,
+            "color": "#FFFFFF",
+            "strokeColor": "#000000",
+            "shadowColor": "#000000"
+          }
+        },
+        "timestamp": "2026-09-20T05:50:07.192Z"
+      }
+    },
+    {
+      "name": "Missing target error code",
+      "passed": true,
+      "response": {
+        "id": "1789883407248-08ae49ca",
+        "ok": false,
+        "action": "get_text_style",
+        "error": {
+          "code": "target_not_found",
+          "message": "未找到对象 ID：no_such_object"
+        },
+        "timestamp": "2026-09-20T05:50:07.398Z"
+      }
+    },
+    {
+      "name": "Non-text error code",
+      "passed": true,
+      "response": {
+        "id": "1789883407411-fc222806",
+        "ok": false,
+        "action": "get_text_style",
+        "error": {
+          "code": "unsupported_property",
+          "message": "目标不是文本对象"
+        },
+        "timestamp": "2026-09-20T05:50:07.603Z"
+      }
+    },
+    {
+      "name": "Invalid color error code",
+      "passed": true,
+      "response": {
+        "id": "1789883407627-0a654643",
+        "ok": false,
+        "action": "set_text_style",
+        "error": {
+          "code": "invalid_argument",
+          "message": "color 必须是 #RRGGBB 或 #RRGGBBAA"
+        },
+        "timestamp": "2026-09-20T05:50:07.808Z"
+      }
+    },
+    {
+      "name": "Loader type after user reload",
+      "passed": true,
+      "response": {
+        "id": "1789883407844-3509b804",
+        "ok": true,
+        "action": "get_tree",
+        "result": {
+          "document": {
+            "url": "ui://qsezbqtwmvx64",
+            "title": "BridgeTextTest",
+            "itemId": "mvx64",
+            "itemName": "BridgeTextTest",
+            "packageName": "Package1",
+            "modified": false,
+            "savedVersion": 1,
+            "selectionCount": 0,
+            "transitionCount": 0,
+            "transitions": []
+          },
+          "tree": {
+            "id": "",
+            "name": "DocContent",
+            "type": "component",
+            "resourceURL": "ui://qsezbqtwmvx64",
+            "x": 0,
+            "y": 0,
+            "width": 240,
+            "height": 100,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "alpha": 1,
+            "visible": true,
+            "touchable": true,
+            "grayed": false,
+            "enabled": true,
+            "locked": false,
+            "text": "",
+            "icon": "",
+            "opaque": true,
+            "children": [
+              {
+                "id": "n0_mvx6",
+                "name": "n0",
+                "type": "image",
+                "resourceURL": "ui://qsezbqtwp93m1",
+                "x": 88,
+                "y": 18,
+                "width": 64,
+                "height": 64,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "alpha": 1,
+                "visible": true,
+                "touchable": false,
+                "grayed": false,
+                "enabled": true,
+                "locked": false,
+                "text": "",
+                "icon": ""
+              },
+              {
+                "id": "n1_mvx6",
+                "name": "title",
+                "type": "text",
+                "resourceURL": null,
+                "x": 0,
+                "y": 0,
+                "width": 240,
+                "height": 100,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "alpha": 1,
+                "visible": true,
+                "touchable": false,
+                "grayed": false,
+                "enabled": true,
+                "locked": false,
+                "text": "",
+                "icon": ""
+              },
+              {
+                "id": "n2_mvx6",
+                "name": "icon",
+                "type": "loader",
+                "resourceURL": null,
+                "x": 0,
+                "y": 0,
+                "width": 240,
+                "height": 100,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "alpha": 1,
+                "visible": true,
+                "touchable": true,
+                "grayed": false,
+                "enabled": true,
+                "locked": false,
+                "text": "",
+                "icon": "ui://qsezbqtwp93m2"
+              }
+            ]
+          }
+        },
+        "timestamp": "2026-09-20T05:50:08.014Z"
+      }
+    },
+    {
+      "name": "XML n2_mvx6 url",
+      "actual": "ui://qsezbqtwp93m2",
+      "expected": "ui://qsezbqtwp93m2",
+      "passed": true
+    },
+    {
+      "name": "XML n1_mvx6 fontSize",
+      "actual": "40",
+      "expected": "40",
+      "passed": true
+    },
+    {
+      "name": "XML n1_mvx6 leading",
+      "actual": "4",
+      "expected": "4",
+      "passed": true
+    },
+    {
+      "name": "XML n1_mvx6 color",
+      "actual": "#ffffff",
+      "expected": "#ffffff",
+      "passed": true
+    }
+  ],
+  "remaining": [
+    "Button state API",
+    "automatic XML readback",
+    "automatic external reload",
+    "batch atomicity",
+    "lineGap response",
+    "previous test Loader restoration"
+  ]
+}

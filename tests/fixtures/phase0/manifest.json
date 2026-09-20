@@ -1,0 +1,6 @@
+{
+  "name": "fgui-bridge-phase0",
+  "editorBaseline": "6.1.4",
+  "objects": ["Image", "Loader", "Button", "Text", "List", "Group", "Controller", "Transition"],
+  "snapshots": ["initial-tree.json", "initial-resources.json", "initial-xml.xml"]
+}

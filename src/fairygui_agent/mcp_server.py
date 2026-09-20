@@ -510,6 +510,34 @@ def fgui_set_property(
 
 
 @mcp.tool()
+def fgui_replace_object_resource(resource_url: str, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected_type: str = "image", state: str | None = None, save: bool = False, verify: bool = True) -> dict[str, Any]:
+    """通过 FairyGUI Editor API 替换 Image、Loader 或 Button 的资源引用。"""
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "resourceURL": resource_url, "expectedType": expected_type, "save": save, "verify": verify}
+    if state: params["state"] = state
+    return _client.call("replace_object_resource", params)
+
+
+@mcp.tool()
+def fgui_get_text_style(object_id: str | None = None, object_path: str | None = None, object_name: str | None = None) -> dict[str, Any]:
+    """读取 TextField/RichText 的统一文本样式。"""
+    return _client.call("get_text_style", {"target": _target(object_id, object_path, object_name)})
+
+
+@mcp.tool()
+def fgui_set_text_style(style: dict[str, Any], object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, save: bool = False, verify: bool = True) -> dict[str, Any]:
+    """设置 TextField/RichText 的统一文本样式。"""
+    return _client.call("set_text_style", {"target": _target(object_id, object_path, object_name), "style": style, "save": save, "verify": verify})
+
+
+@mcp.tool()
+def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None) -> dict[str, Any]:
+    """重新读取活动文档对象树并返回 Editor 回读状态。"""
+    params: dict[str, Any] = {"maxDepth": max_depth}
+    if any((object_id, object_path, object_name)): params["target"] = _target(object_id, object_path, object_name)
+    return _client.call("verify_document", params)
+
+
+@mcp.tool()
 def fgui_insert_object(
     url: str,
     x: float = 0,
