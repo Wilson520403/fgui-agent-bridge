@@ -14,7 +14,7 @@
 
 | 阶段 | 当前状态 | 已有能力与主要缺口 |
 | --- | --- | --- |
-| Phase 0 | 部分完成 | 有夹具目录、版本基线声明、sample 回归报告和单测命令；八类对象完整隔离夹具、初始快照及自动 JSON 报告未完成。 |
+| Phase 0 | 部分完成 | 八类对象隔离夹具、初始快照、统一 JSON 报告与测试命令已于 2026-10-15 落地（`scripts/phase0_fixture.py`、`sample/assets/Package1/BridgeFixture.xml`）；external reload 与"请求成功但未持久化"的自动断言仍未完成。 |
 | Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；external reload、所有写 Action 统一语义仍未完成。 |
 | Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
 | Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
@@ -25,11 +25,11 @@
 
 ### 核查证据与验收边界
 
-- 本次执行 `uv run python -m unittest discover -s tests -q`：**23 项通过**（含新增 4 项 Python/模拟宿主入口测试；模拟宿主内部另有 24 项回归）；这是 Python/协议与静态接口测试，不是真实 Editor 全流程验收。
+- 本次执行 `uv run python -m unittest discover -s tests -q`：**28 项通过**（含 2026-10-15 新增的 5 项 Phase 0 夹具离线校验；模拟宿主内部另有 24 项回归）；这是 Python/协议与静态接口测试，不是真实 Editor 全流程验收。
 - 既有 Editor 记录：`tests/reports/sample-p0-validation.json`、`sample-p0-retest.json`、`sample-p0-color-errors-retest.json`。较新的报告修复了早期颜色和错误码失败，但仍列出 Button 状态、自动 XML 回读、自动重载、批量原子性、lineGap 响应等缺口。
 - 最后一次报告的重载证据来自用户报告及 `savedVersion` 重置，**没有自动关闭/重开测试**。本次未重新操作 Editor、发布资源、刷新 Unity 或执行 Play Mode/真机测试。
 - **本轮已处理：** `writeVerification` 现在检查保存状态并可读取组件 XML 与 expected 比对；`verifyDocument` 支持 expected 校验。**仍未完成：** external reload、完整 XML 对象矩阵和所有写 Action 的统一语义，因此 P0/切片 A 仍只能标为部分完成。
-- `tests/fixtures/phase0/initial-tree.json`、`initial-resources.json` 仍为空数组，`initial-xml.xml` 仍为占位注释，不能按完整夹具验收。
+- **2026-10-15 已补齐 Phase 0 夹具：** `tests/fixtures/phase0/initial-*.{json,xml}` 已由 FairyGUI Editor 6.1.4 回读并重新序列化生成（不再是空数组与占位注释），覆盖 Image/Loader/Button/Text/List/Group/Controller/Transition 八类对象；`scripts/phase0_fixture.py` 提供 `capture` / `verify [--live]` 两种模式并输出统一 JSON 报告。离线 12 项、实况 21 项校验全通过。**仍缺：** Bridge 无创建 List/Group/Controller/Loader 节点的 Action（`insert_object` 只能插入已有包资源），这 4 类节点只能由工程文件承载，并已验证编辑器可加载与重写它们。
 - capability 文档实际路径为 `.agents/skills/fgui-agent-bridge/references/current-capabilities.md`，而非仓库根目录 `references/`。
 
 ---
@@ -238,26 +238,26 @@ Lanhu 设计中的：
 
 ### 工作项
 
-- [ ] 固定 FairyGUI Editor 版本和 Bridge 插件版本。（部分完成：manifest 声明 Editor 6.1.4，仓库 Bridge 为 0.8.3；夹具尚未锁定完整版本组合。）
-- [ ] 创建隔离测试工程，包含：（部分完成：有 sample 实测报告和夹具定义，未见以下八类对象完整覆盖。）
-  - 一个普通 Image；
-  - 一个 Loader；
-  - 一个 Button；
-  - 一个 Text；
-  - 一个 List；
-  - 一个 Group；
-  - 一个 Controller；
-  - 一个 Transition。
-- [ ] 为每个对象记录初始 XML、对象树和资源 URL。（快照文件仍为占位。）
-- [ ] 补充 Action 的“请求成功但未持久化”回归测试。（部分完成：已有人工 Editor 回归报告，未形成自动持久化断言。）
-- [x] 将测试夹具放在独立 Bridge 仓库，不污染业务工程。（目录 `tests/fixtures/phase0/` 已建立；内容完整性见上。）
-- [ ] 建立统一的测试命令和 JSON 报告格式。（部分完成：有 unittest 命令和 JSON 报告，但没有统一报告生成器/schema。）
+- [x] 固定 FairyGUI Editor 版本和 Bridge 插件版本。（2026-10-15 实测：编辑器 Info.plist 报告 `6.1.4`，`sample` 工程插件 `0.8.3`，`status.versionMatch = true`；两者一并写入 `verify --live` 的报告 `editor` 段。）
+- [x] 创建隔离测试工程，包含：（已落地 `sample/assets/Package1/BridgeFixture.xml`，八类对象全部就位并经编辑器往返重写验证。）
+  - 一个普通 Image；→ `imgIcon` (`n0_fix01`)
+  - 一个 Loader；→ `loaderItem` (`n1_fix01`)
+  - 一个 Button；→ `btnMain` (`n3_fix01`，引用 `extention="Button"` 的 `BridgeTestButton.xml`)
+  - 一个 Text；→ `txtLabel` (`n2_fix01`)
+  - 一个 List；→ `listItems` (`n4_fix01`)
+  - 一个 Group；→ `grpRows` (`n7_fix01`，子节点用 `group="n7_fix01"` 反向引用)
+  - 一个 Controller；→ `ctrlState`，被 `imgIcon`/`loaderItem` 的 `gearDisplay` 引用
+  - 一个 Transition。→ `transFade`（frameRate 60，2 条关键帧轨道）
+- [x] 为每个对象记录初始 XML、对象树和资源 URL。（`initial-tree.json`（17 节点）、`initial-resources.json`（6 项）、`initial-xml.xml`（1818 字节）均由编辑器回读/重写后生成。）
+- [ ] 补充 Action 的“请求成功但未持久化”回归测试。（部分完成：已有人工 Editor 回归报告；2026-10-15 起 `verify --live` 会同时比对编辑器内存对象树、磁盘 XML 与包资源快照，可发现偏离，但尚未对写 Action 自动执行"写入→重载→断言"闭环。）
+- [x] 将测试夹具放在独立 Bridge 仓库，不污染业务工程。（隔离工程为仓库内 `sample/`，夹具目录 `tests/fixtures/phase0/`。）
+- [x] 建立统一的测试命令和 JSON 报告格式。（`scripts/phase0_fixture.py capture` / `verify [--live]`，报告 `kind: fgui-bridge-phase0-report`；失败项必须带 `target`/`expected`/`actual`/`xmlFragment`。离线用例已接入 `tests/test_phase0_fixture.py`。）
 
 ### 验收标准
 
-- 可以在隔离工程中稳定复现 `icon` 修改不落盘问题；
-- 可以区分内存修改、保存成功和重新加载成功；
-- 测试失败时能输出对象 ID、路径、before、after 和 XML 片段。
+- 可以在隔离工程中稳定复现 `icon` 修改不落盘问题；（夹具备齐，但"写入→重载→断言"尚未自动化）
+- 可以区分内存修改、保存成功和重新加载成功；（已区分编辑器内存树与磁盘 XML；外部重载仍返回 false）
+- 测试失败时能输出对象 ID、路径、before、after 和 XML 片段。（已满足：`verify` 报告失败项带 `target`/`expected`/`actual`/`xmlFragment`）
 
 ---
 

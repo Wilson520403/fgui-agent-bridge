@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component size="200,80" extention="Button">
+  <controller name="button" pages="0,up,1,down,2,over,3,selectedOver" selected="0"/>
+  <displayList>
+    <image id="n0_p93m" name="n0" src="p93m2" fileName="Blue.png" xy="68,8">
+      <relation target="" sidePair="width-width,height-height"/>
+    </image>
+    <image id="n1_p93m" name="icon" src="p93m2" fileName="Blue.png" xy="0,0" size="200,80">
+      <relation target="" sidePair="width-width,height-height"/>
+    </image>
+  </displayList>
+  <Button/>
+</component>

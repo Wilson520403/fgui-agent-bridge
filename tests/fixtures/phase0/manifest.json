@@ -2,5 +2,13 @@
   "name": "fgui-bridge-phase0",
   "editorBaseline": "6.1.4",
   "objects": ["Image", "Loader", "Button", "Text", "List", "Group", "Controller", "Transition"],
-  "snapshots": ["initial-tree.json", "initial-resources.json", "initial-xml.xml"]
+  "snapshots": ["initial-tree.json", "initial-resources.json", "initial-xml.xml"],
+  "fixture": {
+    "project": "sample",
+    "package": "Package1",
+    "component": "BridgeFixture",
+    "xml": "sample/assets/Package1/BridgeFixture.xml",
+    "url": "ui://qsezbqtwfix01"
+  },
+  "note": "Bridge 无创建 List/Group/Controller/Loader 节点的 API，该矩阵由工程文件承载；initial-*.json 与 initial-xml.xml 均由 FairyGUI Editor 6.1.4 回读/重写后生成，不是手写占位。"
 }

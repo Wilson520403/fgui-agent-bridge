@@ -6,4 +6,8 @@ __pycache__/
 node_modules/
 main.js.map
 .DS_Store
-sample/
+# sample/ 是 Phase 0 隔离回归工程：夹具定义必须进版本控制，
+# 但运行时队列、编辑器工作区状态和同步过去的插件快照不入库。
+sample/.agent/
+sample/.objs/
+sample/plugins/

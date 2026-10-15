@@ -1,1 +1,83 @@
-{"fixture":"fgui-bridge-phase0","resources":[]}
+{
+  "package": "Package1",
+  "resources": [
+    {
+      "id": "7vc10",
+      "name": "Component1",
+      "title": "Component1",
+      "type": "component",
+      "path": "/",
+      "file": "Component1.xml",
+      "width": 800,
+      "height": 600,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtw7vc10"
+    },
+    {
+      "id": "p93m1",
+      "name": "Red",
+      "title": "Red",
+      "type": "image",
+      "path": "/",
+      "file": "Red.png",
+      "width": 64,
+      "height": 64,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwp93m1"
+    },
+    {
+      "id": "p93m2",
+      "name": "Blue",
+      "title": "Blue",
+      "type": "image",
+      "path": "/",
+      "file": "Blue.png",
+      "width": 64,
+      "height": 64,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwp93m2"
+    },
+    {
+      "id": "p93m3",
+      "name": "BridgeTestButton",
+      "title": "BridgeTestButton",
+      "type": "component",
+      "path": "/",
+      "file": "BridgeTestButton.xml",
+      "width": 200,
+      "height": 80,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwp93m3"
+    },
+    {
+      "id": "mvx64",
+      "name": "BridgeTextTest",
+      "title": "BridgeTextTest",
+      "type": "component",
+      "path": "/",
+      "file": "BridgeTextTest.xml",
+      "width": 240,
+      "height": 100,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwmvx64"
+    },
+    {
+      "id": "fix01",
+      "name": "BridgeFixture",
+      "title": "BridgeFixture",
+      "type": "component",
+      "path": "/",
+      "file": "BridgeFixture.xml",
+      "width": 800,
+      "height": 600,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwfix01"
+    }
+  ]
+}

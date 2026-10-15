@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component size="240,100" extention="Button">
+  <controller name="button" pages="0,up,1,down,2,over,3,selectedOver" selected="0"/>
+  <displayList>
+    <image id="n0_mvx6" name="n0" src="p93m1" fileName="Red.png" xy="88,18">
+      <relation target="" sidePair="width-width,height-height"/>
+    </image>
+    <text id="n1_mvx6" name="title" xy="0,0" size="240,100" fontSize="40" color="#ffffff" align="center" vAlign="middle" leading="4" autoSize="none" singleLine="true" text="">
+      <relation target="" sidePair="width-width,height-height"/>
+    </text>
+    <loader id="n2_mvx6" name="icon" xy="0,0" size="240,100" url="ui://qsezbqtwp93m2" align="center" vAlign="middle">
+      <relation target="" sidePair="width-width,height-height"/>
+    </loader>
+  </displayList>
+  <Button/>
+</component>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<packageDescription id="qsezbqtw">
+  <resources>
+    <component id="7vc10" name="Component1.xml" path="/" exported="true"/>
+    <image id="p93m1" name="Red.png" path="/" exported="true"/>
+    <image id="p93m2" name="Blue.png" path="/" exported="true"/>
+    <component id="p93m3" name="BridgeTestButton.xml" path="/" exported="true"/>
+    <component id="mvx64" name="BridgeTextTest.xml" path="/" exported="true"/>
+    <component id="fix01" name="BridgeFixture.xml" path="/" exported="true"/>
+  </resources>
+  <publish name=""/>
+</packageDescription>

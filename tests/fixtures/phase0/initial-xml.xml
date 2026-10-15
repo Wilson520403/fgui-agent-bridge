@@ -1,1 +1,30 @@
-<!-- Populate from the isolated FairyGUI Editor fixture; kept empty in source because FairyGUI project assets are environment-specific. -->
+<?xml version="1.0" encoding="utf-8"?>
+<component size="800,600">
+  <controller name="ctrlState" pages="0,idle,1,busy" selected="0"/>
+  <displayList>
+    <image id="n0_fix01" name="imgIcon" src="p93m2" fileName="Blue.png" xy="40,40" size="64,64">
+      <gearDisplay controller="ctrlState" pages="0"/>
+      <relation target="" sidePair=""/>
+    </image>
+    <loader id="n1_fix01" name="loaderItem" xy="120,40" size="64,64" url="ui://qsezbqtwp93m1" align="center" vAlign="middle">
+      <gearDisplay controller="ctrlState" pages="1"/>
+      <relation target="" sidePair=""/>
+    </loader>
+    <text id="n2_fix01" name="txtLabel" xy="200,48" size="202,44" fontSize="32" color="#ffffff" text="Fixture Label"/>
+    <component id="n3_fix01" name="btnMain" src="p93m3" fileName="BridgeTestButton.xml" xy="40,130"/>
+    <list id="n4_fix01" name="listItems" xy="440,130" size="320,240" overflow="scroll" colGap="8" defaultItem="ui://qsezbqtwp93m3" align="none" vAlign="none" autoClearItems="true">
+      <relation target="" sidePair=""/>
+      <item/>
+      <item/>
+    </list>
+    <graph id="n5_fix01" name="grpChildA" xy="40,240" size="140,36" group="n7_fix01" type="rect" fillColor="#ff334c66"/>
+    <text id="n6_fix01" name="grpChildB" xy="40,288" size="76,34" group="n7_fix01" fontSize="24" color="#7be495" text="Row B"/>
+    <group id="n7_fix01" name="grpRows" xy="40,240" size="140,84" advanced="true" layout="vt" lineGap="12" excludeInvisibles="true">
+      <relation target="" sidePair=""/>
+    </group>
+  </displayList>
+  <transition name="transFade" frameRate="60">
+    <item time="0" type="Alpha" target="n0_fix01" tween="true" startValue="0" endValue="1" duration="30"/>
+    <item time="0" type="XY" target="n1_fix01" tween="true" startValue="120,20" endValue="120,40" duration="30"/>
+  </transition>
+</component>
