@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "suite": "unified-write-verification",
+  "kind": "fgui-bridge-live-evidence",
+  "generatedAt": "2026-10-16",
+  "bridgeVersion": "0.8.5",
+  "environment": {
+    "editor": "FairyGUI Editor 6.1.4 (macOS)",
+    "project": "sample/ (Phase 0 隔离工程)",
+    "document": "Package1/BridgeFixture (ui://qsezbqtwfix01)"
+  },
+  "scope": "set_property / insert_object / remove_object 迁入 writeVerification 统一语义",
+  "cases": [
+    {
+      "name": "set_property numeric x --save",
+      "request": "set --id n2_fix01 x 210 --save",
+      "result": "ok=true persisted=true strength=disk xmlReadback=true xml.x=210",
+      "verdict": "pass"
+    },
+    {
+      "name": "set_property boolean visible=false --save",
+      "request": "set --id n0_fix01 visible false --save",
+      "result": "ok=true persisted=true xml.visible=false; XML 实际写入 visible=\"false\"",
+      "verdict": "pass"
+    },
+    {
+      "name": "set_property boolean visible=true 恢复后属性回落默认值",
+      "request": "set --id n0_fix01 visible true --save",
+      "result": "ok=true persisted=true xml.visible=true; XML 中 visible 属性按缺省省略",
+      "verdict": "pass"
+    },
+    {
+      "name": "set_property scaleX --save --external-reload",
+      "request": "set --id n0_fix01 scaleX 1.5 --save --external-reload",
+      "result": "ok=true persisted=true strength=reload closeStrategy=CloseDocuments reload.values.scaleX=1.5",
+      "verdict": "pass"
+    },
+    {
+      "name": "insert_object --save",
+      "request": "insert ui://qsezbqtwp93m2 --x 5 --y 6 --name insertedTest --save",
+      "result": "ok=true persisted=true strength=disk 新节点 n8_u4ww 磁盘 XML 回读 name/resourceURL/x 一致",
+      "verdict": "pass"
+    },
+    {
+      "name": "remove_object --save --external-reload 缺失性验证",
+      "request": "remove --id n8_u4ww --save --external-reload",
+      "result": "ok=true persisted=true strength=reload reload.absent=true 磁盘 XML 已不含节点",
+      "verdict": "pass"
+    },
+    {
+      "name": "夹具还原与全量回归",
+      "request": "phase0_fixture.py verify --live; unittest; p0_host_harness.cjs",
+      "result": "verify --live pass; 29 项 Python 单测通过; 模拟宿主 51/51",
+      "verdict": "pass"
+    }
+  ],
+  "notes": [
+    "所有写操作完成后已将夹具属性还原（x=200、scaleX=1、删除插入节点），sample/assets XML 与初始快照一致。",
+    "Transition/MovieClip/创建导入类 Action 未在本轮接入统一写验证。",
+    "Windows 与 Unity 侧验收仍未完成。"
+  ]
+}

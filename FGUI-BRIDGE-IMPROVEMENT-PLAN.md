@@ -15,7 +15,7 @@
 | 阶段 | 当前状态 | 已有能力与主要缺口 |
 | --- | --- | --- |
 | Phase 0 | 部分完成 | 八类对象隔离夹具、初始快照、统一 JSON 报告与测试命令已于 2026-10-15 落地（`scripts/phase0_fixture.py`、`sample/assets/Package1/BridgeFixture.xml`）；external reload 已于 2026-10-15 补齐并真机验证，「请求成功但未持久化」的自动断言仍只覆盖写 Action，`set_property` 等旧接口未纳入。 |
-| Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；**external reload 已于 2026-10-15 完成并在 FairyGUI Editor 6.1.4 真机验证**（关闭重开后重新定位比对通过，关闭方式实测为 `CloseDocuments`）；`verify_document` 的完整比对、所有写 Action 统一语义与真实持久化失败检测仍未完成。 |
+| Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；**external reload 已于 2026-10-15 完成并在 FairyGUI Editor 6.1.4 真机验证**（关闭方式实测为 `CloseDocuments`）；**2026-10-16 `set_property`/`insert_object`/`remove_object` 已迁入统一 `writeVerification` 语义并真机验证**，验证层新增 scale/rotation/alpha/visible/touchable/grayed/text/icon 通用属性；`verify_document` 的完整比对、动画与 MovieClip 等写 Action 的统一语义仍未完成。 |
 | Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
 | Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
 | Phase 4 | 未完成 | 未找到计划中的 List/Group/Relation/Controller/gearDisplay 专用 Action。 |
@@ -31,6 +31,7 @@
 - **本轮已处理：** `writeVerification` 检查保存状态、读取组件 XML 与 expected 比对；`verifyDocument` 支持 expected 校验；external reload 与 `strength` 验证强度分级。**仍未完成：** `verify_document` 的完整比对、所有写 Action 的统一语义（`set_property` 等旧接口未迁移），因此 P0/切片 A 仍只能标为部分完成。
 - **2026-10-15 已补齐 Phase 0 夹具：** `tests/fixtures/phase0/initial-*.{json,xml}` 已由 FairyGUI Editor 6.1.4 回读并重新序列化生成（不再是空数组与占位注释），覆盖 Image/Loader/Button/Text/List/Group/Controller/Transition 八类对象；`scripts/phase0_fixture.py` 提供 `capture` / `verify [--live]` 两种模式并输出统一 JSON 报告。离线 12 项、实况 21 项校验全通过。**仍缺：** Bridge 无创建 List/Group/Controller/Loader 节点的 Action（`insert_object` 只能插入已有包资源），这 4 类节点只能由工程文件承载，并已验证编辑器可加载与重写它们。
 - **2026-10-15 修复「XML 缺省属性导致假失败」：** FairyGUI 序列化时会省略仍为默认值的属性，而 `persistedObjectValues` 把缺失属性读成 `null`，导致断言任何默认值属性（典型如默认色 `#FFFFFF`、默认对齐 `left`）时抛出**虚假的** `persistence_failed`——表现像严重的持久化故障，足以诱发对正确改动的错误回滚。修复把缺失属性解析为 FairyGUI 默认值，使「期望默认值」通过、「期望非默认值而 XML 缺失」仍然失败关闭。原有测试 `Read-only verify compares expected Editor and disk` 此前是因为夹具把默认属性也写进 XML 才通过，属于因错因通过，已随夹具改为真实序列化行为而转为因对因通过。**已于 2026-10-16 在 FairyGUI Editor 6.1.4 真机复验**：`verify_document` 断言 XML 缺失的默认属性 `align:"left"` 通过（`persisted:true`、`strength:disk`）；断言 `align:"center"` 在「内存已改、磁盘未存」时仍以 `persistence_failed`（stage `xml`）失败关闭；`set_text_style fontSize:36 --save --external-reload` 经 `CloseDocuments` 关闭重开后回读一致（`strength:reload`），随后已还原 fontSize:32。同时修复夹具脚本一个跨会话假失败：`get_tree` 中 List item 实例等运行时节点的 id 由编辑器按会话分配（如 `n0_dftm`→`n0_jrnu`），`snapshot.tree.match` 现只严格比对持久化到组件 XML 的 id，运行时节点仅比对 name/type/结构。证据见 `tests/reports/phase0-live-recheck.json`。
+- **2026-10-16 `set_property`/`insert_object`/`remove_object` 迁入统一写验证（0.8.5）：** 三个 Action 复用 `writeVerification`/`validateReloadOptions`，返回统一的 `{ok,target,before/after,documentModified,saved,persisted,strength,verification,note}` 并支持 `save`/`verify`/`externalReload`。`set_property` 保留 Agent 属性事务栈，新增类型归一化（数值/布尔/字符串在写入前校验）与 `font` 的 `ui://` 解析；验证层 `VERIFIED_KEYS` 扩展 `scaleX/scaleY/rotation/alpha/visible/touchable/grayed/text/icon` 通用属性（序列化名与默认值已按 6.1.4 实测钉住，如 `visible` 仅在 `false` 时序列化）。`remove_object` 改为缺失性验证：编辑器回读确认不可解析、保存后磁盘 XML 不含节点 id、external reload 重开后仍缺失才报 `persisted`；`insert_object` 验证新节点 `id/name/type/x/y`（含引用时 `resourceURL`）。模拟宿主 51 项全过；真机 6.1.4 已验证 `x`、`visible` 双向、`scaleX` 关闭重开、insert 磁盘回读与 remove 重载后仍缺失。Transition/MovieClip/创建导入类 Action 未在本轮接入。
 - capability 文档实际路径为 `.agents/skills/fgui-agent-bridge/references/current-capabilities.md`，而非仓库根目录 `references/`。
 - **环境记录（2026-10-15 夜）：** FairyGUI Editor 反复进入「进程存活但插件 `onUpdate` 停摆」的状态——桥接写入一次 status 后心跳即冻结，请求长期滞留在 `requests/` 不被认领。已排除插件自身原因（快照 `main.js` 与仓库字节完全一致且结尾完整；Player.log 中 `JsEnv has been disposed!` 是 Puerts 在编辑器关闭时的收尾噪音，非运行期异常）。已观察到两点可复现规律：编辑器**退到后台会被节流**，`App.runInBackground = true` 并未完全避免；以及工程打开后 `activeDocument` 可能为 `null`。同一现象在 20:07（尚未改动该修复时）也出现过，因此与本次修复无因果关系。后续真机复验前建议先手工打开编辑器并确认已有活动文档。
 
@@ -277,7 +278,7 @@ Lanhu 设计中的：
   - `name`；
   - `resourceURL`；
   - 唯一性校验。
-- [ ] 所有写 Action 返回统一结构：（部分完成：`replace_object_resource`、`set_text_style`、`verify_document` 三条已统一走 `writeVerification`，并新增 `strength` 字段区分 reload/disk/none 三级验证强度；`set_property`、`insert_object`、动画与 MovieClip 等旧接口仍未统一。）
+- [ ] 所有写 Action 返回统一结构：（部分完成：`replace_object_resource`、`set_text_style`、`verify_document`、`set_property`、`insert_object`、`remove_object` 已统一走 `writeVerification`，并新增 `strength` 字段区分 reload/disk/none 三级验证强度；2026-10-16 起 `remove_object` 按缺失性验证，删除仅在磁盘 XML 与重载后均解析不到节点时才报持久化；动画、MovieClip 与创建导入类接口仍未统一。）
 
 ```json
 {

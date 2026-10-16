@@ -31,6 +31,7 @@ function setup() {
  const resource=(id,w=64,h=64)=>({id,owner:{id:'fixture0'},type:'image',width:w,height:h,GetURL:()=>`ui://fixture0${id}`});
  resources={'ui://fixture0red':resource('red'),'ui://fixture0blue':resource('blue',128,128)};
  objects=[{id:'image1',name:'picture',objectType:'image',resourceURL:'ui://fixture0red',width:64,height:64,x:10,y:20}, {id:'loader1',name:'icon',objectType:'loader',url:'ui://fixture0red',width:64,height:64,x:80,y:20}, {id:'text1',name:'title',objectType:'text',font:'',fontSize:24,color:new Color(1,1,1,1),align:'center',verticalAlign:'middle',leading:4,letterSpacing:1,autoSize:'none',width:240,height:60,x:0,y:100}];
+ for(const o of objects)Object.assign(o,{scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}});
  doc=makeDoc();
  resources['ui://fixture0component']={file:'fixture.xml',owner:{id:'fixture0'}};
  const docView={
@@ -39,17 +40,21 @@ function setup() {
   OpenDocument(url){ if(openMode==='throw')throw Error('open failed'); if(openMode==='null')return null; doc=makeDoc(); return doc; }
  };
  const app={project:{GetItemByURL:url=>resources[url] || null},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font'}},UnityEngine:{Application:{runInBackground:false},Color},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{},Path:{},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:()=>({}),console});
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font'}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{},Path:{},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:()=>({}),console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  ctx.getActiveDocument=()=>doc;
  ctx.resolveObject=(_,t)=>{const o=objects.find(o=>o.id===t.id);if(!o)throw Error('未找到对象 ID');return o;};
+ ctx.findObjectById=(_,id)=>objects.find(o=>o.id===id)||null;
  ctx.describeObject=o=>({id:o.id});ctx.describeDocument=()=>({modified:doc.isModified});
 }
 function makeDoc(){
  const d={content:{resourceURL:'ui://fixture0component'},docURL:'ui://fixture0component',dead:false,
-  SetModified(v){this.isModified=v;},RefreshInspectors(){},SetSelection(o){this.selected=o;},
+  history:{CanUndo:()=>false,CanRedo:()=>false,GetPendingList:()=>({Count:0})},
+  SetModified(v){this.isModified=v;},RefreshInspectors(){},SetSelection(o){this.selected=o;},SelectObject(){},
   ReplaceSelection(url){replaceCount++;if(replaceMode==='ignore')return;const i=objects.indexOf(this.selected);objects[i]={...this.selected,resourceURL:url};},
+  InsertObject(url,pos,idx){const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
+  RemoveObject(o){const i=objects.indexOf(o);if(i>=0)objects.splice(i,1);},
   Save(){if(saveMode==='throw')throw Error('disk full');if(saveMode==='dirty')return;if(saveMode!=='stale')files['fixture.xml']=serialize();this.isModified=false;}};
  let modified=false;
  // A closed document must not answer reads: it is how the suite proves the
@@ -74,7 +79,8 @@ function reloadFromDisk(){
  objects=(list?list.children:[]).map(n=>{
   const a=n.attrs;
   const xy=(a.xy||'0,0').split(',').map(Number),size=(a.size||'0,0').split(',').map(Number);
-  const o={id:a.id,name:a.name,x:xy[0],y:xy[1],width:size[0],height:size[1]};
+  const scale=(a.scale||'1,1').split(',').map(Number);
+  const o={id:a.id,name:a.name,x:xy[0],y:xy[1],width:size[0],height:size[1],scaleX:scale[0],scaleY:scale[1]??scale[0],rotation:Number(a.rotation||0),alpha:Number(a.alpha||1),visible:a.visible!=='false',touchable:a.touchable!=='false',grayed:a.grayed==='true',text:a.text??a.title??'',icon:a.icon||'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
   if(n.name==='image'){o.objectType='image';o.resourceURL='ui://fixture0'+a.src;}
   if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
   if(n.name==='text'){Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none'});}
@@ -96,6 +102,14 @@ function serialize() {
  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
  return '<component size="400,300"><displayList>'+objects.map(o=>{
  const a={id:o.id,name:o.name,xy:`${o.x},${o.y}`,size:`${o.width},${o.height}`};
+ if(o.scaleX!==1||o.scaleY!==1)a.scale=`${o.scaleX},${o.scaleY}`;
+ if(o.rotation)a.rotation=o.rotation;
+ if(o.alpha!==1)a.alpha=o.alpha;
+ if(o.visible===false)a.visible='false';
+ if(o.touchable===false)a.touchable='false';
+ if(o.grayed===true)a.grayed='true';
+ if(o.text)a[o.objectType==='text'?'text':'title']=o.text;
+ if(o.icon)a.icon=o.icon;
  if(o.objectType==='image')a.src=o.resourceURL.slice('ui://fixture0'.length);
  if(o.objectType==='loader')a.url=o.url;
  if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);}
@@ -145,6 +159,21 @@ test('verifyDocument can reload an already saved document without saving',()=>{c
 test('verifyDocument refuses to close a document with unsaved changes',()=>{doc.SetModified(true);rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24},externalReload:true}),'invalid_argument','reload');assert.equal(closeCount,0);});
 test('Snapshot mode never closes the document even if asked',()=>{const r=ctx.verifyDocument({});assert.equal(closeCount,0);assert.equal(r.strength,'none');assert.equal(r.persisted,false);});
 test('Button state API cannot silently replace whole button',()=>{objects[0].objectType='button';rejects(()=>replace('image1',{state:'up'}),'unsupported_property','input');assert.equal(replaceCount,0);});
+const set=(id,property,value,extra={})=>ctx.handleCommand({action:'set_property',params:{target:{id},property,value,save:true,...extra}});
+const insert=(extra={})=>ctx.handleCommand({action:'insert_object',params:{url:'ui://fixture0red',x:5,y:6,name:'inserted',save:true,...extra}});
+const remove=(id,extra={})=>ctx.handleCommand({action:'remove_object',params:{target:{id},save:true,...extra}});
+test('set_property persists a numeric property through save and disk readback',()=>{const r=set('text1','x',42);assert.equal(r.ok,true);assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.after,42);assert.equal(r.verification.xml.x,42);assert.equal(r.history.agentUndoCount,1);});
+test('set_property verifies boolean defaults in both directions',()=>{const r=set('image1','visible',false);assert.equal(r.persisted,true);assert.equal(r.verification.xml.visible,false);const r2=set('image1','visible',true);assert.equal(r2.persisted,true);assert.equal(r2.verification.xml.visible,true);});
+test('set_property without save never claims persistence',()=>{const r=set('text1','x',7,{save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(r.strength,'none');assert.equal(files['fixture.xml'],fixture);});
+test('set_property rejects non-whitelist property before mutation',()=>{rejects(()=>set('text1','evil',1),'unsupported_property','input');assert.equal(objects[2].x,0);});
+test('set_property rejects invalid numeric before mutation',()=>{rejects(()=>set('text1','x','abc'),'invalid_argument','input');assert.equal(objects[2].x,0);});
+test('set_property external reload round-trips the value',()=>{const r=set('text1','scaleX',1.5,{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.scaleX,1.5);assert.equal(closeCount,1);});
+test('insert_object saves and reads the new node back from XML',()=>{const r=insert();assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.name,'inserted');assert.equal(r.verification.xml.resourceURL,'ui://fixture0red');assert.equal(r.verification.xml.x,5);assert.equal(objects.length,4);});
+test('insert_object rejects reload without save before inserting',()=>{rejects(()=>insert({save:false,externalReload:true}),'invalid_argument','input');assert.equal(objects.length,3);});
+test('remove_object verifies absence on disk after save',()=>{const r=remove('loader1');assert.equal(r.persisted,true);assert.equal(r.verification.xmlReadback,true);assert.equal(objects.length,2);assert.ok(!files['fixture.xml'].includes('loader1'));});
+test('remove_object external reload proves the node stays gone',()=>{const r=remove('loader1',{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.absent,true);assert.equal(closeCount,1);});
+test('remove_object without save does not claim persistence',()=>{const r=remove('loader1',{save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(files['fixture.xml'],fixture);});
+test('remove_object fails closed when the disk write is stale',()=>{saveMode='stale';rejects(()=>remove('loader1'),'persistence_failed','xml');});
 // externalReloadVerified stays false on purpose: this suite proves the reload
 // verification *logic* against a mocked host, never Editor acceptance.
 const report={schemaVersion:1,suite:'p0-persistence-host',evidence:'mocked-editor-host',liveEditorVerified:false,mockedExternalReloadCovered:true,externalReloadVerified:false,passed:results.filter(r=>r.passed).length,total:results.length,cases:results};

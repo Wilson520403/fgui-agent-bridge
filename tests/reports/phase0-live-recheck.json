@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "kind": "fgui-bridge-phase0-report",
-  "generatedAt": "2026-10-16T11:30:31+08:00",
+  "generatedAt": "2026-10-16T11:39:43+08:00",
   "summary": {
     "total": 21,
     "passed": 21,
@@ -173,7 +173,7 @@
       "target": {},
       "actual": {
         "title": "BridgeFixture",
-        "savedVersion": 5,
+        "savedVersion": 11,
         "transitions": [
           "transFade"
         ]
@@ -318,9 +318,9 @@
   },
   "editor": {
     "online": true,
-    "heartbeatAgeSeconds": 0.79,
-    "bridgeClientVersion": "0.8.4",
-    "pluginVersion": "0.8.4",
+    "heartbeatAgeSeconds": 0.33,
+    "bridgeClientVersion": "0.8.5",
+    "pluginVersion": "0.8.5",
     "versionMatch": true
   }
 }

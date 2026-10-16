@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-- **版本**：`0.8.4`
+- **版本**：`0.8.5`
 - **队列协议**：`1.0`
 - **已验证 FairyGUI Editor**：`6.1.4`
 - **通信方式**：本地 JSON 队列 + MCP stdio
@@ -247,6 +247,12 @@ uv run fgui-agent preview-transition play fadeIn
 ### 3. 大图自动独立图集规则
 - **规则触发**：图片分辨率达到 `1920×1080`，或任意一边达到 `2048`（2K）时，会自动标记为 FairyGUI `alone` 单独纹理集。
 - **自动补齐**：通过 `fgui_import_image` 导入时即时生效；执行 `fgui_publish` 发布时还会自动扫描目标包并纠正历史大图配置，防止大图与小图碎图混排导致图集膨胀。
+
+### 4. 写操作持久化验证
+- `fgui_replace_object_resource`、`fgui_set_text_style`、`fgui_set_property`、`fgui_insert_object`、`fgui_remove_object` 和只读的 `fgui_verify_document` 统一返回 `{ok, target, before/after, documentModified, saved, persisted, strength, verification}`。
+- `save=true` 保存后默认比对磁盘 XML；`external_reload=true`（需 `save=true`，且与 `verify=false` 冲突）会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证。
+- `strength` 标明验证强度：`reload`（关闭重开比对通过）/ `disk`（仅保存成功且磁盘 XML 匹配）/ `none`（未验证）；读 `persisted` 时必须同时看 `strength`。
+- `fgui_remove_object` 按缺失性验证：保存后要求磁盘 XML 不再包含目标节点，重载后要求目标仍不可解析。
 
 ---
 

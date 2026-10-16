@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.4";
+const BRIDGE_VERSION = "0.8.5";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -771,7 +771,10 @@ function targetSummary(obj, target) {
 }
 // Verification is deliberately limited to properties with a known serialized meaning.
 const VERIFIED_TEXT_KEYS = ["font", "fontSize", "color", "align", "vAlign", "autoSize", "lineGap", "letterSpacing", "width", "height", "x", "y"];
-const VERIFIED_KEYS = ["id", "name", "type", "resourceURL"].concat(VERIFIED_TEXT_KEYS);
+// Whitelist properties whose serialized attribute and default are pinned, so
+// set_property can be covered by the same write verification semantics.
+const VERIFIED_GENERIC_KEYS = ["scaleX", "scaleY", "rotation", "alpha", "visible", "touchable", "grayed", "text", "icon"];
+const VERIFIED_KEYS = ["id", "name", "type", "resourceURL"].concat(VERIFIED_TEXT_KEYS, VERIFIED_GENERIC_KEYS);
 function verificationError(code, message, details) {
     const error = new Error(message);
     error.code = code;
@@ -794,6 +797,17 @@ function validateExpectations(expected) {
     }
     return result;
 }
+function genericObjectValue(obj, key) {
+    if (obj[key] !== undefined)
+        return safeValue(obj[key]);
+    try {
+        const value = obj.GetProperty ? obj.GetProperty(key) : null;
+        return value === undefined || value === null ? null : safeValue(value);
+    }
+    catch (error) {
+        return null;
+    }
+}
 function verifiedObjectValues(obj) {
     const value = { id: obj.id || "", name: obj.name || "", type: String(obj.objectType || "unknown").toLowerCase(), resourceURL: String(obj.objectType).toLowerCase() === "loader" ? (obj.url || null) : (obj.resourceURL || null) };
     const aliases = { vAlign: "verticalAlign", lineGap: "leading" };
@@ -804,6 +818,8 @@ function verifiedObjectValues(obj) {
     // An unspecified/default font is represented by the empty string in XML.
     if (value.font === null)
         value.font = "";
+    for (const key of VERIFIED_GENERIC_KEYS)
+        value[key] = genericObjectValue(obj, key);
     return value;
 }
 function compareVerification(expected, actual, stage, obj) {
@@ -887,6 +903,17 @@ function persistedObjectValues(doc, obj) {
     for (const key of ["fontSize", "letterSpacing", "lineGap"])
         if (value[key] !== null)
             value[key] = Number(value[key]);
+    const scale = (attr("scale") || "1,1").split(",").map(Number);
+    value.scaleX = scale[0];
+    value.scaleY = scale.length > 1 ? scale[1] : scale[0];
+    value.rotation = Number(attr("rotation") || 0);
+    value.alpha = Number(attr("alpha") || 1);
+    // FairyGUI only serializes these when they differ from the default.
+    value.visible = attr("visible") !== "false";
+    value.touchable = attr("touchable") !== "false";
+    value.grayed = attr("grayed") === "true";
+    value.text = attr("text") !== null ? attr("text") : (attr("title") !== null ? attr("title") : "");
+    value.icon = attr("icon") || "";
     const xy = (attr("xy") || "0,0").split(",").map(Number);
     value.x = xy[0];
     value.y = xy[1];
@@ -976,6 +1003,58 @@ function externalReloadVerify(doc, locator, expected, state) {
     // be returned in the response, but later code still needs a live document.
     state.doc = reopened;
     return { performed: true, url, closeStrategy, values };
+}
+// Removal is verified by proving absence, not by comparing values: the write
+// succeeded only if the node can no longer be resolved in the Editor, no longer
+// appears in the serialized displayList, and stays gone after a real reload.
+function persistedNodeExists(doc, objectId) {
+    const item = App.project.GetItemByURL(doc.content.resourceURL);
+    if (!item || !item.file || !IOFile.Exists(item.file))
+        verificationError("persistence_failed", "无法读取组件 XML", { stage: "xml" });
+    const XmlType = CS.FairyGUI.Utils.XML;
+    const xml = new XmlType(String(IOFile.ReadAllText(item.file)));
+    const list = xml.GetNode("displayList");
+    let exists = false;
+    if (list) {
+        for (let i = 0; i < list.elements.Count; i++) {
+            if (String(list.elements.get_Item(i).GetAttribute("id")) === String(objectId)) {
+                exists = true;
+                break;
+            }
+        }
+    }
+    return { exists, file: String(item.file) };
+}
+function externalReloadVerifyAbsent(doc, locator, state) {
+    const url = String(doc.docURL || "");
+    if (!url)
+        verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", { stage: "reload" });
+    if (doc.isModified)
+        verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", { stage: "reload", url });
+    const docView = App.docView;
+    if (!docView || typeof docView.OpenDocument !== "function")
+        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", { stage: "reload", url });
+    const closeStrategy = closeDocumentForReload(docView, url);
+    let reopened = null;
+    try {
+        reopened = docView.OpenDocument(url, true);
+    }
+    catch (error) {
+        verificationError("persistence_failed", "external reload 重新打开文档失败", { stage: "reload", url, closeStrategy, reason: String(error) });
+    }
+    if (!reopened)
+        verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", { stage: "reload", url, closeStrategy });
+    let stillPresent = null;
+    try {
+        stillPresent = resolveObject(reopened, locator);
+    }
+    catch (error) {
+        stillPresent = null;
+    }
+    if (stillPresent)
+        verificationError("persistence_failed", "external reload 后目标节点仍然存在", { stage: "reload", url, closeStrategy, target: locator });
+    state.doc = reopened;
+    return { performed: true, url, closeStrategy, absent: true };
 }
 function verificationStrength(verification, saved) {
     if (verification && verification.reload && verification.reload.performed)
@@ -2195,6 +2274,44 @@ const writableProperties = {
     customData: true,
     notes: true
 };
+const numericWritableProperties = {
+    x: true, y: true, width: true, height: true,
+    scaleX: true, scaleY: true, skewX: true, skewY: true,
+    pivotX: true, pivotY: true, rotation: true, alpha: true
+};
+const booleanWritableProperties = {
+    anchor: true, visible: true, touchable: true, opaque: true, grayed: true,
+    enabled: true, locked: true, hideByEditor: true, useSourceSize: true
+};
+const stringWritableProperties = {
+    name: true, text: true, icon: true, font: true,
+    tooltips: true, blendMode: true, customData: true, notes: true
+};
+// Normalizes once, before the mutation, so the value sent to the Editor and the
+// value used as the verification expectation can never diverge.
+function normalizeWritableValue(property, value) {
+    if (numericWritableProperties[property]) {
+        const number = Number(value);
+        if (!Number.isFinite(number))
+            verificationError("invalid_argument", `${property} 必须是有限数字`, { stage: "input", property, value });
+        return number;
+    }
+    if (booleanWritableProperties[property]) {
+        if (typeof value === "boolean")
+            return value;
+        if (value === 0 || value === 1)
+            return Boolean(value);
+        if (value === "true" || value === "false")
+            return value === "true";
+        verificationError("invalid_argument", `${property} 只接受布尔值`, { stage: "input", property, value });
+    }
+    if (stringWritableProperties[property]) {
+        if (value === null || value === undefined)
+            verificationError("invalid_argument", `${property} 不能为 null`, { stage: "input", property });
+        return String(value);
+    }
+    return value;
+}
 function validatePropertyTarget(doc, obj, property) {
     const isRoot = obj === doc.content;
     if (isRoot && property === "touchable") {
@@ -2705,11 +2822,19 @@ function handleCommand(request) {
             const obj = resolveObject(doc, params.target);
             const property = String(params.property || "");
             if (!writableProperties[property])
-                throw new Error(`属性不在安全写入白名单中：${property}`);
+                verificationError("unsupported_property", `属性不在安全写入白名单中：${property}`, { stage: "input", property });
             validatePropertyTarget(doc, obj, property);
+            validateReloadOptions(params, targetSummary(obj, params.target));
+            let value = normalizeWritableValue(property, params.value);
+            if (property === "font" && typeof value === "string" && value.indexOf("ui://") === 0) {
+                const font = resolveItem({ url: value });
+                if (font.type !== FairyEditor.FPackageItemType.FONT)
+                    verificationError("invalid_argument", "font 必须引用字体资源", { stage: "input", resourceURL: value });
+                value = String(font.GetURL());
+            }
             const before = safeValue(getWritableProperty(obj, property));
             const documentModifiedBefore = doc.isModified;
-            setWritableProperty(obj, property, params.value);
+            setWritableProperty(obj, property, value);
             doc.SetModified(true);
             doc.RefreshInspectors();
             const after = safeValue(getWritableProperty(obj, property));
@@ -2724,24 +2849,26 @@ function handleCommand(request) {
                 });
                 agentRedoStack.length = 0;
             }
-            return {
-                target: { id: obj.id, name: obj.name, type: obj.objectType },
-                property,
-                before,
-                after,
-                documentModified: doc.isModified,
-                history: {
-                    agentUndoCount: agentUndoStack.length,
-                    agentRedoCount: agentRedoStack.length,
-                    nativeCanUndo: doc.history.CanUndo(),
-                    nativeCanRedo: doc.history.CanRedo(),
-                    nativePendingCount: doc.history.GetPendingList().Count
-                }
+            // font 的 XML 序列化形式取决于编辑器接受的值，而不是输入形式；
+            // 其余已覆盖属性用请求值做 expected，让编辑器擅自调整能被检出。
+            const expected = { id: obj.id, name: obj.name, type: String(obj.objectType || "").toLowerCase() };
+            if (VERIFIED_KEYS.indexOf(property) >= 0 && property !== "name")
+                expected[property] = property === "font" ? after : value;
+            const result = writeVerification(doc, obj, before, after, params, expected);
+            result.property = property;
+            result.history = {
+                agentUndoCount: agentUndoStack.length,
+                agentRedoCount: agentRedoStack.length,
+                nativeCanUndo: doc.history.CanUndo(),
+                nativeCanRedo: doc.history.CanRedo(),
+                nativePendingCount: doc.history.GetPendingList().Count
             };
+            return result;
         }
         case "insert_object": {
             const doc = getActiveDocument();
             const item = resolveItem(params);
+            validateReloadOptions(params, null);
             const x = Number(params.x || 0);
             const y = Number(params.y || 0);
             const insertIndex = params.insertIndex === undefined ? -1 : Number(params.insertIndex);
@@ -2753,20 +2880,76 @@ function handleCommand(request) {
             doc.SetModified(true);
             clearAgentHistory();
             doc.SelectObject(obj, true, true);
-            return describeObject(obj, 0, 1);
+            const expected = {
+                id: obj.id,
+                name: obj.name || "",
+                type: String(obj.objectType || "").toLowerCase(),
+                x,
+                y
+            };
+            if (obj.resourceURL || String(obj.objectType).toLowerCase() === "loader")
+                expected.resourceURL = String(item.GetURL());
+            return writeVerification(doc, obj, null, describeObject(obj, 0, 1), params, expected);
         }
         case "remove_object": {
             const doc = getActiveDocument();
             const obj = resolveObject(doc, params.target);
             if (obj === doc.content)
                 throw new Error("不允许删除文档根组件");
+            const target = targetSummary(obj, params.target);
+            validateReloadOptions(params, target);
             const removed = describeObject(obj, 0, 1);
+            const removedId = String(obj.id || "");
+            const locator = removedId ? { id: removedId } : params.target;
             doc.RemoveObject(obj);
             doc.SetModified(true);
             clearAgentHistory();
+            let stillPresent = null;
+            if (removedId)
+                stillPresent = findObjectById(doc.content, removedId);
+            else {
+                try {
+                    stillPresent = resolveObject(doc, params.target);
+                }
+                catch (error) {
+                    stillPresent = null;
+                }
+            }
+            if (stillPresent)
+                verificationError("editor_rejected", "删除后目标仍可解析", { stage: "editor", target });
+            let saved = false;
+            if (params.save) {
+                try {
+                    doc.Save();
+                }
+                catch (error) {
+                    verificationError("persistence_failed", "保存失败", { stage: "save", target, reason: String(error) });
+                }
+                saved = doc.isModified === false;
+                if (!saved)
+                    verificationError("persistence_failed", "保存后文档仍处于修改状态", { stage: "save", target });
+            }
+            let xmlReadback = false;
+            let xmlFile = null;
+            if (saved && params.verify !== false) {
+                const persisted = persistedNodeExists(doc, removedId);
+                xmlFile = persisted.file;
+                if (persisted.exists)
+                    verificationError("persistence_failed", "保存后磁盘 XML 仍包含目标节点", { stage: "xml", target });
+                xmlReadback = true;
+            }
+            const state = {};
+            let reloaded = null;
+            if (xmlReadback && params.externalReload)
+                reloaded = externalReloadVerifyAbsent(doc, locator, state);
+            const verification = { editorReadback: true, xmlReadback, externalReload: Boolean(reloaded), file: xmlFile, reload: reloaded };
+            const liveDoc = state.doc || doc;
+            const strength = verificationStrength(verification, saved);
             return {
-                removed,
-                documentModified: doc.isModified
+                ok: true, target, removed,
+                documentModified: Boolean(liveDoc.isModified),
+                saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+                note: `${strengthNote(verification, saved, "目标已删除；")}失败不自动回滚。`
             };
         }
         case "save_document": {

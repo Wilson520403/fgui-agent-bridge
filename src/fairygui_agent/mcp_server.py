@@ -497,14 +497,23 @@ def fgui_set_property(
     object_id: str | None = None,
     object_path: str | None = None,
     object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """修改白名单属性但不保存；该操作进入 Agent 属性 undo/redo 事务栈。"""
+    """修改白名单属性；该操作进入 Agent 属性 undo/redo 事务栈。
+
+    save=True 保存后默认比对磁盘 XML；external_reload=True 会在保存后关闭并重新打开文档再比对，需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
     return _client.call(
         "set_property",
         {
             "target": _target(object_id, object_path, object_name),
             "property": property_name,
             "value": value,
+            "save": save,
+            "verify": verify,
+            "externalReload": external_reload,
         },
     )
 
@@ -557,9 +566,15 @@ def fgui_insert_object(
     y: float = 0,
     name: str | None = None,
     insert_index: int | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """插入已有 ui:// 资源但不保存；结构操作不能由 Agent 属性事务栈撤销。"""
-    params: dict[str, Any] = {"url": url, "x": x, "y": y}
+    """插入已有 ui:// 资源；结构操作不能由 Agent 属性事务栈撤销。
+
+    save=True 保存后默认比对磁盘 XML；external_reload=True 会在保存后关闭并重新打开文档再比对，需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
+    params: dict[str, Any] = {"url": url, "x": x, "y": y, "save": save, "verify": verify, "externalReload": external_reload}
     if name:
         params["name"] = name
     if insert_index is not None:
@@ -572,9 +587,15 @@ def fgui_remove_object(
     object_id: str | None = None,
     object_path: str | None = None,
     object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """删除非根对象但不保存；需要可靠回退时使用 fgui_discard_document。"""
-    return _client.call("remove_object", {"target": _target(object_id, object_path, object_name)})
+    """删除非根对象；需要可靠回退时使用 fgui_discard_document。
+
+    删除按「缺失性验证」处理：save=True 保存后确认磁盘 XML 不再包含该节点；external_reload=True 关闭重开后确认目标仍不存在，需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
+    return _client.call("remove_object", {"target": _target(object_id, object_path, object_name), "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()

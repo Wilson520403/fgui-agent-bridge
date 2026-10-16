@@ -212,6 +212,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_target_arguments(set_parser)
     set_parser.add_argument("property")
     set_parser.add_argument("value", help="支持 JSON 值，例如 12、true、\"文本\"")
+    set_parser.add_argument("--save", action="store_true")
+    set_parser.add_argument("--no-verify", action="store_true")
+    set_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
 
     resource_parser = subparsers.add_parser("replace-object-resource", help="替换对象资源引用")
     _add_target_arguments(resource_parser)
@@ -244,9 +247,15 @@ def build_parser() -> argparse.ArgumentParser:
     insert_parser.add_argument("--y", type=float, default=0)
     insert_parser.add_argument("--name")
     insert_parser.add_argument("--index", type=int, dest="insert_index")
+    insert_parser.add_argument("--save", action="store_true")
+    insert_parser.add_argument("--no-verify", action="store_true")
+    insert_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
 
     remove_parser = subparsers.add_parser("remove", help="删除对象；保存前可用 discard 放弃修改")
     _add_target_arguments(remove_parser)
+    remove_parser.add_argument("--save", action="store_true")
+    remove_parser.add_argument("--no-verify", action="store_true")
+    remove_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认目标在重载后仍不存在（需 --save）")
 
     subparsers.add_parser("save", help="保存当前文档")
     subparsers.add_parser("discard", help="放弃当前文档未保存的修改")
@@ -526,17 +535,20 @@ def main() -> int:
                 "target": target_from_args(args),
                 "property": args.property,
                 "value": load_json_value(args.value),
+                "save": args.save,
+                "verify": not args.no_verify,
+                "externalReload": args.external_reload,
             }
         elif args.command == "insert":
             action = "insert_object"
-            params = {"url": args.url, "x": args.x, "y": args.y}
+            params = {"url": args.url, "x": args.x, "y": args.y, "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
             if args.name:
                 params["name"] = args.name
             if args.insert_index is not None:
                 params["insertIndex"] = args.insert_index
         elif args.command == "remove":
             action = "remove_object"
-            params = {"target": target_from_args(args)}
+            params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
         elif args.command == "save":
             action = "save_document"
         elif args.command == "discard":

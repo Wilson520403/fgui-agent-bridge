@@ -4,7 +4,7 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.4`
+- Bridge 版本：`0.8.5`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
@@ -30,11 +30,11 @@
 | `fgui_create_movieclip` | 包、名称、有序 `frame_paths`、FPS、延迟、Swing、目录 | 从本地图片序列创建/替换 MovieClip |
 | `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing | 读取、更新或显式强制删除 MovieClip |
 | `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth` | 读取活动文档或对象树 |
-| `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称 | 选择对象或修改白名单属性 |
+| `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
 | `fgui_replace_object_resource` | target、resource_url、expected_type、state?、save?、external_reload? | 通过 Editor API 替换 Image、Loader 或 Button 资源引用 |
 | `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读 |
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态 |
-| `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标 | 插入已有资源或删除非根对象 |
+| `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
 | `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name` | 声明式创建、完整替换或删除 Transition |
 | `fgui_add_transition_item` / `fgui_update_transition_item` / `fgui_remove_transition_item` | `name`、类型化 `item`、`item_index` | 原子增删改 Transition 关键帧 |
@@ -77,7 +77,7 @@
 
 正式子命令包括：
 
-- 基础：`status`、`ping`、`project`、`packages`、`items`、`open`、`active`、`tree`、`select`、`set`、`insert`、`remove`
+- 基础：`status`、`ping`、`project`、`packages`、`items`、`open`、`active`、`tree`、`select`；`set`、`insert`、`remove` 支持 `--save` / `--no-verify` / `--external-reload`
 - 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`
 - Transition：`transitions`、`get-transition`、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
@@ -118,3 +118,12 @@
 - 响应的 `strength` 字段标明验证强度：`reload`（关闭重开比对通过，可确认持久化）/ `disk`（仅保存成功且磁盘 XML 匹配）/ `none`（未验证）。读 `persisted` 时必须同时看 `strength`，否则会把 `disk` 误当作已排除「重载丢值」。
 - `external_reload` 要求 `save=true`，且与 `verify=false` 冲突，两种组合都在**任何变更之前**拒绝，不会留下半写入的文档；`verify_document` 不保存，文档有未保存改动时同样拒绝执行重载。
 - 真实 FairyGUI Editor 端到端的 external reload 已完成（`tests/reports/external-reload-live.json`）；Unity/真机验收仍未完成。
+
+### 写 Action 统一验证（0.8.5，2026-10-16 真机验证）
+
+- `set_property`、`insert_object`、`remove_object` 迁入与 `replace_object_resource` / `set_text_style` 相同的 `writeVerification` 语义：统一返回 `{ok, target, before/after, documentModified, saved, persisted, strength, verification, note}`，支持 `save` / `verify` / `externalReload` 参数。
+- `set_property` 保留 Agent 属性 undo/redo 事务栈；非白名单属性报 `unsupported_property`，数值/布尔/字符串属性先做类型归一化再写入，`font` 传入 `ui://` URL 时解析为字体资源 canonical URL。
+- 验证层新增已钉住序列化含义的通用属性：`scaleX`、`scaleY`（`scale`）、`rotation`、`alpha`、`visible`（仅 `false` 序列化）、`touchable`（仅 `false` 序列化）、`grayed`（仅 `true` 序列化）、`text`（`text`/`title`）、`icon`；其余白名单属性可以写入但不进 `expected`。
+- `remove_object` 按缺失性验证：保存后要求磁盘 XML 不再包含目标节点，`external_reload` 关闭重开后要求目标仍不可解析；`verify:false` 时跳过磁盘比对，不报 `persisted`。
+- `insert_object` 验证新节点的 `id`、`name`、`type`、`x`、`y`（有引用时含 `resourceURL`）已写入磁盘 XML。
+- 模拟宿主 `tests/p0_host_harness.cjs` 扩到 51 项；真机 6.1.4 已验证 `x`/`visible`/`scaleX` 写+存+重载、insert 磁盘回读和 remove 关闭重开后仍缺失。Transition/MovieClip/创建导入类 Action 尚未接入统一写验证。

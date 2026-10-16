@@ -56,6 +56,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 资源替换：替换显示对象引用的资源使用 `fgui_replace_object_resource`（当前仅支持 Image 与 Loader，不支持 Button 状态资源切换），支持传入 `expected_type` 校验并在 `--save` 时验证 Editor/XML 持久化。
 - 文本样式：文本对象的样式读取与修改优先使用 `fgui_get_text_style` 和 `fgui_set_text_style`（支持 `fontSize`、`color`、`strokeColor`、`shadowColor`、`lineGap`、`letterSpacing`、`align`、`vAlign`、`autoSize` 等白名单属性），并提供回读验证；暂不支持自动 external reload。
 - 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
+- `set_property`、`insert_object`、`remove_object`、`replace_object_resource`、`set_text_style` 统一走写验证：支持 `save` / `verify` / `external_reload`，返回 `persisted` + `strength`（`reload`/`disk`/`none`）；`external_reload` 需 `save=true`。`remove_object` 按缺失性验证（磁盘 XML 与重载后均不再解析到节点）。
 - 文档与持久化验证：使用 `fgui_verify_document` 重新读取活动文档对象树并可传入 `target + expected` 比对组件 XML 磁盘持久化内容；无 `expected` 时仅作为对象树快照。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
 
@@ -187,6 +188,7 @@ git diff --check
 - `replace_object_resource` 本轮仅允许 Image 与 Loader，拒绝 Button `state` 替换，避免误将整个按钮组件替换为单一资源。
 - 文本样式修改支持类型与枚举检查，暂不支持自动 external reload。
 - `verify_document` 可传入 `target + expected` 执行磁盘 XML 持久化比对，失败响应保留结构化 `error.details`（包含 `stage`、expected、actual、differences）。
+- `set_property` 的持久化验证只覆盖已钉住序列化含义的属性（`x`/`y`/`width`/`height`/`scale`/`rotation`/`alpha`/`visible`/`touchable`/`grayed`/`text`/`icon` 及文本样式字段）；其余白名单属性可写入但不进入 `expected`。
 - 不允许删除根组件；不要把 `discard`、`undo` 和 `save` 混为同一语义。
 - 根组件点击穿透使用可序列化的 `opaque=false`；不要把无法持久化的根 `touchable` 宣称成功。
 - 不在代码、配置、文档或示例中提交个人绝对路径、密钥或真实 MCP 配置。
