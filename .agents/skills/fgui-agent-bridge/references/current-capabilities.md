@@ -4,7 +4,7 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.5`
+- Bridge 版本：`0.8.6`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
@@ -24,11 +24,11 @@
 | `fgui_get_project` / `fgui_list_packages` | 无 | 读取工程或包 |
 | `fgui_list_items` | `package_name`, `item_type?` | 列出包内资源 |
 | `fgui_open_document` | `package_name`, `item_name` | 打开已有组件文档 |
-| `fgui_create_component` | 包、名称、尺寸、目录、扩展、导出、重名策略 | 新建组件资源 |
-| `fgui_import_image` / `fgui_import_font` / `fgui_import_sound` | 包、绝对路径、目录、名称、冲突策略、导出 | 导入或替换本地资源 |
-| `fgui_create_button` | 包、名称、尺寸、模式、状态图片、目录 | 创建 Common/Check/Radio 标准 Button |
-| `fgui_create_movieclip` | 包、名称、有序 `frame_paths`、FPS、延迟、Swing、目录 | 从本地图片序列创建/替换 MovieClip |
-| `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing | 读取、更新或显式强制删除 MovieClip |
+| `fgui_create_component` | 包、名称、尺寸、目录、扩展、导出、重名策略、`save?`、`verify?` | 新建组件资源 |
+| `fgui_import_image` / `fgui_import_font` / `fgui_import_sound` | 包、绝对路径、目录、名称、冲突策略、导出、`save?`、`verify?`、`external_reload?` | 导入或替换本地资源 |
+| `fgui_create_button` | 包、名称、尺寸、模式、状态图片、目录、`save?`、`verify?` | 创建 Common/Check/Radio 标准 Button |
+| `fgui_create_movieclip` | 包、名称、有序 `frame_paths`、FPS、延迟、Swing、目录、`save?`、`verify?`、`external_reload?` | 从本地图片序列创建/替换 MovieClip |
+| `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing、`save?`、`verify?`、`external_reload?`（删除不支持 external_reload） | 读取、更新或显式强制删除 MovieClip |
 | `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth` | 读取活动文档或对象树 |
 | `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
 | `fgui_replace_object_resource` | target、resource_url、expected_type、state?、save?、external_reload? | 通过 Editor API 替换 Image、Loader 或 Button 资源引用 |
@@ -36,8 +36,8 @@
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态 |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
-| `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name` | 声明式创建、完整替换或删除 Transition |
-| `fgui_add_transition_item` / `fgui_update_transition_item` / `fgui_remove_transition_item` | `name`、类型化 `item`、`item_index` | 原子增删改 Transition 关键帧 |
+| `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name`，均支持 `save?`、`verify?`、`external_reload?` | 声明式创建、完整替换或删除 Transition |
+| `fgui_add_transition_item` / `fgui_update_transition_item` / `fgui_remove_transition_item` | `name`、类型化 `item`、`item_index`、`save?`、`verify?`、`external_reload?` | 原子增删改 Transition 关键帧 |
 | `fgui_preview_animation` | `kind`, `operation`, Transition 名称或 MovieClip 目标 | 播放、暂停、停止、跳帧或查询状态，不保存 |
 | `fgui_undo` / `fgui_redo` / `fgui_get_history` | 无 | Agent 事务优先的回退和历史读取 |
 | `fgui_save_document` / `fgui_save_all` / `fgui_discard_document` | 无 | 保存、全部保存或放弃当前文档修改 |
@@ -78,8 +78,8 @@
 正式子命令包括：
 
 - 基础：`status`、`ping`、`project`、`packages`、`items`、`open`、`active`、`tree`、`select`；`set`、`insert`、`remove` 支持 `--save` / `--no-verify` / `--external-reload`
-- 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`
-- Transition：`transitions`、`get-transition`、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`
+- 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`；均支持 `--save` / `--no-verify`，image/font/sound/movieclip 另支持 `--external-reload`（asset 重载）
+- Transition：`transitions`、`get-transition`、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
 - 预览：`preview-transition`、`preview-movieclip`
 - 保存发布：`save`、`discard`、`save-all`、`history`、`undo`、`redo`、`publish-settings`、`publish`
@@ -127,3 +127,10 @@
 - `remove_object` 按缺失性验证：保存后要求磁盘 XML 不再包含目标节点，`external_reload` 关闭重开后要求目标仍不可解析；`verify:false` 时跳过磁盘比对，不报 `persisted`。
 - `insert_object` 验证新节点的 `id`、`name`、`type`、`x`、`y`（有引用时含 `resourceURL`）已写入磁盘 XML。
 - 模拟宿主 `tests/p0_host_harness.cjs` 扩到 51 项；真机 6.1.4 已验证 `x`/`visible`/`scaleX` 写+存+重载、insert 磁盘回读和 remove 关闭重开后仍缺失。Transition/MovieClip/创建导入类 Action 尚未接入统一写验证。
+
+### 动画与包资源统一写验证（0.8.6）
+
+- Transition 写操作（`upsert_transition`、`remove_transition`、`add_transition_item`、`update_transition_item`、`remove_transition_item`）迁入同一 `save` → 磁盘 XML 回读 → `externalReload` 梯子：验证组件 XML 中 `<transition>` 节点的存在性与公开条目数（tween 合成端点不重复计数）；`externalReload` 为关闭重开文档后在新文档上重新读取 Transition 集合。动画快照 undo/redo 语义保持不变；验证失败不回滚已落笔的编辑器变更。
+- 包资源写操作（`create_component`、`create_button`、`import_image`、`import_font`、`import_sound`、`create_movieclip`、`update_movieclip`、`remove_movieclip`）验证 `package.xml` 资源条目：保存包与工程后回读清单，并要求 image/sound/font/movieclip 的资源文件存在；`externalReload` 仅这些资产类型可用（`UnloadAsset` + `GetAsset` 重载），组件创建与删除拒绝该参数，`strength` 上限 `disk`。
+- 全部写 Action 的响应统一带 `saved`、`persisted`、`strength`、`verification`、`note`；`requiresSave` 改为按实际保存结果返回。
+- 模拟宿主新增 Transition 与包资源验证用例，总数 71；真机验证待补（需在 6.1.4 上复验 Transition 磁盘回读与 asset reload）。

@@ -70,7 +70,7 @@ class McpAnimationSurfaceTests(unittest.TestCase):
             fake.calls[0],
             (
                 "update_transition_item",
-                {"name": "fade", "itemIndex": 2, "item": {"value": {"volume": 0.5}}},
+                {"name": "fade", "itemIndex": 2, "item": {"value": {"volume": 0.5}}, "save": False, "verify": True, "externalReload": False},
                 None,
             ),
         )

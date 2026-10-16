@@ -253,6 +253,8 @@ uv run fgui-agent preview-transition play fadeIn
 - `save=true` 保存后默认比对磁盘 XML；`external_reload=true`（需 `save=true`，且与 `verify=false` 冲突）会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证。
 - `strength` 标明验证强度：`reload`（关闭重开比对通过）/ `disk`（仅保存成功且磁盘 XML 匹配）/ `none`（未验证）；读 `persisted` 时必须同时看 `strength`。
 - `fgui_remove_object` 按缺失性验证：保存后要求磁盘 XML 不再包含目标节点，重载后要求目标仍不可解析。
+- Transition 写操作（`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item`）走同一梯子：验证组件 XML 中 `<transition>` 节点的存在性与公开条目数；`external_reload` 为关闭重开文档后重新读取 Transition 集合。
+- 包资源写操作（`fgui_create_component`、`fgui_create_button`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound`、`fgui_create_movieclip`、`fgui_update_movieclip`、`fgui_remove_movieclip`）验证 `package.xml` 资源条目与资源文件：`save=true` 保存包与工程后做清单回读；`external_reload`（仅 image/sound/font/movieclip，需 `save=true`）卸载并重新加载 asset；组件创建与删除没有诚实的重载基元，`strength` 上限为 `disk`。
 
 ---
 

@@ -41,6 +41,25 @@ def _add_target_arguments(parser: argparse.ArgumentParser) -> None:
     target_group.add_argument("--name", dest="target_name")
 
 
+def _add_write_verify_arguments(parser: argparse.ArgumentParser, *, external_reload: bool = False) -> None:
+    parser.add_argument("--save", action="store_true")
+    parser.add_argument("--no-verify", action="store_true")
+    if external_reload:
+        parser.add_argument(
+            "--external-reload",
+            action="store_true",
+            help="保存后执行重载验证：文档写操作关闭重开文档比对，包资源写操作卸载并重新加载 asset（需 --save）",
+        )
+
+
+def _write_verify_params(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "save": args.save,
+        "verify": not args.no_verify,
+        "externalReload": getattr(args, "external_reload", False),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="通过本地队列操作 FairyGUI Editor")
     parser.add_argument("--project", help=".fairy 文件、FairyGUI 工程目录或仓库目录")
@@ -72,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_component_parser.add_argument("--auto-rename", action="store_true")
     create_component_parser.add_argument("--no-create-folders", action="store_true")
     create_component_parser.add_argument("--no-open", action="store_true")
+    _add_write_verify_arguments(create_component_parser)
 
     import_image_parser = subparsers.add_parser("import-image", help="从本地路径导入图片")
     import_image_parser.add_argument("package_name")
@@ -87,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_image_parser.add_argument("--not-exported", action="store_true")
     import_image_parser.add_argument("--no-create-folders", action="store_true")
     import_image_parser.add_argument("--import-timeout", type=float, default=120.0)
+    _add_write_verify_arguments(import_image_parser, external_reload=True)
 
     import_font_parser = subparsers.add_parser("import-font", help="从本地路径导入字体")
     import_font_parser.add_argument("package_name")
@@ -102,6 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_font_parser.add_argument("--not-exported", action="store_true")
     import_font_parser.add_argument("--no-create-folders", action="store_true")
     import_font_parser.add_argument("--import-timeout", type=float, default=120.0)
+    _add_write_verify_arguments(import_font_parser, external_reload=True)
 
     create_button_parser = subparsers.add_parser("create-button", help="创建标准 FairyGUI Button 组件")
     create_button_parser.add_argument("package_name")
@@ -125,6 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_button_parser.add_argument("--no-create-folders", action="store_true")
     create_button_parser.add_argument("--no-open", action="store_true")
     create_button_parser.add_argument("--extension", dest="extension_id")
+    _add_write_verify_arguments(create_button_parser)
 
     import_sound_parser = subparsers.add_parser("import-sound", help="从本地路径导入声音")
     import_sound_parser.add_argument("package_name")
@@ -135,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_sound_parser.add_argument("--not-exported", action="store_true")
     import_sound_parser.add_argument("--no-create-folders", action="store_true")
     import_sound_parser.add_argument("--import-timeout", type=float, default=120.0)
+    _add_write_verify_arguments(import_sound_parser, external_reload=True)
 
     create_movieclip_parser = subparsers.add_parser("create-movieclip", help="用有序图片序列创建 MovieClip")
     create_movieclip_parser.add_argument("package_name")
@@ -149,6 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_movieclip_parser.add_argument("--not-exported", action="store_true")
     create_movieclip_parser.add_argument("--no-create-folders", action="store_true")
     create_movieclip_parser.add_argument("--animation-timeout", type=float, default=120.0)
+    _add_write_verify_arguments(create_movieclip_parser, external_reload=True)
 
     get_movieclip_parser = subparsers.add_parser("get-movieclip", help="读取 MovieClip 设置")
     get_movieclip_parser.add_argument("url", help="MovieClip ui:// URL")
@@ -164,27 +189,34 @@ def build_parser() -> argparse.ArgumentParser:
     update_movieclip_parser.add_argument("--exported", action="store_const", const=True, default=None)
     update_movieclip_parser.add_argument("--not-exported", dest="exported", action="store_const", const=False)
     update_movieclip_parser.add_argument("--animation-timeout", type=float, default=120.0)
+    _add_write_verify_arguments(update_movieclip_parser, external_reload=True)
     remove_movieclip_parser = subparsers.add_parser("remove-movieclip", help="删除 MovieClip 包资源")
     remove_movieclip_parser.add_argument("url", help="MovieClip ui:// URL")
     remove_movieclip_parser.add_argument("--force", action="store_true", help="确认不可逆删除")
+    _add_write_verify_arguments(remove_movieclip_parser)
 
     subparsers.add_parser("transitions", help="列出当前组件的全部 Transition")
     get_transition_parser = subparsers.add_parser("get-transition", help="读取当前组件的一个 Transition")
     get_transition_parser.add_argument("name")
     upsert_transition_parser = subparsers.add_parser("upsert-transition", help="声明式创建或替换 Transition")
     upsert_transition_parser.add_argument("definition", help="Transition JSON 对象")
+    _add_write_verify_arguments(upsert_transition_parser, external_reload=True)
     remove_transition_parser = subparsers.add_parser("remove-transition", help="删除当前组件的 Transition")
     remove_transition_parser.add_argument("name")
+    _add_write_verify_arguments(remove_transition_parser, external_reload=True)
     add_transition_item_parser = subparsers.add_parser("add-transition-item", help="向 Transition 添加关键帧")
     add_transition_item_parser.add_argument("name")
     add_transition_item_parser.add_argument("item", help="Transition item JSON 对象")
+    _add_write_verify_arguments(add_transition_item_parser, external_reload=True)
     update_transition_item_parser = subparsers.add_parser("update-transition-item", help="更新指定 Transition 关键帧")
     update_transition_item_parser.add_argument("name")
     update_transition_item_parser.add_argument("item_index", type=int)
     update_transition_item_parser.add_argument("item", help="Transition item JSON 对象")
+    _add_write_verify_arguments(update_transition_item_parser, external_reload=True)
     remove_transition_item_parser = subparsers.add_parser("remove-transition-item", help="删除指定 Transition 关键帧")
     remove_transition_item_parser.add_argument("name")
     remove_transition_item_parser.add_argument("item_index", type=int)
+    _add_write_verify_arguments(remove_transition_item_parser, external_reload=True)
 
     preview_transition_parser = subparsers.add_parser("preview-transition", help="预览当前组件的 Transition，不保存")
     preview_transition_parser.add_argument("operation", choices=("play", "pause", "stop", "seek", "next", "previous", "status"))
@@ -360,6 +392,7 @@ def main() -> int:
                 "autoRename": args.auto_rename,
                 "createFolders": not args.no_create_folders,
                 "openAfterCreate": not args.no_open,
+                **_write_verify_params(args),
             }
             if args.extension_id:
                 params["extensionId"] = args.extension_id
@@ -373,6 +406,7 @@ def main() -> int:
                 "conflictPolicy": args.conflict_policy,
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
+                **_write_verify_params(args),
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
@@ -387,6 +421,7 @@ def main() -> int:
                 "conflictPolicy": args.conflict_policy,
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
+                **_write_verify_params(args),
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
@@ -409,6 +444,7 @@ def main() -> int:
                 "autoRename": args.auto_rename,
                 "createFolders": not args.no_create_folders,
                 "openAfterCreate": not args.no_open,
+                **_write_verify_params(args),
             }
             if args.extension_id:
                 params["extensionId"] = args.extension_id
@@ -421,6 +457,7 @@ def main() -> int:
                 "conflictPolicy": args.conflict_policy,
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
+                **_write_verify_params(args),
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
@@ -438,6 +475,7 @@ def main() -> int:
                 "conflictPolicy": args.conflict_policy,
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
+                **_write_verify_params(args),
             }
             if args.frame_delays:
                 params["frameDelays"] = json.loads(args.frame_delays)
@@ -447,7 +485,7 @@ def main() -> int:
             params = {"url": args.url}
         elif args.command == "update-movieclip":
             action = "update_movieclip"
-            params = {"url": args.url}
+            params = {"url": args.url, **_write_verify_params(args)}
             if args.frame_paths:
                 params["framePaths"] = [str(Path(path).expanduser().resolve()) for path in args.frame_paths]
             for key, value in (("fps", args.fps), ("speed", args.speed), ("repeatDelay", args.repeat_delay), ("swing", args.swing), ("exported", args.exported)):
@@ -458,7 +496,7 @@ def main() -> int:
             command_timeout = args.animation_timeout
         elif args.command == "remove-movieclip":
             action = "remove_movieclip"
-            params = {"url": args.url, "force": args.force}
+            params = {"url": args.url, "force": args.force, **_write_verify_params(args)}
         elif args.command == "transitions":
             action = "list_transitions"
         elif args.command == "get-transition":
@@ -469,25 +507,25 @@ def main() -> int:
             definition = json.loads(args.definition)
             if not isinstance(definition, dict):
                 raise ValueError("definition 必须是 JSON 对象")
-            params = {"transition": definition}
+            params = {"transition": definition, **_write_verify_params(args)}
         elif args.command == "remove-transition":
             action = "remove_transition"
-            params = {"name": args.name}
+            params = {"name": args.name, **_write_verify_params(args)}
         elif args.command == "add-transition-item":
             action = "add_transition_item"
             item = json.loads(args.item)
             if not isinstance(item, dict):
                 raise ValueError("item 必须是 JSON 对象")
-            params = {"name": args.name, "item": item}
+            params = {"name": args.name, "item": item, **_write_verify_params(args)}
         elif args.command == "update-transition-item":
             action = "update_transition_item"
             item = json.loads(args.item)
             if not isinstance(item, dict):
                 raise ValueError("item 必须是 JSON 对象")
-            params = {"name": args.name, "itemIndex": args.item_index, "item": item}
+            params = {"name": args.name, "itemIndex": args.item_index, "item": item, **_write_verify_params(args)}
         elif args.command == "remove-transition-item":
             action = "remove_transition_item"
-            params = {"name": args.name, "itemIndex": args.item_index}
+            params = {"name": args.name, "itemIndex": args.item_index, **_write_verify_params(args)}
         elif args.command == "preview-transition":
             action = "preview_animation"
             params = {"kind": "transition", "operation": args.operation, "target": {"name": args.name}}

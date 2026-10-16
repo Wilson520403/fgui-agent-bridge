@@ -23,24 +23,122 @@ class XML {
 }
 function Color(r,g,b,a) { Object.assign(this,{r,g,b,a}); }
 const results=[];
+const tests=[];
 let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
+let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
+function makeTransitionItem(targetId,type,frame){
+ const it={targetId,type,frame,label:'',tween:false,easeType:'Quad',repeat:0,yoyo:false,usePath:false,pathData:'',customEaseData:'',value:{f1:0,f2:0,b1:true,b2:true,b3:false,i:0,s:'',s2:'',iu:null},prevItem:null,nextItem:null,_path:[],
+  pathPoints:{get Count(){return it._path.length},get_Item:i=>it._path[i],set_Item(i,v){it._path[i]=v;}},
+  AddPathPoint(x,y,near){it._path.push({pos:{x,y},curveType:'straight',smooth:false});},
+  UpdateControlPoint(){},
+  customEase:{points:{Clear(){},Add(){}},Update(){}}};
+ return it;
+}
+function relinkTransitionItems(items){items.forEach((it,i)=>{it.prevItem=i>0?items[i-1]:null;it.nextItem=i<items.length-1?items[i+1]:null;});}
+function makeTransition(name){
+ const items=[];
+ const t={name,options:0,autoPlay:false,autoPlayDelay:0,autoPlayRepeat:1,frameRate:60,playTimes:1,playing:false,_items:items,
+  get maxFrame(){return items.length?Math.max(...items.map(i=>i.frame)):0;},
+  items:{get Count(){return items.length},get_Item:i=>items[i]},
+  CreateItem(targetId,type,frame){const it=makeTransitionItem(targetId,type,frame);items.push(it);items.sort((a,b)=>a.frame-b.frame);relinkTransitionItems(items);return it;},
+  DeleteItem(it){const i=items.indexOf(it);if(i>=0)items.splice(i,1);relinkTransitionItems(items);},
+  Validate(){}};
+ return t;
+}
+function makeTransitionsCollection(list){
+ return {
+  items:{get Count(){return list.length},get_Item:i=>list[i]},
+  GetItem:name=>list.find(t=>t.name===name)||null,
+  AddItem(name){const t=makeTransition(name);list.push(t);return t;},
+  RemoveItem(t){const i=list.indexOf(t);if(i>=0)list.splice(i,1);},
+  Write(){return {ToXMLString:()=>'<transitions>'+serializeTransitions()+'</transitions>'};}
+ };
+}
+// Mirrors the Editor serializer: a tween start+end pair folds into one <item>
+// with startValue/endValue/duration, so the public item count matches the XML.
+function serializeTransitions(){
+ return transitions.map(t=>{
+  const its=t._items.filter(it=>!(it.prevItem&&it.prevItem.tween&&!it.tween)).map(it=>{
+   const a={time:it.frame,type:it.type,target:it.targetId};
+   if(it.tween){a.tween='true';a.startValue=it.value.f1;a.endValue=it.nextItem.value.f1;a.duration=it.nextItem.frame-it.frame;}
+   else a.startValue=it.value.f1;
+   return `<item ${Object.entries(a).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`;
+  }).join('');
+  return `<transition name="${t.name}" frameRate="${t.frameRate}">${its}</transition>`;
+ }).join('');
+}
+function rebuildTransitionFromXml(node){
+ const t=makeTransition(node.GetAttribute('name'));
+ const frameRate=node.GetAttribute('frameRate');if(frameRate!==null)t.frameRate=Number(frameRate);
+ for(let i=0;i<node.elements.Count;i++){
+  const c=node.elements.get_Item(i);
+  if(c.name!=='item')continue;
+  const it=t.CreateItem(c.GetAttribute('target'),c.GetAttribute('type'),Number(c.GetAttribute('time')||0));
+  it.value.f1=Number(c.GetAttribute('startValue')||0);
+  if(c.GetAttribute('tween')==='true'){it.tween=true;const end=t.CreateItem(c.GetAttribute('target'),c.GetAttribute('type'),Number(c.GetAttribute('time')||0)+Number(c.GetAttribute('duration')||0));end.value.f1=Number(c.GetAttribute('endValue')||0);}
+ }
+ return t;
+}
+function serializePackageXml(){
+ return `<packageDescription id="${pkg.id}"><resources>${packageItems.map(i=>`<${i.type} id="${i.id}" name="${i.name}" path="/" exported="${i.exported}"/>`).join('')}</resources><publish name=""/></packageDescription>`;
+}
+function makePackageItem(name,type,ext){
+ const id='it'+(packageItems.length+1);
+ const file=`/pkg/${name}${ext}`;
+ const it={id,name:`${name}${ext}`,type,title:name,path:'/',file,width:64,height:64,exported:true,folderAtlas:'',_asset:null,
+  GetURL:()=>`ui://${pkg.id}${id}`,
+  SetChanged(){},EnsureOpen(){},
+  UnloadAsset(){it._asset=null;},
+  GetAsset(){if(!(it.file in files))return null;it._asset=it._asset||{file:it.file};return it._asset;},
+  UnloadAssetLabel:1};
+ it.owner=pkg;
+ packageItems.push(it);
+ resources[it.GetURL()]=it;
+ return it;
+}
+function makePackage(){
+ const items=[];
+ return {
+  id:'fixture0',name:'Fixture',basePath:'/pkg',opened:true,_items:items,
+  get items(){return {Count:items.length,get_Item:i=>items[i]}},
+  rootItem:{type:'folder',path:'/'},
+  EnsureOpen(){this.opened=true;},SetChanged(){this.changed=true;},
+  Save(){if(pkgSaveMode==='throw')throw Error('disk full');if(pkgSaveMode==='stale')return;files['/pkg/package.xml']=serializePackageXml();this.changed=false;},
+  GetItemByPath(p){return p==='/'?this.rootItem:null;},
+  EnsurePathExists(p){return this.rootItem;},
+  GetItemByName(folder,name){return packageItems.find(i=>(i.name===name||i.name===`${name}.png`||i.name===`${name}.xml`||i.name===`${name}.jta`)&&i.path===folder.path)||null;},
+  GetItem(id){return packageItems.find(i=>i.id===id)||null;},
+  CreateComponentItem(name,w,h,folderPath,extensionId,exported){const it=makePackageItem(name,'component','.xml');it.exported=exported;files[it.file]='<component/>';return it;},
+  ImportResource(sourcePath,folderPath,fileName){const it=makePackageItem(fileName.replace(/\.[^.]+$/,''),'image',fileName.slice(fileName.lastIndexOf('.')));files[it.file]=files[sourcePath];return it;},
+  UpdateResource(item,sourcePath){files[item.file]=files[sourcePath];return item;},
+  CreateMovieClipItem(name,folderPath){const it=makePackageItem(name,'movieclip','.jta');return it;},
+  DeleteItem(item){const i=packageItems.indexOf(item);if(i>=0)packageItems.splice(i,1);delete resources[item.GetURL()];delete files[item.file];}
+ };
+}
 function setup() {
  files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
+ transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
+ pkg=makePackage();
  const resource=(id,w=64,h=64)=>({id,owner:{id:'fixture0'},type:'image',width:w,height:h,GetURL:()=>`ui://fixture0${id}`});
  resources={'ui://fixture0red':resource('red'),'ui://fixture0blue':resource('blue',128,128)};
  objects=[{id:'image1',name:'picture',objectType:'image',resourceURL:'ui://fixture0red',width:64,height:64,x:10,y:20}, {id:'loader1',name:'icon',objectType:'loader',url:'ui://fixture0red',width:64,height:64,x:80,y:20}, {id:'text1',name:'title',objectType:'text',font:'',fontSize:24,color:new Color(1,1,1,1),align:'center',verticalAlign:'middle',leading:4,letterSpacing:1,autoSize:'none',width:240,height:60,x:0,y:100}];
  for(const o of objects)Object.assign(o,{scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}});
  doc=makeDoc();
  resources['ui://fixture0component']={file:'fixture.xml',owner:{id:'fixture0'}};
+ const mc={id:'mc1',name:'loop.jta',type:'movieclip',title:'loop',path:'/',file:'/pkg/mc.jta',width:64,height:64,exported:true,folderAtlas:'',owner:pkg,
+  GetURL:()=>'ui://fixture0mc1',SetChanged(){},UnloadAsset(){mc._asset=null;},GetAsset(){if(!(mc.file in files))return null;mc._asset=mc._asset||{file:mc.file,animation:{frameList:{Count:0,get_Item:()=>null},fps:12,speed:1,repeatDelay:0,swing:false,frameCount:0}};return mc._asset;}};
+ packageItems.push(mc);resources['ui://fixture0mc1']=mc;files['/pkg/mc.jta']='JTA';
+ files['/pkg/package.xml']=serializePackageXml();
  const docView={
   CloseDocuments(url){ if(closeMode==='plural-throw'||closeMode==='none')throw Error('invalid arguments ... or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocuments');closeAndReload(); },
   CloseDocument(url){ if(closeMode==='none')throw Error('or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocument');closeAndReload(); },
   OpenDocument(url){ if(openMode==='throw')throw Error('open failed'); if(openMode==='null')return null; doc=makeDoc(); return doc; }
  };
- const app={project:{GetItemByURL:url=>resources[url] || null},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font'}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{},Path:{},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:()=>({}),console});
+ const app={activeDoc:null,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
+  GetItemByURL:url=>resources[url] || null,GetPackage:()=>pkg,GetPackageByName:()=>pkg,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,SetChanged(){},Save(){}},docView};
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  ctx.getActiveDocument=()=>doc;
@@ -49,9 +147,10 @@ function setup() {
  ctx.describeObject=o=>({id:o.id});ctx.describeDocument=()=>({modified:doc.isModified});
 }
 function makeDoc(){
- const d={content:{resourceURL:'ui://fixture0component'},docURL:'ui://fixture0component',dead:false,
+ const d={content:{resourceURL:'ui://fixture0component',transitions:makeTransitionsCollection(transitions)},docURL:'ui://fixture0component',dead:false,
   history:{CanUndo:()=>false,CanRedo:()=>false,GetPendingList:()=>({Count:0})},
-  SetModified(v){this.isModified=v;},RefreshInspectors(){},SetSelection(o){this.selected=o;},SelectObject(){},
+  SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;},SelectObject(){},
+  UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
   ReplaceSelection(url){replaceCount++;if(replaceMode==='ignore')return;const i=objects.indexOf(this.selected);objects[i]={...this.selected,resourceURL:url};},
   InsertObject(url,pos,idx){const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
   RemoveObject(o){const i=objects.indexOf(o);if(i>=0)objects.splice(i,1);},
@@ -89,6 +188,8 @@ function reloadFromDisk(){
  // Models an attribute the Editor silently drops when parsing: disk XML is
  // correct but the reloaded object is not. Only a real round-trip catches this.
  if(dropOnReload)for(const o of objects)if(o.id==='text1')o.fontSize=24;
+ transitions.length=0;
+ if(!dropTransitionOnReload)for(const n of parsed.children.filter(c=>c.name==='transition'))transitions.push(rebuildTransitionFromXml(new XML(n)));
 }
 // Mirrors FairyGUI's serializer: attributes still at their default are omitted
 // from XML entirely. The previous version always wrote them, which let a
@@ -114,9 +215,9 @@ function serialize() {
  if(o.objectType==='loader')a.url=o.url;
  if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);}
  return `<${o.objectType} ${Object.entries(a).map(([k,v])=>`${k}="${esc(v)}"`).join(' ')}/>`;
- }).join('')+'</displayList></component>';
+ }).join('')+'</displayList>'+serializeTransitions()+'</component>';
 }
-function test(name,run){try{setup();run();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:e.stack});}}
+function test(name,run){tests.push({name,run});}
 const replace=(id,extra={})=>ctx.replaceObjectResource({target:{id},resourceURL:'ui://fixture0blue',save:true,...extra});
 const text=(extra={})=>ctx.setTextStyle({target:{id:'text1'},style:{fontSize:40,color:'#00ffBA',lineGap:8},save:true,...extra});
 function rejects(fn,code,stage){assert.throws(fn,e=>(!code||e.code===code)&&(!stage||e.details?.stage===stage));}
@@ -174,9 +275,34 @@ test('remove_object verifies absence on disk after save',()=>{const r=remove('lo
 test('remove_object external reload proves the node stays gone',()=>{const r=remove('loader1',{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.absent,true);assert.equal(closeCount,1);});
 test('remove_object without save does not claim persistence',()=>{const r=remove('loader1',{save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(files['fixture.xml'],fixture);});
 test('remove_object fails closed when the disk write is stale',()=>{saveMode='stale';rejects(()=>remove('loader1'),'persistence_failed','xml');});
+const upsert=(extra={})=>ctx.upsertTransition({transition:{name:'fade',frameRate:30,items:[{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]},save:true,...extra});
+test('upsert_transition persists through save and disk readback',()=>{const r=upsert();assert.equal(r.ok,true);assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.target.type,'transition');assert.equal(r.verification.xml.present,true);assert.equal(r.verification.xml.itemCount,1);assert.equal(r.transitions.length,1);});
+test('upsert_transition without save never claims persistence',()=>{const r=upsert({save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(r.strength,'none');assert.ok(!files['fixture.xml'].includes('fade'));});
+test('upsert_transition external reload round-trips the transition',()=>{const r=upsert({externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.performed,true);assert.equal(r.verification.reload.values.itemCount,1);assert.equal(closeCount,1);});
+test('upsert_transition rejects reload without save before mutating',()=>{rejects(()=>upsert({save:false,externalReload:true}),'invalid_argument','input');assert.equal(transitions.length,0);assert.equal(closeCount,0);});
+test('upsert_transition fails closed when save throws',()=>{saveMode='throw';rejects(()=>upsert(),'persistence_failed','save');assert.equal(transitions.length,1);});
+test('upsert_transition fails closed on stale XML',()=>{saveMode='stale';rejects(()=>upsert(),'persistence_failed','xml');});
+test('upsert_transition reload catches a transition the reload drops',()=>{dropTransitionOnReload=true;rejects(()=>upsert({externalReload:true}),'persistence_failed','reload');});
+test('add_transition_item persists the new item count',()=>{upsert();const r=ctx.addTransitionItem({name:'fade',item:{type:'Alpha',targetId:'loader1',frame:5,value:{value:1}},save:true});assert.equal(r.persisted,true);assert.equal(r.verification.xml.itemCount,2);});
+test('remove_transition verifies absence on disk after save',()=>{upsert();const r=ctx.removeTransition({name:'fade',save:true});assert.equal(r.persisted,true);assert.equal(r.verification.xml.present,false);assert.ok(!files['fixture.xml'].includes('name="fade"'));});
+test('remove_transition external reload proves it stays gone',()=>{upsert();const r=ctx.removeTransition({name:'fade',save:true,externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.present,false);assert.equal(closeCount,1);});
+test('mutation failure still restores the transition snapshot',()=>{upsert({save:false});assert.throws(()=>ctx.addTransitionItem({name:'fade',item:{type:'Alpha',targetId:'missing-target',frame:0,value:{value:1}}}),/targetId/);assert.equal(transitions.find(t=>t.name==='fade')._items.length,1);});
+const importImage=(extra={})=>ctx.importImage({packageName:'Fixture',sourcePath:'/src/new.png',save:true,...extra});
+test('import_image saves package manifest and verifies item on disk',async()=>{files['/src/new.png']='PNGDATA';const r=await importImage();assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.present,true);assert.equal(r.verification.xml.name,'new');assert.equal(r.verification.xml.fileExists,true);});
+test('import_image external reload reloads the asset from disk',async()=>{files['/src/new.png']='PNGDATA';const r=await importImage({externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.strategy,'assetReload');assert.equal(r.verification.reload.performed,true);});
+test('import_image without save does not claim persistence',async()=>{files['/src/new.png']='PNGDATA';const r=await importImage({save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.ok(!files['/pkg/package.xml'].includes('new.png'));});
+test('import_image fails closed when the package save is stale',async()=>{files['/src/new.png']='PNGDATA';pkgSaveMode='stale';await assert.rejects(()=>importImage(),e=>e.code==='persistence_failed'&&e.details.stage==='xml');});
+test('create_component rejects externalReload before mutating',()=>{assert.throws(()=>ctx.createComponent({packageName:'Fixture',componentName:'NewC',save:true,externalReload:true}),e=>e.code==='invalid_argument'&&e.details.stage==='input');assert.equal(packageItems.filter(i=>i.name==='NewC.xml').length,0);});
+test('create_component saves the package manifest',()=>{const r=ctx.createComponent({packageName:'Fixture',componentName:'NewC',save:true});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.type,'component');assert.equal(r.saved,true);});
+test('remove_movieclip verifies absence in package.xml after save',async()=>{const r=await ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:true});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.present,false);assert.ok(!files['/pkg/package.xml'].includes('mc1'));});
+test('remove_movieclip rejects externalReload before deleting',async()=>{await assert.rejects(()=>ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:true,externalReload:true}),e=>e.code==='invalid_argument'&&e.details.stage==='input');assert.ok(resources['ui://fixture0mc1']);});
+test('remove_movieclip without save keeps absence unverified',async()=>{const r=await ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(r.strength,'none');});
 // externalReloadVerified stays false on purpose: this suite proves the reload
 // verification *logic* against a mocked host, never Editor acceptance.
+(async()=>{
+for(const {name,run} of tests){try{setup();await run();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:e.stack});}}
 const report={schemaVersion:1,suite:'p0-persistence-host',evidence:'mocked-editor-host',liveEditorVerified:false,mockedExternalReloadCovered:true,externalReloadVerified:false,passed:results.filter(r=>r.passed).length,total:results.length,cases:results};
 const output=JSON.stringify(report,null,2)+'\n';
 if(process.argv[2]==='--report'&&process.argv[3])fs.writeFileSync(process.argv[3],output);
 process.stdout.write(output);if(results.some(r=>!r.passed))process.exitCode=1;
+})();

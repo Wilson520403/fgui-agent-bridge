@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.5";
+const BRIDGE_VERSION = "0.8.6";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -542,6 +542,8 @@ function describeCreatedItem(
 }
 
 function createComponent(params: any): any {
+    // 组件清单写入 package.xml；组件类资源没有可靠的 asset 重载手段，故不支持 externalReload。
+    validatePackageWriteOptions(params, "component", false);
     const pkg = resolvePackage(params);
     const requestedName = validateResourceName(params.componentName, "componentName");
     const folderPath = normalizePackagePath(params.folderPath);
@@ -565,7 +567,8 @@ function createComponent(params: any): any {
 
     markPackageChanged(pkg);
     const document = params.openAfterCreate === false ? null : openDocument({ url: item.GetURL() });
-    return describeCreatedItem(item, "created", requestedName, folderPath, document);
+    const result = describeCreatedItem(item, "created", requestedName, folderPath, document);
+    return packageWriteResult(result, pkg, packageItemRef(item, "component", folderPath, false), params);
 }
 
 function normalizeConflictPolicy(value: any): string {
@@ -576,6 +579,7 @@ function normalizeConflictPolicy(value: any): string {
 }
 
 async function importImage(params: any): Promise<any> {
+    validatePackageWriteOptions(params, "image", true);
     const pkg = resolvePackage(params);
     const rawSourcePath = String(params.sourcePath || "").trim();
     if (!rawSourcePath)
@@ -618,7 +622,7 @@ async function importImage(params: any): Promise<any> {
         existing.SetChanged();
         const largeImageAtlasApplied = applyLargeImageAtlasRule(existing);
         markPackageChanged(pkg);
-        return {
+        return packageWriteResult({
             operation: "replaced",
             requestedName,
             actualName: existing.name,
@@ -630,7 +634,7 @@ async function importImage(params: any): Promise<any> {
             packageModified: true,
             requiresSave: true,
             diskWrite: true
-        };
+        }, pkg, packageItemRef(existing, "image", folderPath, true), params);
     }
 
     const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
@@ -644,7 +648,7 @@ async function importImage(params: any): Promise<any> {
     const largeImageAtlasApplied = applyLargeImageAtlasRule(item);
 
     markPackageChanged(pkg);
-    return {
+    return packageWriteResult({
         operation: "imported",
         requestedName,
         actualName: item.name,
@@ -656,10 +660,11 @@ async function importImage(params: any): Promise<any> {
         packageModified: true,
         requiresSave: true,
         diskWrite: true
-    };
+    }, pkg, packageItemRef(item, "image", folderPath, true), params);
 }
 
 async function importFont(params: any): Promise<any> {
+    validatePackageWriteOptions(params, "font", true);
     const pkg = resolvePackage(params);
     const rawSourcePath = String(params.sourcePath || "").trim();
     if (!rawSourcePath)
@@ -701,7 +706,7 @@ async function importFont(params: any): Promise<any> {
         existing.exported = params.exported !== false;
         existing.SetChanged();
         markPackageChanged(pkg);
-        return {
+        return packageWriteResult({
             operation: "replaced",
             requestedName,
             actualName: existing.name,
@@ -712,7 +717,7 @@ async function importFont(params: any): Promise<any> {
             packageModified: true,
             requiresSave: true,
             diskWrite: true
-        };
+        }, pkg, packageItemRef(existing, "font", folderPath, true), params);
     }
 
     const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
@@ -725,7 +730,7 @@ async function importFont(params: any): Promise<any> {
     item.SetChanged();
 
     markPackageChanged(pkg);
-    return {
+    return packageWriteResult({
         operation: "imported",
         requestedName,
         actualName: item.name,
@@ -736,7 +741,7 @@ async function importFont(params: any): Promise<any> {
         packageModified: true,
         requiresSave: true,
         diskWrite: true
-    };
+    }, pkg, packageItemRef(item, "font", folderPath, true), params);
 }
 
 function normalizeButtonMode(value: any): string {
@@ -775,6 +780,7 @@ function resolveButtonImages(params: any): string[] {
 }
 
 function createButton(params: any): any {
+    validatePackageWriteOptions(params, "component", false);
     const pkg = resolvePackage(params);
     const requestedName = validateResourceName(params.buttonName, "buttonName");
     const folderPath = normalizePackagePath(params.folderPath);
@@ -810,7 +816,7 @@ function createButton(params: any): any {
     const result = describeCreatedItem(item, "created", requestedName, folderPath, document);
     result.mode = mode;
     result.imageUrls = images;
-    return result;
+    return packageWriteResult(result, pkg, packageItemRef(item, "component", folderPath, false), params);
 }
 
 function openDocument(params: any): FairyEditor.View.Document {
@@ -1308,6 +1314,276 @@ function writeVerification(doc: any, obj: any, before: any, after: any, params: 
         documentModified: Boolean(liveDoc.isModified),
         saved, persisted: strength !== NONE_STRENGTH, strength, verification: checked,
         note: `${strengthNote(checked, saved, "仅验证 expected 中的字段；")}失败不自动回滚。`
+    };
+}
+
+// Transitions and package items live outside the display list, so the
+// object-centric verifyObject path cannot check them. The helpers below keep
+// the same save → disk readback → optional reload ladder, but verify
+// <transition> nodes in the component XML and resource entries in package.xml.
+
+function publicTransitionItemCount(transition: any): number {
+    let count = 0;
+    for (let i = 0; i < transition.items.Count; i++)
+        if (!isSyntheticTweenEndpoint(transition.items.get_Item(i))) count++;
+    return count;
+}
+
+function transitionMemoryValues(doc: any, name: string): any {
+    const transitions = doc && doc.content ? (doc.content as any).transitions : null;
+    const transition = transitions && typeof transitions.GetItem === "function" ? transitions.GetItem(name) : null;
+    if (!transition)
+        return { name, present: false, itemCount: null };
+    return { name, present: true, itemCount: publicTransitionItemCount(transition) };
+}
+
+// Transition nodes serialize as direct <component> children; tween end
+// keyframes fold into a single <item> element, matching the public
+// (non-synthetic) item count exposed to callers.
+function persistedTransitionValues(doc: any, name: string): any {
+    const item = App.project.GetItemByURL(doc.content.resourceURL);
+    if (!item || !item.file || !IOFile.Exists(item.file))
+        verificationError("persistence_failed", "无法读取组件 XML", { stage: "xml" });
+    const XmlType = (CS as any).FairyGUI.Utils.XML;
+    const xml = new XmlType(String(IOFile.ReadAllText(item.file)));
+    let node: any = null;
+    for (let i = 0; i < xml.elements.Count; i++) {
+        const candidate = xml.elements.get_Item(i);
+        if (String(candidate.name) === "transition" && String(candidate.GetAttribute("name") || "") === name) {
+            if (node)
+                verificationError("persistence_failed", "XML 中存在同名 Transition", { stage: "xml", name });
+            node = candidate;
+        }
+    }
+    if (!node)
+        return { values: { name, present: false, itemCount: null }, file: String(item.file) };
+    let itemCount = 0;
+    for (let i = 0; i < node.elements.Count; i++)
+        if (String(node.elements.get_Item(i).name) === "item")
+            itemCount++;
+    return { values: { name, present: true, itemCount }, file: String(item.file) };
+}
+
+function externalReloadVerifyTransition(doc: any, name: string, expected: any, state: any): any {
+    const url = String(doc.docURL || "");
+    if (!url) verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", { stage: "reload" });
+    if (doc.isModified) verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", { stage: "reload", url });
+
+    const docView = App.docView;
+    if (!docView || typeof docView.OpenDocument !== "function")
+        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", { stage: "reload", url });
+
+    const closeStrategy = closeDocumentForReload(docView, url);
+
+    let reopened: any = null;
+    try {
+        reopened = docView.OpenDocument(url, true);
+    } catch (error) {
+        verificationError("persistence_failed", "external reload 重新打开文档失败", { stage: "reload", url, closeStrategy, reason: String(error) });
+    }
+    if (!reopened) verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", { stage: "reload", url, closeStrategy });
+
+    const values = compareVerification(expected, transitionMemoryValues(reopened, name), "reload", { id: name, name, objectType: "transition" });
+    state.doc = reopened;
+    return { performed: true, url, closeStrategy, values };
+}
+
+// Mirrors writeVerification for transition mutations: the target lives in
+// doc.content.transitions rather than the display list, so each stage re-reads
+// the transition set by name instead of re-locating a display object.
+function transitionWriteVerification(doc: any, name: string, expectPresent: boolean, params: any): any {
+    const target = { id: null, name, path: null, type: "transition" };
+    const stub = { id: name, name, objectType: "transition" };
+    // Guard repeated here so a future caller cannot skip the precondition.
+    validateReloadOptions(params, target);
+    const memory = transitionMemoryValues(doc, name);
+    const expected: any = { name, present: expectPresent };
+    if (expectPresent && memory.present)
+        expected.itemCount = memory.itemCount;
+    compareVerification(expected, memory, "editor", stub);
+
+    let saved = false;
+    if (params.save) {
+        try { doc.Save(); }
+        catch (error) { verificationError("persistence_failed", "保存失败", { stage: "save", target, reason: String(error), expected }); }
+        saved = doc.isModified === false;
+        if (!saved) verificationError("persistence_failed", "保存后文档仍处于修改状态", { stage: "save", target, expected });
+    }
+
+    let xmlReadback = false;
+    let xmlFile: any = null;
+    let xmlValues: any = null;
+    if (saved && params.verify !== false) {
+        const disk = persistedTransitionValues(doc, name);
+        xmlFile = disk.file;
+        xmlValues = disk.values;
+        compareVerification(expected, xmlValues, "xml", stub);
+        xmlReadback = true;
+    }
+
+    const state: any = {};
+    let reloaded: any = null;
+    if (xmlReadback && params.externalReload)
+        reloaded = externalReloadVerifyTransition(doc, name, expected, state);
+    const verification = { editorReadback: true, xmlReadback, externalReload: Boolean(reloaded), expected, editor: memory, xml: xmlValues, file: xmlFile, reload: reloaded };
+    const strength = verificationStrength(verification, saved);
+    return {
+        state, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+        note: `${strengthNote(verification, saved, "仅验证 Transition 名称与公开条目数；")}失败不自动回滚。`
+    };
+}
+
+// Package writes (create/import/movieclip) are verified against the package
+// manifest: package.xml is what the editor actually persists for membership,
+// and for asset-backed types external reload unloads and reloads the asset
+// from disk. Components and deletions have no honest reload primitive, so
+// their strength caps at disk.
+const PACKAGE_ASSET_RELOAD_TYPES = ["image", "sound", "font", "movieclip"];
+
+function validatePackageWriteOptions(params: any, itemType: string, allowReload: boolean): void {
+    validateReloadOptions(params, null);
+    if (params.externalReload && !allowReload)
+        verificationError("invalid_argument", `external reload 暂不支持该操作：仅 image/sound/font/movieclip 包资源可通过 asset 重新加载验证（当前：${itemType}）`, { stage: "input" });
+}
+
+function persistedPackageItemValues(pkg: any, itemId: string): any {
+    const file = IOPath.Combine(String(pkg.basePath || ""), "package.xml");
+    if (!IOFile.Exists(file))
+        verificationError("persistence_failed", "无法读取 package.xml", { stage: "xml", file });
+    const XmlType = (CS as any).FairyGUI.Utils.XML;
+    let xml: any = null;
+    try {
+        xml = new XmlType(String(IOFile.ReadAllText(file)));
+    } catch (error) {
+        verificationError("persistence_failed", "package.xml 解析失败", { stage: "xml", file, reason: String(error) });
+    }
+    const resources = xml.GetNode("resources");
+    let node: any = null;
+    if (resources) {
+        for (let i = 0; i < resources.elements.Count; i++) {
+            const candidate = resources.elements.get_Item(i);
+            if (String(candidate.GetAttribute("id") || "") === String(itemId)) {
+                if (node)
+                    verificationError("persistence_failed", "package.xml 中资源 ID 重复", { stage: "xml", id: itemId });
+                node = candidate;
+            }
+        }
+    }
+    if (!node)
+        return { values: { present: false }, file };
+    return { values: { present: true, id: String(node.GetAttribute("id") || ""), name: packageItemNameKey(node.GetAttribute("name") || ""), type: String(node.name) }, file };
+}
+
+// FPackageItem.name 的扩展名归一化时机不一致（MovieClip 创建时可能不带
+// 扩展名，package.xml 的 name 属性总是文件名带扩展名）。名称比对统一按
+// 去掉扩展名的口径进行，id 才是稳定身份。
+function packageItemNameKey(name: any): string {
+    return String(IOPath.GetFileNameWithoutExtension(String(name || "")) || "");
+}
+
+function packageItemMemoryValues(pkg: any, ref: any): any {
+    let found: any = null;
+    if (ref.url) found = App.project.GetItemByURL(ref.url);
+    if (!found && ref.id && typeof pkg.GetItem === "function") found = pkg.GetItem(ref.id);
+    const values: any = { present: Boolean(found) };
+    if (found) {
+        values.id = String(found.id);
+        values.name = packageItemNameKey(found.name);
+        values.type = String(found.type);
+        values.exported = Boolean(found.exported);
+        values.file = found.file ? String(found.file) : null;
+        if (found.file) values.fileExists = IOFile.Exists(String(found.file));
+    }
+    return values;
+}
+
+function packageItemAssetReload(item: any, target: any): any {
+    if (typeof item.UnloadAsset !== "function" || typeof item.GetAsset !== "function")
+        verificationError("persistence_failed", "资源不支持 asset 重新加载，无法执行 external reload", { stage: "reload", target });
+    try { item.UnloadAsset(); }
+    catch (error) { verificationError("persistence_failed", "external reload 卸载资源 asset 失败", { stage: "reload", target, reason: String(error) }); }
+    let asset: any = null;
+    try { asset = item.GetAsset(); }
+    catch (error) { verificationError("persistence_failed", "external reload 重新加载资源失败", { stage: "reload", target, reason: String(error) }); }
+    if (!asset) verificationError("persistence_failed", "external reload 后资源 asset 为空", { stage: "reload", target });
+    return { performed: true, strategy: "assetReload" };
+}
+
+// ref: { id, url, name, type, path, present, file, checkFile } — captured by the
+// caller after mutation (or before deletion, for absent checks). checkFile asks
+// the verification to hard-fail when the item's backing file is missing.
+function writePackageVerification(pkg: any, ref: any, params: any): any {
+    const expectPresent = ref.present !== false;
+    const target = { id: ref.id || null, name: ref.name || null, path: ref.path || null, type: ref.type || "packageItem", url: ref.url || null };
+    const stub = { id: ref.id, name: ref.name, objectType: ref.type || "packageItem" };
+    const expected: any = { present: expectPresent };
+    if (expectPresent) {
+        expected.id = String(ref.id);
+        if (ref.name !== undefined) expected.name = packageItemNameKey(ref.name);
+        if (ref.checkFile) expected.fileExists = true;
+    }
+    const memory = packageItemMemoryValues(pkg, ref);
+    compareVerification(expected, memory, "editor", stub);
+
+    let saved = false;
+    if (params.save) {
+        try {
+            if (typeof pkg.EnsureOpen === "function") pkg.EnsureOpen();
+            pkg.Save();
+            App.project.Save();
+        }
+        catch (error) {
+            verificationError("persistence_failed", "保存包或工程失败", { stage: "save", target, reason: String(error), expected });
+        }
+        saved = true;
+    }
+
+    let xmlReadback = false;
+    let xmlFile: any = null;
+    let xmlValues: any = null;
+    if (saved && params.verify !== false) {
+        const disk = persistedPackageItemValues(pkg, String(ref.id));
+        xmlFile = disk.file;
+        xmlValues = disk.values;
+        if (ref.file !== undefined && ref.file !== null)
+            xmlValues.file = ref.file;
+        if (expectPresent && ref.checkFile)
+            xmlValues.fileExists = IOFile.Exists(String(ref.file));
+        compareVerification(expected, xmlValues, "xml", stub);
+        xmlReadback = true;
+    }
+
+    let reloaded: any = null;
+    if (xmlReadback && params.externalReload) {
+        const found = ref.url ? App.project.GetItemByURL(ref.url) : null;
+        if (!found)
+            verificationError("persistence_failed", "external reload 需要存活资源句柄", { stage: "reload", target });
+        reloaded = packageItemAssetReload(found, target);
+    }
+    const verification = { editorReadback: true, xmlReadback, externalReload: Boolean(reloaded), expected, editor: memory, xml: xmlValues, file: xmlFile, reload: reloaded };
+    const strength = verificationStrength(verification, saved);
+    return {
+        ok: true, target, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+        note: `${strengthNote(verification, saved, "包资源验证覆盖 package.xml 条目与资源文件；")}失败不自动回滚。`
+    };
+}
+
+function packageWriteResult(result: any, pkg: any, ref: any, params: any): any {
+    const verified = writePackageVerification(pkg, ref, params);
+    result.requiresSave = !verified.saved;
+    return Object.assign(result, verified);
+}
+
+function packageItemRef(item: any, type: string, folderPath: string, checkFile: boolean): any {
+    return {
+        id: String(item.id),
+        url: String(item.GetURL()),
+        name: String(item.name),
+        type,
+        path: folderPath,
+        present: true,
+        file: item.file ? String(item.file) : null,
+        checkFile
     };
 }
 
@@ -1929,22 +2205,37 @@ function applyAnimationHistory(entry: AgentAnimationHistoryEntry, undo: boolean)
     return { mode: "agent-animation", document: describeDocument(doc), transitions: listTransitions(doc) };
 }
 
-function mutateTransitions(params: any, operation: string, mutate: (doc: FairyEditor.View.Document) => any): any {
+function mutateTransitions(params: any, operation: string, mutate: (doc: FairyEditor.View.Document) => any, verifySpec: { name: string; present: boolean }): any {
     const doc = getActiveDocument();
+    const transitionTarget = { id: null, name: verifySpec.name, path: null, type: "transition" };
+    // Reject impossible reload combinations before any mutation, so a bad
+    // request never leaves the user's document half-written.
+    validateReloadOptions(params, transitionTarget);
     const before = transitionSnapshot(doc);
     const documentModifiedBefore = doc.isModified;
+    let result: any;
     try {
-        const result = mutate(doc);
+        result = mutate(doc);
         doc.RefreshTransition();
         doc.RefreshInspectors();
         doc.SetModified(true);
         pushAnimationHistory(doc, before, documentModifiedBefore);
-        return { operation, result, document: describeDocument(doc), transitions: listTransitions(doc) };
     }
     catch (error) {
         try { restoreTransitions(doc, before); doc.SetModified(documentModifiedBefore); } catch (_) { /* preserve the original editor error */ }
         throw error;
     }
+    // Verification runs outside the mutation try: a failed save must not roll
+    // back an editor mutation that already landed (and may already be saved).
+    const verified = transitionWriteVerification(doc, verifySpec.name, verifySpec.present, params);
+    const liveDoc = verified.state.doc || doc;
+    return {
+        ok: true, operation, result, target: transitionTarget,
+        document: describeDocument(liveDoc), transitions: listTransitions(liveDoc),
+        documentModified: Boolean(liveDoc.isModified),
+        saved: verified.saved, persisted: verified.persisted, strength: verified.strength,
+        verification: verified.verification, note: verified.note
+    };
 }
 
 function upsertTransition(params: any): any {
@@ -1957,7 +2248,7 @@ function upsertTransition(params: any): any {
         const existing = transitions.GetItem(name);
         const transition = existing || transitions.AddItem(name);
         return describeTransition(applyTransitionDefinition(doc, transition, { ...definition, name }));
-    });
+    }, { name, present: true });
 }
 
 function addTransitionItem(params: any): any {
@@ -1967,7 +2258,7 @@ function addTransitionItem(params: any): any {
         definition.items.push(params.item);
         applyTransitionDefinition(doc, transition, definition);
         return describeTransition(transition);
-    });
+    }, { name: normalizeTransitionName(params.name), present: true });
 }
 
 function publicTransitionItem(definition: any, index: any): any {
@@ -1998,7 +2289,7 @@ function updateTransitionItem(params: any): any {
         definition.items[found.itemIndex] = replacement;
         applyTransitionDefinition(doc, transition, definition);
         return describeTransition(transition);
-    });
+    }, { name: normalizeTransitionName(params.name), present: true });
 }
 
 function removeTransitionItem(params: any): any {
@@ -2009,7 +2300,7 @@ function removeTransitionItem(params: any): any {
         definition.items.splice(found.itemIndex, 1);
         applyTransitionDefinition(doc, transition, definition);
         return found.item;
-    });
+    }, { name: normalizeTransitionName(params.name), present: true });
 }
 
 function removeTransition(params: any): any {
@@ -2018,10 +2309,11 @@ function removeTransition(params: any): any {
         const removed = describeTransition(transition);
         (doc.content as any).transitions.RemoveItem(transition);
         return removed;
-    });
+    }, { name: normalizeTransitionName(params.name), present: false });
 }
 
 async function importSound(params: any): Promise<any> {
+    validatePackageWriteOptions(params, "sound", true);
     const pkg = resolvePackage(params);
     const rawSourcePath = String(params.sourcePath || "").trim();
     if (!rawSourcePath || !IOPath.IsPathRooted(rawSourcePath))
@@ -2049,7 +2341,7 @@ async function importSound(params: any): Promise<any> {
         existing.exported = params.exported !== false;
         existing.SetChanged();
         markPackageChanged(pkg);
-        return { operation: "replaced", requestedName, actualName: existing.name, sourcePath, folderPath, item: describeItem(existing), packageModified: true, requiresSave: true, diskWrite: true };
+        return packageWriteResult({ operation: "replaced", requestedName, actualName: existing.name, sourcePath, folderPath, item: describeItem(existing), packageModified: true, requiresSave: true, diskWrite: true }, pkg, packageItemRef(existing, "sound", folderPath, true), params);
     }
     const item = await puerts.$promise(pkg.ImportResource(sourcePath, folderPath, `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`));
     if (!item || item.type !== FairyEditor.FPackageItemType.SOUND)
@@ -2057,7 +2349,7 @@ async function importSound(params: any): Promise<any> {
     item.exported = params.exported !== false;
     item.SetChanged();
     markPackageChanged(pkg);
-    return { operation: "imported", requestedName, actualName: item.name, sourcePath, folderPath, item: describeItem(item), packageModified: true, requiresSave: true, diskWrite: true };
+    return packageWriteResult({ operation: "imported", requestedName, actualName: item.name, sourcePath, folderPath, item: describeItem(item), packageModified: true, requiresSave: true, diskWrite: true }, pkg, packageItemRef(item, "sound", folderPath, true), params);
 }
 
 function normalizeFramePaths(value: any): string[] {
@@ -2232,6 +2524,7 @@ async function configureMovieClip(item: any, params: any): Promise<any> {
 }
 
 async function createMovieClip(params: any): Promise<any> {
+    validatePackageWriteOptions(params, "movieclip", true);
     const pkg = resolvePackage(params);
     const requestedName = validateResourceName(params.movieClipName, "movieClipName");
     const folderPath = normalizePackagePath(params.folderPath);
@@ -2250,7 +2543,7 @@ async function createMovieClip(params: any): Promise<any> {
         const result = await configureMovieClip(item, { ...params, exported: params.exported !== false, recordHistory: !created });
         if (created)
             clearAgentHistory();
-        return {
+        return packageWriteResult({
             operation: created ? "created" : "replaced",
             requestedName,
             actualName: item.name,
@@ -2261,7 +2554,7 @@ async function createMovieClip(params: any): Promise<any> {
             requiresSave: true,
             diskWrite: true,
             undoable: !created
-        };
+        }, pkg, packageItemRef(item, "movieclip", folderPath, true), params);
     }
     catch (error) {
         if (created) {
@@ -2277,12 +2570,13 @@ async function createMovieClip(params: any): Promise<any> {
 }
 
 async function updateMovieClip(params: any): Promise<any> {
+    validatePackageWriteOptions(params, "movieclip", true);
     const item = resolveItem(params.movieClip || params);
     const updateKeys = ["framePaths", "fps", "speed", "repeatDelay", "swing", "frameDelays", "exported", "compressPng"];
     if (!updateKeys.some((key) => params[key] !== undefined))
         throw new Error("update_movieclip 至少需要提供一个更新字段");
     const result = await configureMovieClip(item, { ...params, recordHistory: true });
-    return { operation: "updated", movieClip: result, resourceChanges: result.resourceChanges || [], packageModified: true, requiresSave: true, diskWrite: true, undoable: true };
+    return packageWriteResult({ operation: "updated", movieClip: result, resourceChanges: result.resourceChanges || [], packageModified: true, requiresSave: true, diskWrite: true, undoable: true }, item.owner, packageItemRef(item, "movieclip", String(item.path || ""), true), params);
 }
 
 function findMovieClipReferences(item: any): string[] {
@@ -2322,6 +2616,8 @@ function findMovieClipReferences(item: any): string[] {
 }
 
 async function removeMovieClip(params: any): Promise<any> {
+    // 删除没有诚实的重载基元（资源句柄已随删除失效），externalReload 不支持。
+    validatePackageWriteOptions(params, "movieclip", false);
     const item = resolveItem(params.movieClip || params);
     if (item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
         throw new Error("目标资源不是 MovieClip");
@@ -2332,10 +2628,11 @@ async function removeMovieClip(params: any): Promise<any> {
         throw new Error(`MovieClip 正在被引用，不能删除：${references.join(", ")}`);
     const pkg = item.owner;
     const removed = describeLoadedMovieClip(item, await ensureMovieClipAsset(item));
+    const ref = { id: String(item.id), url: String(item.GetURL()), name: String(item.name), type: "movieclip", path: String(item.path || ""), present: false, file: item.file ? String(item.file) : null };
     clearAgentHistory();
     pkg.DeleteItem(item);
     markPackageChanged(pkg);
-    return { operation: "removed", movieClip: removed, references, packageModified: true, requiresSave: true, diskWrite: true, undoable: false };
+    return packageWriteResult({ operation: "removed", movieClip: removed, references, packageModified: true, requiresSave: true, diskWrite: true, undoable: false }, pkg, ref, params);
 }
 
 async function previewAnimation(params: any): Promise<any> {

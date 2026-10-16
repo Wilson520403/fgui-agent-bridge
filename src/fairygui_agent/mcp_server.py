@@ -134,8 +134,13 @@ def fgui_create_component(
     auto_rename: bool = False,
     create_folders: bool = True,
     open_after_create: bool = True,
+    save: bool = False,
+    verify: bool = True,
 ) -> dict[str, Any]:
-    """在指定包中新建组件文档；默认打开但不保存，重名时默认拒绝。"""
+    """在指定包中新建组件文档；默认打开但不保存，重名时默认拒绝。
+
+    save=True 保存包与工程后默认比对 package.xml 条目；组件类资源没有可靠的 asset 重载手段，external_reload 不可用，strength 上限为 disk。
+    """
     params: dict[str, Any] = {
         "packageName": package_name,
         "componentName": component_name,
@@ -146,6 +151,8 @@ def fgui_create_component(
         "autoRename": auto_rename,
         "createFolders": create_folders,
         "openAfterCreate": open_after_create,
+        "save": save,
+        "verify": verify,
     }
     if extension_id:
         params["extensionId"] = extension_id
@@ -162,8 +169,14 @@ def fgui_import_image(
     exported: bool = True,
     create_folders: bool = True,
     timeout_seconds: float = 120,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """从绝对本地路径导入图片；这是磁盘写入操作，支持拒绝、自动改名或替换同名图片。"""
+    """从绝对本地路径导入图片；这是磁盘写入操作，支持拒绝、自动改名或替换同名图片。
+
+    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
     resolved_source = Path(source_path).expanduser().resolve()
@@ -174,6 +187,9 @@ def fgui_import_image(
         "conflictPolicy": conflict_policy,
         "exported": exported,
         "createFolders": create_folders,
+        "save": save,
+        "verify": verify,
+        "externalReload": external_reload,
     }
     if resource_name:
         params["resourceName"] = resource_name
@@ -190,8 +206,14 @@ def fgui_import_font(
     exported: bool = True,
     create_folders: bool = True,
     timeout_seconds: float = 120,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """从绝对本地路径导入字体；这是磁盘写入操作，支持拒绝、自动改名或替换同名字体。"""
+    """从绝对本地路径导入字体；这是磁盘写入操作，支持拒绝、自动改名或替换同名字体。
+
+    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
     resolved_source = Path(source_path).expanduser().resolve()
@@ -202,6 +224,9 @@ def fgui_import_font(
         "conflictPolicy": conflict_policy,
         "exported": exported,
         "createFolders": create_folders,
+        "save": save,
+        "verify": verify,
+        "externalReload": external_reload,
     }
     if resource_name:
         params["resourceName"] = resource_name
@@ -226,8 +251,13 @@ def fgui_create_button(
     create_folders: bool = True,
     open_after_create: bool = True,
     extension_id: str | None = None,
+    save: bool = False,
+    verify: bool = True,
 ) -> dict[str, Any]:
-    """创建标准 FairyGUI Button 组件；状态图顺序为 up/down/over/selectedOver/disabled/selectedDisabled。"""
+    """创建标准 FairyGUI Button 组件；状态图顺序为 up/down/over/selectedOver/disabled/selectedDisabled。
+
+    save=True 保存包与工程后默认比对 package.xml 条目；组件类资源不支持 external_reload，strength 上限为 disk。
+    """
     params: dict[str, Any] = {
         "packageName": package_name,
         "buttonName": button_name,
@@ -244,6 +274,8 @@ def fgui_create_button(
         "autoRename": auto_rename,
         "createFolders": create_folders,
         "openAfterCreate": open_after_create,
+        "save": save,
+        "verify": verify,
     }
     if extension_id:
         params["extensionId"] = extension_id
@@ -274,8 +306,14 @@ def fgui_import_sound(
     exported: bool = True,
     create_folders: bool = True,
     timeout_seconds: float = 120,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """从绝对本地路径导入声音资源；支持替换同名声音，属于磁盘写入。"""
+    """从绝对本地路径导入声音资源；支持替换同名声音，属于磁盘写入。
+
+    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
     params: dict[str, Any] = {
@@ -285,6 +323,9 @@ def fgui_import_sound(
         "conflictPolicy": conflict_policy,
         "exported": exported,
         "createFolders": create_folders,
+        "save": save,
+        "verify": verify,
+        "externalReload": external_reload,
     }
     if resource_name:
         params["resourceName"] = resource_name
@@ -305,8 +346,14 @@ def fgui_create_movieclip(
     exported: bool = True,
     create_folders: bool = True,
     timeout_seconds: float = 120,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """用有序绝对图片路径创建或替换 MovieClip；图片序列由 FairyGUI 原生动画资源处理。"""
+    """用有序绝对图片路径创建或替换 MovieClip；图片序列由 FairyGUI 原生动画资源处理。
+
+    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    """
     if not frame_paths:
         raise ValueError("frame_paths 至少需要一帧")
     if not 1 <= fps <= 255 or not 0 <= repeat_delay <= 255:
@@ -324,6 +371,9 @@ def fgui_create_movieclip(
         "conflictPolicy": conflict_policy,
         "exported": exported,
         "createFolders": create_folders,
+        "save": save,
+        "verify": verify,
+        "externalReload": external_reload,
     }
     if frame_delays is not None:
         if len(frame_delays) != len(frame_paths) or any(delay < 0 or delay > 255 for delay in frame_delays):
@@ -357,8 +407,14 @@ def fgui_update_movieclip(
     frame_delays: list[int] | None = None,
     exported: bool | None = None,
     timeout_seconds: float = 120,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
 ) -> dict[str, Any]:
-    """更新已有 MovieClip；传入 frame_paths 时使用新的有序图片序列替换动画帧。"""
+    """更新已有 MovieClip；传入 frame_paths 时使用新的有序图片序列替换动画帧。
+
+    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
     if fps is not None and not 1 <= fps <= 255:
@@ -380,6 +436,9 @@ def fgui_update_movieclip(
             params[key] = value
     if not any(value is not None for _, value in updates) and frame_paths is None:
         raise ValueError("至少需要提供一个 MovieClip 更新字段")
+    params["save"] = save
+    params["verify"] = verify
+    params["externalReload"] = external_reload
     return _client.call("update_movieclip", params, timeout=timeout_seconds)
 
 
@@ -390,10 +449,17 @@ def fgui_remove_movieclip(
     package_name: str | None = None,
     item_name: str | None = None,
     item_path: str | None = None,
+    save: bool = False,
+    verify: bool = True,
 ) -> dict[str, Any]:
-    """删除 MovieClip 包资源；这是不可逆资源操作，必须显式 force=True。"""
+    """删除 MovieClip 包资源；这是不可逆资源操作，必须显式 force=True。
+
+    save=True 保存包与工程后默认比对 package.xml 确认条目已移除；删除没有诚实的重载基元，external_reload 不可用，strength 上限为 disk。
+    """
     params = _resource_target(url, package_name, item_name, item_path)
     params["force"] = force
+    params["save"] = save
+    params["verify"] = verify
     return _client.call("remove_movieclip", params)
 
 
@@ -410,37 +476,52 @@ def fgui_get_transition(name: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def fgui_upsert_transition(transition: TransitionDefinition) -> dict[str, Any]:
-    """声明式创建或完整替换一个 Transition；一次调用可由 fgui_undo/redo 原子回退。"""
-    return _client.call("upsert_transition", {"transition": transition})
+def fgui_upsert_transition(transition: TransitionDefinition, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """声明式创建或完整替换一个 Transition；一次调用可由 fgui_undo/redo 原子回退。
+
+    save=True 保存后默认比对磁盘 XML 中的 <transition> 节点；external_reload=True（需 save=True）关闭并重新打开文档再比对，响应 strength 为 reload / disk / none。
+    """
+    return _client.call("upsert_transition", {"transition": transition, "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()
-def fgui_remove_transition(name: str) -> dict[str, Any]:
-    """删除当前组件中的一个 Transition；可由 fgui_undo 恢复。"""
-    return _client.call("remove_transition", {"name": name})
+def fgui_remove_transition(name: str, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """删除当前组件中的一个 Transition；可由 fgui_undo 恢复。
+
+    save=True 保存后默认确认磁盘 XML 不再包含该 Transition；external_reload=True（需 save=True）关闭重开后确认仍不存在，响应 strength 为 reload / disk / none。
+    """
+    return _client.call("remove_transition", {"name": name, "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()
-def fgui_add_transition_item(name: str, item: TransitionItem) -> dict[str, Any]:
-    """向 Transition 添加一个类型化关键帧轨道项。"""
-    return _client.call("add_transition_item", {"name": name, "item": item})
+def fgui_add_transition_item(name: str, item: TransitionItem, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """向 Transition 添加一个类型化关键帧轨道项。
+
+    save=True 保存后默认比对磁盘 XML 中该 Transition 的条目数；external_reload=True（需 save=True）关闭重开再比对，响应 strength 为 reload / disk / none。
+    """
+    return _client.call("add_transition_item", {"name": name, "item": item, "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()
-def fgui_update_transition_item(name: str, item_index: int, item: TransitionItem) -> dict[str, Any]:
-    """替换 Transition 指定索引的关键帧项；可用 fgui_undo/redo 回退。"""
+def fgui_update_transition_item(name: str, item_index: int, item: TransitionItem, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """替换 Transition 指定索引的关键帧项；可用 fgui_undo/redo 回退。
+
+    save=True 保存后默认比对磁盘 XML 中该 Transition 的条目数；external_reload=True（需 save=True）关闭重开再比对，响应 strength 为 reload / disk / none。
+    """
     if item_index < 0:
         raise ValueError("item_index 不能小于 0")
-    return _client.call("update_transition_item", {"name": name, "itemIndex": item_index, "item": item})
+    return _client.call("update_transition_item", {"name": name, "itemIndex": item_index, "item": item, "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()
-def fgui_remove_transition_item(name: str, item_index: int) -> dict[str, Any]:
-    """删除 Transition 指定索引的关键帧项；可用 fgui_undo 恢复。"""
+def fgui_remove_transition_item(name: str, item_index: int, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """删除 Transition 指定索引的关键帧项；可用 fgui_undo 恢复。
+
+    save=True 保存后默认比对磁盘 XML 中该 Transition 的条目数；external_reload=True（需 save=True）关闭重开再比对，响应 strength 为 reload / disk / none。
+    """
     if item_index < 0:
         raise ValueError("item_index 不能小于 0")
-    return _client.call("remove_transition_item", {"name": name, "itemIndex": item_index})
+    return _client.call("remove_transition_item", {"name": name, "itemIndex": item_index, "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()
