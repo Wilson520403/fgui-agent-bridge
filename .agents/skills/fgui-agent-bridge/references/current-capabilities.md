@@ -133,4 +133,5 @@
 - Transition 写操作（`upsert_transition`、`remove_transition`、`add_transition_item`、`update_transition_item`、`remove_transition_item`）迁入同一 `save` → 磁盘 XML 回读 → `externalReload` 梯子：验证组件 XML 中 `<transition>` 节点的存在性与公开条目数（tween 合成端点不重复计数）；`externalReload` 为关闭重开文档后在新文档上重新读取 Transition 集合。动画快照 undo/redo 语义保持不变；验证失败不回滚已落笔的编辑器变更。
 - 包资源写操作（`create_component`、`create_button`、`import_image`、`import_font`、`import_sound`、`create_movieclip`、`update_movieclip`、`remove_movieclip`）验证 `package.xml` 资源条目：保存包与工程后回读清单，并要求 image/sound/font/movieclip 的资源文件存在；`externalReload` 仅这些资产类型可用（`UnloadAsset` + `GetAsset` 重载），组件创建与删除拒绝该参数，`strength` 上限 `disk`。
 - 全部写 Action 的响应统一带 `saved`、`persisted`、`strength`、`verification`、`note`；`requiresSave` 改为按实际保存结果返回。
-- 模拟宿主新增 Transition 与包资源验证用例，总数 71；真机验证待补（需在 6.1.4 上复验 Transition 磁盘回读与 asset reload）。
+- 包资源名称比对按去扩展名归一化：`item.name` 注册归一化时机不一致（MovieClip 创建时可不带扩展名），`package.xml` 的 `name` 属性总是文件名；真机 6.1.4 实测确认。
+- 模拟宿主新增 Transition 与包资源验证用例，总数 71；**真机 6.1.4 已验证**：`upsert_transition`/`add_transition_item` 磁盘回读（itemCount 折叠正确）、`remove_transition` 关闭重开后仍缺失（`CloseDocuments`）、`create_movieclip` 清单+`.jta`+asset reload（`strength:reload`）、`remove_movieclip` 包清单缺失、`create_component` 清单回读（`strength:disk`）。
