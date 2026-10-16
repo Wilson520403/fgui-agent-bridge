@@ -36,6 +36,12 @@ class PersistenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mcp_server.fgui_verify_document(expected={'fontSize': 40})
 
+    def test_mcp_tree_expected_without_target(self):
+        tree_spec = {'children': [{'id': 'text1', 'fontSize': 40}]}
+        with patch.object(mcp_server._client, 'call', return_value={}) as call:
+            mcp_server.fgui_verify_document(expected=tree_spec)
+        self.assertEqual(call.call_args.args, ('verify_document', {'maxDepth': 12, 'expected': tree_spec, 'readXml': True, 'externalReload': False}))
+
     def test_external_reload_reaches_plugin_from_mcp_and_cli(self):
         """CLI、MCP 和插件必须能请求同一个 externalReload 参数，否则最强验证只存在于插件里。"""
         cases = [

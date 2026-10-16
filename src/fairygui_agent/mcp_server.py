@@ -629,12 +629,15 @@ def fgui_set_text_style(style: dict[str, Any], object_id: str | None = None, obj
 def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected: dict[str, Any] | None = None, read_xml: bool = True, external_reload: bool = False) -> dict[str, Any]:
     """只读验证 target 的 expected 属性；默认比对磁盘 XML，不保存。无 expected 时仅返回快照。
 
+    expected 为纯属性对象时比对单个 target（必须提供 object_id/object_path/object_name）。expected 含 children 时执行对象树比对，可省略 target（默认根组件）：每个节点用 id/name/type 断言或定位，children 为子节点 spec 数组；childrenMode 默认 "exact"（按位置全等，数量必须一致），"subset" 表示每个 spec 按 id/name/index 定位一个子节点、允许多余节点。
+
     external_reload=True 会关闭并重新打开当前文档再比对——这是只读操作仍能达到的最强持久化证明。本命令不会保存，因此文档存在未保存改动时会拒绝执行。
     """
     params: dict[str, Any] = {"maxDepth": max_depth, "readXml": read_xml, "externalReload": external_reload}
     if expected is not None:
-        if not any((object_id, object_path, object_name)):
-            raise ValueError("expected 必须提供 target")
+        is_tree = any(k in expected for k in ("children", "childrenMode", "index"))
+        if not any((object_id, object_path, object_name)) and not is_tree:
+            raise ValueError("expected 必须提供 target；含 children 的树结构比对可省略 target（默认根组件）")
         params["expected"] = expected
     if any((object_id, object_path, object_name)): params["target"] = _target(object_id, object_path, object_name)
     return _client.call("verify_document", params)

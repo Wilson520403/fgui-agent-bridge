@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.6";
+const BRIDGE_VERSION = "0.8.7";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -787,21 +787,24 @@ function verificationError(code, message, details) {
     error.details = details;
     throw error;
 }
-function validateExpectations(expected) {
-    if (!expected || typeof expected !== "object" || Array.isArray(expected) || Object.keys(expected).length === 0)
-        verificationError("invalid_argument", "expected 必须是非空属性对象", { stage: "input" });
+function validateExpectationsMap(flat, specPath) {
     const result = {};
-    for (const key of Object.keys(expected)) {
+    for (const key of Object.keys(flat)) {
         if (VERIFIED_KEYS.indexOf(key) < 0)
-            verificationError("unsupported_property", `不支持验证属性：${key}`, { stage: "input", property: key });
-        const value = expected[key];
+            verificationError("unsupported_property", `不支持验证属性：${key}`, { stage: "input", property: key, node: specPath });
+        const value = flat[key];
         if (value !== null && typeof value !== "string" && typeof value !== "number")
-            verificationError("invalid_argument", `expected.${key} 必须是字符串、数字或 null`, { stage: "input" });
+            verificationError("invalid_argument", `expected.${key} 必须是字符串、数字或 null`, { stage: "input", node: specPath });
         if (typeof value === "number" && !Number.isFinite(value))
-            verificationError("invalid_argument", `expected.${key} 必须是有限数字`, { stage: "input" });
+            verificationError("invalid_argument", `expected.${key} 必须是有限数字`, { stage: "input", node: specPath });
         result[key] = key === "color" ? normalizedColor(value, "color") : value;
     }
     return result;
+}
+function validateExpectations(expected) {
+    if (!expected || typeof expected !== "object" || Array.isArray(expected) || Object.keys(expected).length === 0)
+        verificationError("invalid_argument", "expected 必须是非空属性对象", { stage: "input" });
+    return validateExpectationsMap(expected, "expected");
 }
 function genericObjectValue(obj, key) {
     if (obj[key] !== undefined)
@@ -828,7 +831,7 @@ function verifiedObjectValues(obj) {
         value[key] = genericObjectValue(obj, key);
     return value;
 }
-function compareVerification(expected, actual, stage, obj) {
+function diffExpectedValues(expected, actual) {
     const differences = [];
     for (const key of Object.keys(expected)) {
         const a = actual[key] === undefined ? null : actual[key];
@@ -836,6 +839,10 @@ function compareVerification(expected, actual, stage, obj) {
         if (!(typeof e === "number" && typeof a === "number" ? Math.abs(e - a) <= 0.00001 : e === a))
             differences.push({ property: key, expected: e, actual: a });
     }
+    return differences;
+}
+function compareVerification(expected, actual, stage, obj) {
+    const differences = diffExpectedValues(expected, actual);
     // Only a mismatch against the live Editor object is an acceptance failure.
     // Once the value has left the Editor (disk XML, or a document reloaded from
     // disk), a mismatch means the value was not persisted — never "rejected".
@@ -870,32 +877,52 @@ function serializedAttr(attr, key) {
     const fallback = XML_SERIALIZED_DEFAULTS[key];
     return fallback === undefined ? null : fallback;
 }
-function persistedObjectValues(doc, obj) {
+// Loads and parses the XML file the active document serializes to. Read or
+// parse failures are persistence failures: the ladder cannot claim disk state
+// it cannot read.
+function documentXml(doc, obj) {
     const item = App.project.GetItemByURL(doc.content.resourceURL);
     if (!item || !item.file || !IOFile.Exists(item.file))
-        verificationError("persistence_failed", "无法读取组件 XML", { stage: "xml", target: targetSummary(obj, null) });
+        verificationError("persistence_failed", "无法读取组件 XML", { stage: "xml", target: obj ? targetSummary(obj, null) : null });
     const XmlType = CS.FairyGUI.Utils.XML;
-    const xml = new XmlType(String(IOFile.ReadAllText(item.file)));
+    let xml = null;
+    try {
+        xml = new XmlType(String(IOFile.ReadAllText(item.file)));
+    }
+    catch (error) {
+        verificationError("persistence_failed", "组件 XML 解析失败", { stage: "xml", file: String(item.file), reason: String(error) });
+    }
+    return { xml, item, file: String(item.file) };
+}
+function displayListElements(xml) {
+    const nodes = [];
+    const list = xml.GetNode("displayList");
+    if (list)
+        for (let i = 0; i < list.elements.Count; i++)
+            nodes.push(list.elements.get_Item(i));
+    return nodes;
+}
+function persistedObjectValues(doc, obj) {
+    const parsed = documentXml(doc, obj);
     let node = null;
     if (obj === doc.content)
-        node = xml;
+        node = parsed.xml;
     else {
         // Only direct displayList children belong to this component's serialized document.
         // Do not accidentally match a nested component or transition's target ID.
-        const list = xml.GetNode("displayList");
-        if (list) {
-            for (let i = 0; i < list.elements.Count; i++) {
-                const candidate = list.elements.get_Item(i);
-                if (String(candidate.GetAttribute("id")) === String(obj.id)) {
-                    if (node)
-                        verificationError("persistence_failed", "XML 对象 ID 不唯一", { stage: "xml", id: obj.id });
-                    node = candidate;
-                }
+        for (const candidate of displayListElements(parsed.xml)) {
+            if (String(candidate.GetAttribute("id")) === String(obj.id)) {
+                if (node)
+                    verificationError("persistence_failed", "XML 对象 ID 不唯一", { stage: "xml", id: obj.id });
+                node = candidate;
             }
         }
     }
     if (!node)
         verificationError("persistence_failed", "XML 中未找到目标对象", { stage: "xml", target: targetSummary(obj, null) });
+    return { values: xmlNodeValues(parsed.item, node), file: parsed.file };
+}
+function xmlNodeValues(item, node) {
     const attr = (key) => { const v = node.GetAttribute(key); return v === null || v === undefined ? null : String(v); };
     const value = { id: attr("id") || "", name: attr("name") || "", type: String(node.name), resourceURL: null };
     if (value.type === "loader")
@@ -933,7 +960,7 @@ function persistedObjectValues(doc, obj) {
     const dimensions = size ? size.split(",").map(Number) : [null, null];
     value.width = dimensions[0];
     value.height = dimensions[1];
-    return { values: value, file: String(item.file) };
+    return value;
 }
 // Stage 4 of the verification ladder described in the improvement plan: prove the
 // write survives a real Editor reload. The cheaper stages can all pass while the
@@ -974,41 +1001,49 @@ function closeDocumentForReload(docView, url) {
     }
     verificationError("persistence_failed", "无法关闭文档以执行 external reload：所有候选关闭方式均不可用", { stage: "reload", url, attempted: attempts });
 }
-function externalReloadVerify(doc, locator, expected, state) {
+// Shared close + reopen mechanics for every external reload verification.
+// Callers decide what to re-check on the fresh document; this function only
+// guarantees the document round-tripped through disk and reports which close
+// overload worked. An unsaved buffer closes back to the pre-write state and
+// would compare as a false positive, so it is refused up front.
+function reloadDocument(doc, context) {
     const url = String(doc.docURL || "");
+    const details = context || {};
     if (!url)
-        verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", { stage: "reload", expected });
-    // An unsaved buffer closes back to the pre-write state and would compare as a
-    // false positive. Refuse instead of verifying nothing and reporting success.
+        verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", Object.assign({ stage: "reload" }, details));
     if (doc.isModified)
-        verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", { stage: "reload", url, expected });
+        verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", Object.assign({ stage: "reload", url }, details));
     const docView = App.docView;
     if (!docView || typeof docView.OpenDocument !== "function")
-        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", { stage: "reload", url, expected });
+        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", Object.assign({ stage: "reload", url }, details));
     const closeStrategy = closeDocumentForReload(docView, url);
     let reopened = null;
     try {
         reopened = docView.OpenDocument(url, true);
     }
     catch (error) {
-        verificationError("persistence_failed", "external reload 重新打开文档失败", { stage: "reload", url, closeStrategy, reason: String(error), expected });
+        verificationError("persistence_failed", "external reload 重新打开文档失败", Object.assign({ stage: "reload", url, closeStrategy, reason: String(error) }, details));
     }
     if (!reopened)
-        verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", { stage: "reload", url, closeStrategy, expected });
+        verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", Object.assign({ stage: "reload", url, closeStrategy }, details));
+    return { doc: reopened, url, closeStrategy };
+}
+function externalReloadVerify(doc, locator, expected, state) {
+    const rr = reloadDocument(doc, { expected });
     // Every handle captured before the close is now stale; re-locate the target by
     // its recorded locator instead of reusing the pre-close object reference.
     let reloaded = null;
     try {
-        reloaded = resolveObject(reopened, locator);
+        reloaded = resolveObject(rr.doc, locator);
     }
     catch (error) {
-        verificationError("persistence_failed", "external reload 后无法在重新载入的文档中定位目标", { stage: "reload", url, closeStrategy, target: locator, reason: String(error), expected });
+        verificationError("persistence_failed", "external reload 后无法在重新载入的文档中定位目标", { stage: "reload", url: rr.url, closeStrategy: rr.closeStrategy, target: locator, reason: String(error), expected });
     }
     const values = compareVerification(expected, verifiedObjectValues(reloaded), "reload", reloaded);
     // Hand the fresh handle back through state: it is not serializable and cannot
     // be returned in the response, but later code still needs a live document.
-    state.doc = reopened;
-    return { performed: true, url, closeStrategy, values };
+    state.doc = rr.doc;
+    return { performed: true, url: rr.url, closeStrategy: rr.closeStrategy, values };
 }
 // Removal is verified by proving absence, not by comparing values: the write
 // succeeded only if the node can no longer be resolved in the Editor, no longer
@@ -1032,35 +1067,18 @@ function persistedNodeExists(doc, objectId) {
     return { exists, file: String(item.file) };
 }
 function externalReloadVerifyAbsent(doc, locator, state) {
-    const url = String(doc.docURL || "");
-    if (!url)
-        verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", { stage: "reload" });
-    if (doc.isModified)
-        verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", { stage: "reload", url });
-    const docView = App.docView;
-    if (!docView || typeof docView.OpenDocument !== "function")
-        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", { stage: "reload", url });
-    const closeStrategy = closeDocumentForReload(docView, url);
-    let reopened = null;
-    try {
-        reopened = docView.OpenDocument(url, true);
-    }
-    catch (error) {
-        verificationError("persistence_failed", "external reload 重新打开文档失败", { stage: "reload", url, closeStrategy, reason: String(error) });
-    }
-    if (!reopened)
-        verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", { stage: "reload", url, closeStrategy });
+    const rr = reloadDocument(doc, {});
     let stillPresent = null;
     try {
-        stillPresent = resolveObject(reopened, locator);
+        stillPresent = resolveObject(rr.doc, locator);
     }
     catch (error) {
         stillPresent = null;
     }
     if (stillPresent)
-        verificationError("persistence_failed", "external reload 后目标节点仍然存在", { stage: "reload", url, closeStrategy, target: locator });
-    state.doc = reopened;
-    return { performed: true, url, closeStrategy, absent: true };
+        verificationError("persistence_failed", "external reload 后目标节点仍然存在", { stage: "reload", url: rr.url, closeStrategy: rr.closeStrategy, target: locator });
+    state.doc = rr.doc;
+    return { performed: true, url: rr.url, closeStrategy: rr.closeStrategy, absent: true };
 }
 function verificationStrength(verification, saved) {
     if (verification && verification.reload && verification.reload.performed)
@@ -1197,27 +1215,10 @@ function persistedTransitionValues(doc, name) {
     return { values: { name, present: true, itemCount }, file: String(item.file) };
 }
 function externalReloadVerifyTransition(doc, name, expected, state) {
-    const url = String(doc.docURL || "");
-    if (!url)
-        verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", { stage: "reload" });
-    if (doc.isModified)
-        verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", { stage: "reload", url });
-    const docView = App.docView;
-    if (!docView || typeof docView.OpenDocument !== "function")
-        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", { stage: "reload", url });
-    const closeStrategy = closeDocumentForReload(docView, url);
-    let reopened = null;
-    try {
-        reopened = docView.OpenDocument(url, true);
-    }
-    catch (error) {
-        verificationError("persistence_failed", "external reload 重新打开文档失败", { stage: "reload", url, closeStrategy, reason: String(error) });
-    }
-    if (!reopened)
-        verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", { stage: "reload", url, closeStrategy });
-    const values = compareVerification(expected, transitionMemoryValues(reopened, name), "reload", { id: name, name, objectType: "transition" });
-    state.doc = reopened;
-    return { performed: true, url, closeStrategy, values };
+    const rr = reloadDocument(doc, {});
+    const values = compareVerification(expected, transitionMemoryValues(rr.doc, name), "reload", { id: name, name, objectType: "transition" });
+    state.doc = rr.doc;
+    return { performed: true, url: rr.url, closeStrategy: rr.closeStrategy, values };
 }
 // Mirrors writeVerification for transition mutations: the target lives in
 // doc.content.transitions rather than the display list, so each stage re-reads
@@ -1535,33 +1536,276 @@ function setTextStyle(params) {
     const expected = Object.assign({ id: obj.id, type }, style);
     return writeVerification(doc, obj, before, textStyle(obj), params, expected);
 }
+// `expected` may describe a subtree rather than a flat property map. Reserved
+// structural keys: `children` (array of node specs), `childrenMode`
+// ("exact" — default, positional full coverage; "subset" — each spec locates a
+// distinct child by id/name/index, extras allowed) and `index` (positional
+// locator inside subset specs). Every other key is a property assertion
+// validated against VERIFIED_KEYS, so id/name/type double as locator and
+// assertion.
+const TREE_STRUCTURAL_KEYS = ["children", "childrenMode", "index"];
+function isTreeSpec(expected) {
+    return Boolean(expected) && typeof expected === "object" && !Array.isArray(expected) &&
+        (expected.children !== undefined || expected.childrenMode !== undefined || expected.index !== undefined);
+}
+function validateTreeSpec(spec, specPath) {
+    if (!spec || typeof spec !== "object" || Array.isArray(spec))
+        verificationError("invalid_argument", `expected 树节点必须是对象：${specPath}`, { stage: "input", node: specPath });
+    const flat = {};
+    for (const key of Object.keys(spec))
+        if (TREE_STRUCTURAL_KEYS.indexOf(key) < 0)
+            flat[key] = spec[key];
+    const node = { specPath, assert: validateExpectationsMap(flat, specPath) };
+    if (spec.index !== undefined) {
+        const index = Number(spec.index);
+        if (!Number.isInteger(index) || index < 0)
+            verificationError("invalid_argument", `${specPath}.index 必须是非负整数`, { stage: "input", node: specPath });
+        node.index = index;
+    }
+    if (spec.childrenMode !== undefined && spec.childrenMode !== "exact" && spec.childrenMode !== "subset")
+        verificationError("invalid_argument", `${specPath}.childrenMode 必须是 "exact" 或 "subset"`, { stage: "input", node: specPath });
+    if (spec.childrenMode !== undefined && spec.children === undefined)
+        verificationError("invalid_argument", `${specPath}.childrenMode 需要同时提供 children`, { stage: "input", node: specPath });
+    if (spec.children !== undefined && !Array.isArray(spec.children))
+        verificationError("invalid_argument", `${specPath}.children 必须是节点数组`, { stage: "input", node: specPath });
+    if (spec.children) {
+        node.childrenMode = spec.childrenMode || "exact";
+        node.children = spec.children.map((child, i) => validateTreeSpec(child, `${specPath}.children[${i}]`));
+        // A subset spec without any locator can never say which child it means.
+        if (node.childrenMode === "subset")
+            for (const child of node.children)
+                if (child.assert.id === undefined && child.assert.name === undefined && child.index === undefined)
+                    verificationError("invalid_argument", `subset 模式的子节点需要 id、name 或 index 定位：${child.specPath}`, { stage: "input", node: child.specPath });
+    }
+    return node;
+}
+function objectChildren(obj) {
+    const children = [];
+    const component = obj;
+    if (typeof component.numChildren !== "number")
+        return children;
+    for (let i = 0; i < component.numChildren; i++)
+        children.push(component.GetChildAt(i));
+    return children;
+}
+// `stage` controls both the error code and what a mismatch means: an
+// editor-stage miss is the live tree disagreeing; an xml/reload miss means the
+// structure never persisted.
+function stageErrorCode(stage) {
+    return stage === "editor" ? "editor_rejected" : "persistence_failed";
+}
+function locateSpecChild(children, spec, used, stage) {
+    const locate = (key, value) => {
+        let found = -1;
+        for (let i = 0; i < children.length; i++) {
+            if (used[i] || String(children[i][key] || "") !== String(value))
+                continue;
+            if (found >= 0)
+                verificationError("ambiguous_target", `子节点定位不唯一：${spec.specPath}`, { stage, node: spec.specPath, locator: { [key]: value } });
+            found = i;
+        }
+        return found;
+    };
+    if (spec.assert.id !== undefined)
+        return locate("id", spec.assert.id);
+    if (spec.assert.name !== undefined)
+        return locate("name", spec.assert.name);
+    if (spec.index !== undefined)
+        return !used[spec.index] && spec.index < children.length ? spec.index : -1;
+    return -1;
+}
+function countSpecNodes(children) {
+    let count = 0;
+    for (const child of children || []) {
+        count++;
+        if (child.children)
+            count += countSpecNodes(child.children);
+    }
+    return count;
+}
+function verifyTreeNode(obj, spec, stage, counters) {
+    counters.checked++;
+    const actual = verifiedObjectValues(obj);
+    const differences = diffExpectedValues(spec.assert, actual);
+    if (differences.length)
+        verificationError(stageErrorCode(stage), `树比对失败（${stage}）：${spec.specPath}`, { stage, node: spec.specPath, target: targetSummary(obj, null), expected: spec.assert, actual, differences });
+    if (!spec.children)
+        return;
+    const children = objectChildren(obj);
+    if (spec.childrenMode === "subset") {
+        const used = {};
+        for (const childSpec of spec.children) {
+            const index = locateSpecChild(children, childSpec, used, stage);
+            if (index < 0)
+                verificationError(stage === "editor" ? "target_not_found" : "persistence_failed", `未找到子节点（${stage}）：${childSpec.specPath}`, { stage, node: childSpec.specPath, spec: childSpec.assert });
+            used[index] = true;
+            verifyTreeNode(children[index], childSpec, stage, counters);
+        }
+        return;
+    }
+    if (spec.children.length !== children.length)
+        verificationError(stageErrorCode(stage), `子节点数量不匹配（${stage}）：${spec.specPath}`, { stage, node: spec.specPath, target: targetSummary(obj, null), expected: spec.children.length, actual: children.length });
+    for (let i = 0; i < spec.children.length; i++) {
+        const childSpec = spec.children[i];
+        if (childSpec.index !== undefined && childSpec.index !== i)
+            verificationError(stageErrorCode(stage), `子节点位置不匹配（${stage}）：${childSpec.specPath}`, { stage, node: childSpec.specPath, expected: i, actual: childSpec.index });
+        verifyTreeNode(children[i], childSpec, stage, counters);
+    }
+}
+function locateSpecXmlChild(nodes, spec, used) {
+    const locate = (key, value) => {
+        let found = -1;
+        for (let i = 0; i < nodes.length; i++) {
+            if (used[i] || String(nodes[i].GetAttribute(key) || "") !== String(value))
+                continue;
+            if (found >= 0)
+                verificationError("ambiguous_target", `XML 子节点定位不唯一：${spec.specPath}`, { stage: "xml", node: spec.specPath, locator: { [key]: value } });
+            found = i;
+        }
+        return found;
+    };
+    if (spec.assert.id !== undefined)
+        return locate("id", spec.assert.id);
+    if (spec.assert.name !== undefined)
+        return locate("name", spec.assert.name);
+    if (spec.index !== undefined)
+        return !used[spec.index] && spec.index < nodes.length ? spec.index : -1;
+    return -1;
+}
+// The component XML only serializes this document's own scope: the root node
+// plus flat displayList children. Specs nested inside a child component live in
+// that component's file — comparing them against this XML would be dishonest,
+// so they are counted as skipped and still covered by the editor and reload
+// stages.
+function verifyTreeXml(doc, obj, spec, counters) {
+    const parsed = documentXml(doc, obj);
+    const checkSpecNode = (nodeSpec, node) => {
+        const values = xmlNodeValues(parsed.item, node);
+        const differences = diffExpectedValues(nodeSpec.assert, values);
+        if (differences.length)
+            verificationError("persistence_failed", `树比对失败（xml）：${nodeSpec.specPath}`, { stage: "xml", node: nodeSpec.specPath, expected: nodeSpec.assert, actual: values, differences });
+        counters.xmlChecked++;
+    };
+    let targetNode = null;
+    if (obj === doc.content)
+        targetNode = parsed.xml;
+    else {
+        for (const candidate of displayListElements(parsed.xml))
+            if (String(candidate.GetAttribute("id")) === String(obj.id)) {
+                targetNode = candidate;
+                break;
+            }
+        if (!targetNode)
+            verificationError("persistence_failed", "XML 中未找到目标对象", { stage: "xml", node: spec.specPath, target: targetSummary(obj, null) });
+    }
+    checkSpecNode(spec, targetNode);
+    if (!spec.children)
+        return parsed.file;
+    if (obj !== doc.content) {
+        counters.xmlSkipped += countSpecNodes(spec.children);
+        return parsed.file;
+    }
+    const nodes = displayListElements(parsed.xml);
+    if (spec.childrenMode === "subset") {
+        const used = {};
+        for (const childSpec of spec.children) {
+            const index = locateSpecXmlChild(nodes, childSpec, used);
+            if (index < 0)
+                verificationError("persistence_failed", `磁盘 XML 中未找到子节点：${childSpec.specPath}`, { stage: "xml", node: childSpec.specPath, spec: childSpec.assert });
+            used[index] = true;
+            checkSpecNode(childSpec, nodes[index]);
+            counters.xmlSkipped += countSpecNodes(childSpec.children);
+        }
+        return parsed.file;
+    }
+    if (nodes.length !== spec.children.length)
+        verificationError("persistence_failed", `磁盘 XML 子节点数量不匹配：${spec.specPath}`, { stage: "xml", node: spec.specPath, expected: spec.children.length, actual: nodes.length });
+    for (let i = 0; i < spec.children.length; i++) {
+        const childSpec = spec.children[i];
+        if (childSpec.index !== undefined && childSpec.index !== i)
+            verificationError("persistence_failed", `磁盘 XML 子节点位置不匹配：${childSpec.specPath}`, { stage: "xml", node: childSpec.specPath, expected: i, actual: childSpec.index });
+        checkSpecNode(childSpec, nodes[i]);
+        counters.xmlSkipped += countSpecNodes(childSpec.children);
+    }
+    return parsed.file;
+}
+// Reload-stage tree verification: close and reopen the document, re-resolve the
+// target on the fresh handle, then walk the whole spec against memory the
+// Editor re-derived from disk.
+function externalReloadVerifyTree(doc, locator, spec, state) {
+    const rr = reloadDocument(doc, {});
+    let reloaded = null;
+    try {
+        reloaded = locator ? resolveObject(rr.doc, locator) : rr.doc.content;
+    }
+    catch (error) {
+        verificationError("persistence_failed", "external reload 后无法在重新载入的文档中定位目标", { stage: "reload", url: rr.url, closeStrategy: rr.closeStrategy, target: locator, reason: String(error) });
+    }
+    const counters = { checked: 0 };
+    verifyTreeNode(reloaded, spec, "reload", counters);
+    state.doc = rr.doc;
+    return { performed: true, url: rr.url, closeStrategy: rr.closeStrategy, checked: counters.checked };
+}
 function verifyDocument(params) {
     const doc = getActiveDocument();
     const tree = describeObject(doc.content, 0, params.maxDepth === undefined ? 12 : Number(params.maxDepth));
     if (params.expected !== undefined) {
-        if (!params.target)
+        const isTree = isTreeSpec(params.expected);
+        if (!isTree && !params.target)
             verificationError("invalid_argument", "expected 必须提供 target", { stage: "input" });
-        const expected = validateExpectations(params.expected);
-        const obj = resolveObject(doc, params.target);
+        const expectedOrSpec = isTree ? validateTreeSpec(params.expected, "expected") : validateExpectations(params.expected);
+        const obj = params.target ? resolveObject(doc, params.target) : doc.content;
         const wantsReload = Boolean(params.externalReload);
         // Snapshot-only mode must not silently close the user's document. Checked
         // here as well so the failure names this action's read-only contract; the
         // reload stage raises the same precondition for the write path.
         if (wantsReload && doc.isModified)
             verificationError("invalid_argument", "external reload 要求文档已保存；本 Action 不会保存，请先保存后重试", { stage: "reload", url: String(doc.docURL || ""), target: targetSummary(obj, params.target) });
+        if (!isTree) {
+            const expected = expectedOrSpec;
+            const state = {};
+            const verification = verifyObject(doc, obj, expected, params.readXml !== false, wantsReload ? { target: params.target } : null, state);
+            // A reload replaced the document handle; every later read must use the new one.
+            const liveDoc = state.doc || doc;
+            const saved = !liveDoc.isModified;
+            const strength = verificationStrength(verification, saved);
+            return {
+                ok: true, document: describeDocument(liveDoc), target: targetSummary(obj, params.target), tree, verification,
+                saved, persisted: strength !== NONE_STRENGTH, strength,
+                note: `${strengthNote(verification, saved, "只验证 expected 字段；不会保存文档。")}`
+            };
+        }
+        const spec = expectedOrSpec;
+        const counters = { checked: 0, xmlChecked: 0, xmlSkipped: 0 };
+        verifyTreeNode(obj, spec, "editor", counters);
+        let xmlFile = null;
+        if (params.readXml !== false)
+            xmlFile = verifyTreeXml(doc, obj, spec, counters);
         const state = {};
-        const verification = verifyObject(doc, obj, expected, params.readXml !== false, wantsReload ? { target: params.target } : null, state);
+        const reloaded = wantsReload ? externalReloadVerifyTree(doc, params.target || null, spec, state) : null;
         // A reload replaced the document handle; every later read must use the new one.
         const liveDoc = state.doc || doc;
         const saved = !liveDoc.isModified;
+        const verification = {
+            editorReadback: true,
+            xmlReadback: xmlFile !== null,
+            externalReload: Boolean(reloaded),
+            mode: "tree",
+            childrenMode: spec.childrenMode || null,
+            checked: counters.checked,
+            xmlChecked: counters.xmlChecked,
+            xmlSkipped: counters.xmlSkipped,
+            file: xmlFile,
+            reload: reloaded
+        };
         const strength = verificationStrength(verification, saved);
         return {
             ok: true, document: describeDocument(liveDoc), target: targetSummary(obj, params.target), tree, verification,
             saved, persisted: strength !== NONE_STRENGTH, strength,
-            note: `${strengthNote(verification, saved, "只验证 expected 字段；不会保存文档。")}`
+            note: `${strengthNote(verification, saved, `树比对覆盖 ${counters.checked} 个节点，磁盘 XML 覆盖 ${counters.xmlChecked} 个（仅活动文档序列化范围，嵌套组件内部不比对磁盘）；`)}本 Action 不会保存文档。`
         };
     }
-    return { ok: true, document: describeDocument(doc), target: params.target ? describeObject(resolveObject(doc, params.target), 0, 1) : null, tree, verification: { editorReadback: false, xmlReadback: false, externalReload: false, strength: NONE_STRENGTH }, persisted: false, strength: NONE_STRENGTH, note: "仅返回快照，未比对预期值。传入 target 和 expected 执行验证。" };
+    return { ok: true, document: describeDocument(doc), target: params.target ? describeObject(resolveObject(doc, params.target), 0, 1) : null, tree, verification: { editorReadback: false, xmlReadback: false, externalReload: false, strength: NONE_STRENGTH }, persisted: false, strength: NONE_STRENGTH, note: "仅返回快照，未比对预期值。传入 expected 执行验证，expected.children 执行对象树比对。" };
 }
 // Animation bridge helpers. FairyGUI Editor 6.1.4 exposes these APIs through Puerts.
 const TRANSITION_TYPES = [

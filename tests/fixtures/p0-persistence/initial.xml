@@ -4,5 +4,6 @@
 		<image id="image1" name="picture" src="red" xy="10,20" size="64,64"/>
 		<loader id="loader1" name="icon" url="ui://fixture0red" xy="80,20" size="64,64"/>
 		<text id="text1" name="title" xy="0,100" size="240,60" fontSize="24" align="center" vAlign="middle" leading="4" letterSpacing="1"/>
+	<component id="comp1" name="panel" src="panel" xy="200,200" size="100,50"/>
 	</displayList>
 </component>

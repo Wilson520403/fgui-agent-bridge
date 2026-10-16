@@ -31,9 +31,9 @@
 | `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing、`save?`、`verify?`、`external_reload?`（删除不支持 external_reload） | 读取、更新或显式强制删除 MovieClip |
 | `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth` | 读取活动文档或对象树 |
 | `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
-| `fgui_replace_object_resource` | target、resource_url、expected_type、state?、save?、external_reload? | 通过 Editor API 替换 Image、Loader 或 Button 资源引用 |
+| `fgui_replace_object_resource` | target、resource_url、expected_type、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用（Button 状态显式拒绝） |
 | `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读 |
-| `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态 |
+| `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态；expected 含 children 时执行递归对象树比对 |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
 | `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name`，均支持 `save?`、`verify?`、`external_reload?` | 声明式创建、完整替换或删除 Transition |
@@ -112,7 +112,7 @@
 
 - `replace_object_resource` 本轮仅允许 Image/Loader，拒绝 Button `state`，避免把整个 Button 替换误报为状态资源替换。
 - 保存时检查 Editor 文档变为未修改；`save=false` 或 `verify=false` 不会声称磁盘已持久化。
-- `verify_document` 可传 `target + expected`，默认读取组件 XML 比对目标字段；无 `expected` 时只是快照。
+- `verify_document` 可传 `target + expected`，默认读取组件 XML 比对目标字段；无 `expected` 时只是快照；`expected` 含 `children` 时执行递归对象树比对（见下文 0.8.7）。
 - 失败响应保留 `error.details`，包含 `stage`、expected、actual 和 differences（如有）。
 - **external reload（2026-10-15 实现并在 FairyGUI Editor 6.1.4 真机验证）**：`replace_object_resource`、`set_text_style`、`verify_document` 支持 `external_reload`，保存后关闭当前文档、重新打开、在新文档上按 target 重新定位并比对 `expected`。关闭方式不硬编码，运行时按 `CloseDocuments` → `CloseDocument` 探测并在 `verification.reload.closeStrategy` 回报，实测命中 `CloseDocuments`。
 - 响应的 `strength` 字段标明验证强度：`reload`（关闭重开比对通过，可确认持久化）/ `disk`（仅保存成功且磁盘 XML 匹配）/ `none`（未验证）。读 `persisted` 时必须同时看 `strength`，否则会把 `disk` 误当作已排除「重载丢值」。
@@ -135,3 +135,12 @@
 - 全部写 Action 的响应统一带 `saved`、`persisted`、`strength`、`verification`、`note`；`requiresSave` 改为按实际保存结果返回。
 - 包资源名称比对按去扩展名归一化：`item.name` 注册归一化时机不一致（MovieClip 创建时可不带扩展名），`package.xml` 的 `name` 属性总是文件名；真机 6.1.4 实测确认。
 - 模拟宿主新增 Transition 与包资源验证用例，总数 71；**真机 6.1.4 已验证**：`upsert_transition`/`add_transition_item` 磁盘回读（itemCount 折叠正确）、`remove_transition` 关闭重开后仍缺失（`CloseDocuments`）、`create_movieclip` 清单+`.jta`+asset reload（`strength:reload`）、`remove_movieclip` 包清单缺失、`create_component` 清单回读（`strength:disk`）。
+
+### verify_document 对象树比对（0.8.7）
+
+- `expected` 扩展为可递归的树结构 spec：`children` 为子节点 spec 数组，节点其余字段仍为 `VERIFIED_KEYS` 属性断言（`id`/`name`/`type` 同时充当定位与断言）；保留结构字段 `childrenMode` 与 `index`。
+- `childrenMode` 默认 `exact`：子节点按位置全等，数量必须一致，spec 中的 `index` 若提供必须等于实际位置；`subset` 模式下每个 spec 按 `id`/`name`/`index` 定位一个互不重复的子节点，允许多余节点，未定位到报 `target_not_found`（editor）或 `persistence_failed`（xml/reload）。
+- 含 `children` 时 `target` 可省略（默认文档根组件）；纯属性 `expected` 仍必须提供 `target`。
+- 三阶段验证沿用同一梯子：editor 内存树比对 → 磁盘 XML 比对（仅活动文档序列化范围：根节点 + displayList 直接子节点；嵌套组件内部计入 `verification.xmlSkipped`，不比对其他文件的 XML）→ `external_reload` 关闭重开后在重新载入的文档上整树重走。
+- 响应 `verification` 新增 `mode:"tree"`、`checked`（比对节点数）、`xmlChecked`/`xmlSkipped`（XML 阶段覆盖/跳过数）；失败 `error.details` 带 `node`（如 `expected.children[2]`）定位到具体 spec 路径。
+- 模拟宿主新增 16 项树比对用例（总数 87）；**已在 FairyGUI Editor 6.1.4 真机验证**：exact 全树 10 节点（XML 覆盖 9、嵌套组件内部跳过 1）、subset 容忍多余节点、`editor_rejected`/`target_not_found`/`persistence_failed`(stage xml)/`invalid_argument` 各类失败路径、非根 target 子树的 xmlSkipped 记账，以及 `external_reload` 经 `CloseDocuments` 关闭重开后整树 10 节点重走（`strength:reload`）。

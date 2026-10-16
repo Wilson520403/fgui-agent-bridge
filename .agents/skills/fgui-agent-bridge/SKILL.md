@@ -58,7 +58,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
 - `set_property`、`insert_object`、`remove_object`、`replace_object_resource`、`set_text_style` 与全部 Transition 写操作统一走写验证：支持 `save` / `verify` / `external_reload`，返回 `persisted` + `strength`（`reload`/`disk`/`none`）；`external_reload` 需 `save=true`，为关闭重开文档后重新比对。`remove_object` 与 `remove_transition` 按缺失性验证（磁盘 XML 与重载后均不再解析到节点）。
 - 包资源写操作（`create_component`、`create_button`、`import_image`/`import_font`/`import_sound`、`create_movieclip`/`update_movieclip`/`remove_movieclip`）支持 `save` / `verify`，验证 `package.xml` 条目；image/sound/font/movieclip 的 `external_reload` 为 asset 重载（`UnloadAsset` + `GetAsset`），组件创建与删除不支持 `external_reload`，`strength` 上限 `disk`。
-- 文档与持久化验证：使用 `fgui_verify_document` 重新读取活动文档对象树并可传入 `target + expected` 比对组件 XML 磁盘持久化内容；无 `expected` 时仅作为对象树快照。
+- 文档与持久化验证：使用 `fgui_verify_document` 重新读取活动文档对象树并可传入 `target + expected` 比对组件 XML 磁盘持久化内容；`expected` 含 `children` 时执行递归对象树比对（`childrenMode` 默认 `exact` 按位置全等，`subset` 按 id/name/index 定位且允许多余节点；含 `children` 时 `target` 可省略，默认根组件）；无 `expected` 时仅作为对象树快照。XML 阶段仅覆盖活动文档序列化范围（根节点 + displayList 直接子节点），嵌套组件内部计入 `verification.xmlSkipped`。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
 
 ### 3. 发布
@@ -83,7 +83,8 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT tree
 uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT replace-object-resource --id n12_ox87 ui://package/resource --expected-type image --save
 uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT get-text-style --path root/title
 uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT set-text-style --path root/title '{"fontSize":40,"color":"#FFFFFF","align":"center"}' --save
-uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT verify-document --max-depth 12 --target root/title --expected '{"fontSize":40}'
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT verify-document --max-depth 12 --path root/title --expected '{"fontSize":40}'
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT verify-document --expected '{"children":[{"name":"title","type":"text","fontSize":40},{"id":"n12_ox87"}]}'
 ```
 
 全局参数 `--project`、`--editor`、`--timeout` 必须位于子命令前。`call` 只用于调试原始 Action，不替代正式 MCP 工具。
@@ -188,7 +189,7 @@ git diff --check
 - MovieClip 删除即使传 `force=true` 也会执行引用检查；仍被组件使用时必须先移除引用。
 - `replace_object_resource` 本轮仅允许 Image 与 Loader，拒绝 Button `state` 替换，避免误将整个按钮组件替换为单一资源。
 - 文本样式修改支持类型与枚举检查，暂不支持自动 external reload。
-- `verify_document` 可传入 `target + expected` 执行磁盘 XML 持久化比对，失败响应保留结构化 `error.details`（包含 `stage`、expected、actual、differences）。
+- `verify_document` 可传入 `target + expected` 执行磁盘 XML 持久化比对，`expected.children` 递归比对对象树；失败响应保留结构化 `error.details`（包含 `stage`、`node`（spec 路径）、expected、actual、differences）。
 - Transition 持久化验证只覆盖 `<transition>` 名称与公开条目数；`upsert_transition` 等操作可在保存前用 `fgui_verify_document` 之外的方式读取 `list_transitions` 做内存级确认，但不要据此声称属性级磁盘持久化。
 - `set_property` 的持久化验证只覆盖已钉住序列化含义的属性（`x`/`y`/`width`/`height`/`scale`/`rotation`/`alpha`/`visible`/`touchable`/`grayed`/`text`/`icon` 及文本样式字段）；其余白名单属性可写入但不进入 `expected`。
 - 不允许删除根组件；不要把 `discard`、`undo` 和 `save` 混为同一语义。

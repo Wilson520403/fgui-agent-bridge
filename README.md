@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-`v0.8.5` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4` · 本地 JSON 队列 + MCP stdio
+`v0.8.7` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4` · 本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
 
@@ -206,6 +206,7 @@ uv run fgui-agent publish --scope active
 | **Transition 动效** | `fgui_list_transitions`、`fgui_get_transition`、`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item` | 声明式增改整段过渡动效，或原子化修改特定轨道关键帧 |
 | **动画预览** | `fgui_preview_animation` | 在编辑器中实时播放、暂停、停止、跳帧预览 Transition 或 MovieClip |
 | **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 属性与操作撤销/重做、保存文档或放弃全部未保存修改 |
+| **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树（`expected.children` 递归比对）、替换 Image/Loader 资源引用、读写文本样式 |
 | **发布** | `fgui_get_publish_settings`、`fgui_publish` | 查询发布设置、执行资源发布（支持活动包/指定包/全部包） |
 
 ---
@@ -216,6 +217,7 @@ uv run fgui-agent publish --scope active
 - **MovieClip 序列帧**：从有序本地图片序列直接嵌入 `.jta`，不会在包内产生散图 `ui://` 资源。
 - **大图独立图集**：达到 `1920×1080` 或任一边达到 `2048` 的图片自动标记为 `alone` 纹理集，发布时自动纠正历史大图配置。
 - **写操作验证**：写操作支持保存后磁盘 XML 比对，以及「关闭重开再比对」的强持久化验证。
+- **对象树比对**：`fgui_verify_document` 的 `expected` 可携带递归 `children` spec，逐层比对名称、类型和关键属性；`childrenMode` 支持 `exact`（按位置全等）与 `subset`（按 id/name/index 定位、允许多余节点），磁盘比对覆盖当前组件 XML 序列化范围。
 
 ---
 

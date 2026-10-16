@@ -15,7 +15,7 @@
 | 阶段 | 当前状态 | 已有能力与主要缺口 |
 | --- | --- | --- |
 | Phase 0 | 部分完成 | 八类对象隔离夹具、初始快照、统一 JSON 报告与测试命令已于 2026-10-15 落地（`scripts/phase0_fixture.py`、`sample/assets/Package1/BridgeFixture.xml`）；external reload 已于 2026-10-15 补齐并真机验证，「请求成功但未持久化」的自动断言仍只覆盖写 Action，`set_property` 等旧接口未纳入。 |
-| Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；**external reload 已于 2026-10-15 完成并在 FairyGUI Editor 6.1.4 真机验证**（关闭方式实测为 `CloseDocuments`）；**2026-10-16 `set_property`/`insert_object`/`remove_object` 已迁入统一 `writeVerification` 语义并真机验证**，验证层新增 scale/rotation/alpha/visible/touchable/grayed/text/icon 通用属性；**同日 0.8.6 起全部 Transition 写操作与包资源写操作（创建/导入/MovieClip）已接入统一验证**：Transition 按 `<transition>` 名称与公开条目数验证、组件级 external reload；包资源按 `package.xml` 条目+资源文件验证、asset 类资源支持 `UnloadAsset`/`GetAsset` 重载；`verify_document` 的完整对象树比对仍未完成。 |
+| Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；**external reload 已于 2026-10-15 完成并在 FairyGUI Editor 6.1.4 真机验证**（关闭方式实测为 `CloseDocuments`）；**2026-10-16 `set_property`/`insert_object`/`remove_object` 已迁入统一 `writeVerification` 语义并真机验证**，验证层新增 scale/rotation/alpha/visible/touchable/grayed/text/icon 通用属性；**同日 0.8.6 起全部 Transition 写操作与包资源写操作（创建/导入/MovieClip）已接入统一验证**：Transition 按 `<transition>` 名称与公开条目数验证、组件级 external reload；包资源按 `package.xml` 条目+资源文件验证、asset 类资源支持 `UnloadAsset`/`GetAsset` 重载；**0.8.7 起 `verify_document` 的 `expected` 支持递归 `children` 对象树比对**（`exact`/`subset` 模式、XML 阶段限活动文档序列化范围、external reload 整树重走），**已在 FairyGUI Editor 6.1.4 真机验证**。 |
 | Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
 | Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
 | Phase 4 | 未完成 | 未找到计划中的 List/Group/Relation/Controller/gearDisplay 专用 Action。 |
@@ -28,7 +28,7 @@
 - 本次执行 `uv run python -m unittest discover -s tests -q`：**29 项通过**（含 2026-10-15 新增的 5 项 Phase 0 夹具离线校验；模拟宿主内部另有 36 项回归）；这是 Python/协议与静态接口测试，不是真实 Editor 全流程验收。
 - 既有 Editor 记录：`tests/reports/sample-p0-validation.json`、`sample-p0-retest.json`、`sample-p0-color-errors-retest.json`。较新的报告修复了早期颜色和错误码失败，但仍列出 Button 状态、自动 XML 回读、自动重载、批量原子性、lineGap 响应等缺口。
 - **2026-10-15 已真机验证 external reload（本次唯一一次重新操作 Editor 的部分）：** 在 FairyGUI Editor 6.1.4 上对 `BridgeFixture.txtLabel` 执行「写入 + 保存 + 关闭重开 + 重新定位比对」，`strength` 为 `reload`，`verification.reload.performed` 为 true，重载后 `fontSize/color/lineGap` 与 `expected` 一致；关闭方式由运行时探测实测为 `CloseDocuments`，非假设。完整用例与环境记录见 `tests/reports/external-reload-live.json`。**仍未做：** 发布资源、刷新 Unity、Play Mode 或真机测试。
-- **本轮已处理：** `writeVerification` 检查保存状态、读取组件 XML 与 expected 比对；`verifyDocument` 支持 expected 校验；external reload 与 `strength` 验证强度分级。**仍未完成：** `verify_document` 的完整对象树比对（写 Action 统一语义已由 0.8.5/0.8.6 覆盖）。
+- **本轮已处理：** `writeVerification` 检查保存状态、读取组件 XML 与 expected 比对；`verifyDocument` 支持 expected 校验；external reload 与 `strength` 验证强度分级。**0.8.7 已补齐** `verify_document` 对象树比对：`expected` 支持递归 `children` spec（`childrenMode`：`exact` 默认按位置全等 / `subset` 按 id/name/index 定位），三阶段验证沿用同一梯子（editor 内存树 → 磁盘 XML 限活动文档序列化范围 → external reload 整树重走），模拟宿主 87 项全过；**已于 2026-10-16 在 FairyGUI Editor 6.1.4 真机复验**：BridgeFixture 根组件 exact 全树 10 节点通过（XML 覆盖 9、嵌套组件内部跳过 1）、subset 容忍多余节点、属性不符报 `editor_rejected`（details.node 定位到 `expected.children[i]`）、未定位子节点报 `target_not_found`、磁盘 XML 人为改坏报 `persistence_failed`(stage xml)、非根 target 子树的嵌套节点记入 `xmlSkipped`、`external_reload` 经 `CloseDocuments` 关闭重开后整树重走得 `strength:reload`。
 - **2026-10-15 已补齐 Phase 0 夹具：** `tests/fixtures/phase0/initial-*.{json,xml}` 已由 FairyGUI Editor 6.1.4 回读并重新序列化生成（不再是空数组与占位注释），覆盖 Image/Loader/Button/Text/List/Group/Controller/Transition 八类对象；`scripts/phase0_fixture.py` 提供 `capture` / `verify [--live]` 两种模式并输出统一 JSON 报告。离线 12 项、实况 21 项校验全通过。**仍缺：** Bridge 无创建 List/Group/Controller/Loader 节点的 Action（`insert_object` 只能插入已有包资源），这 4 类节点只能由工程文件承载，并已验证编辑器可加载与重写它们。
 - **2026-10-15 修复「XML 缺省属性导致假失败」：** FairyGUI 序列化时会省略仍为默认值的属性，而 `persistedObjectValues` 把缺失属性读成 `null`，导致断言任何默认值属性（典型如默认色 `#FFFFFF`、默认对齐 `left`）时抛出**虚假的** `persistence_failed`——表现像严重的持久化故障，足以诱发对正确改动的错误回滚。修复把缺失属性解析为 FairyGUI 默认值，使「期望默认值」通过、「期望非默认值而 XML 缺失」仍然失败关闭。原有测试 `Read-only verify compares expected Editor and disk` 此前是因为夹具把默认属性也写进 XML 才通过，属于因错因通过，已随夹具改为真实序列化行为而转为因对因通过。**已于 2026-10-16 在 FairyGUI Editor 6.1.4 真机复验**：`verify_document` 断言 XML 缺失的默认属性 `align:"left"` 通过（`persisted:true`、`strength:disk`）；断言 `align:"center"` 在「内存已改、磁盘未存」时仍以 `persistence_failed`（stage `xml`）失败关闭；`set_text_style fontSize:36 --save --external-reload` 经 `CloseDocuments` 关闭重开后回读一致（`strength:reload`），随后已还原 fontSize:32。同时修复夹具脚本一个跨会话假失败：`get_tree` 中 List item 实例等运行时节点的 id 由编辑器按会话分配（如 `n0_dftm`→`n0_jrnu`），`snapshot.tree.match` 现只严格比对持久化到组件 XML 的 id，运行时节点仅比对 name/type/结构。证据见 `tests/reports/phase0-live-recheck.json`。
 - **2026-10-16 `set_property`/`insert_object`/`remove_object` 迁入统一写验证（0.8.5）：** 三个 Action 复用 `writeVerification`/`validateReloadOptions`，返回统一的 `{ok,target,before/after,documentModified,saved,persisted,strength,verification,note}` 并支持 `save`/`verify`/`externalReload`。`set_property` 保留 Agent 属性事务栈，新增类型归一化（数值/布尔/字符串在写入前校验）与 `font` 的 `ui://` 解析；验证层 `VERIFIED_KEYS` 扩展 `scaleX/scaleY/rotation/alpha/visible/touchable/grayed/text/icon` 通用属性（序列化名与默认值已按 6.1.4 实测钉住，如 `visible` 仅在 `false` 时序列化）。`remove_object` 改为缺失性验证：编辑器回读确认不可解析、保存后磁盘 XML 不含节点 id、external reload 重开后仍缺失才报 `persisted`；`insert_object` 验证新节点 `id/name/type/x/y`（含引用时 `resourceURL`）。模拟宿主 51 项全过；真机 6.1.4 已验证 `x`、`visible` 双向、`scaleX` 关闭重开、insert 磁盘回读与 remove 重载后仍缺失。Transition/MovieClip/创建导入类 Action 未在本轮接入。
@@ -317,11 +317,11 @@ Lanhu 设计中的：
 | `disk` | 仅保存成功且磁盘 XML 匹配 | 不能 |
 | `none` | 未验证持久化 | 不能 |
 
-- [ ] 增加 `verify_document` Action：（部分完成：插件/MCP/CLI 入口已存在，仅返回当前文档快照，以下比对尚未完整实现。）
-  - 重新读取活动文档；
-  - 对比对象树；
-  - 对比关键属性；
-  - 检查 XML 是否包含预期值。
+- [x] 增加 `verify_document` Action：（0.8.7 补齐对象树比对：`expected` 支持递归 `children`/`childrenMode`/`index` spec，editor 内存树、磁盘 XML（限活动文档序列化范围）与 external reload 三阶段整树比对；含 `children` 时 `target` 可省略默认根组件。）
+  - 重新读取活动文档；✓
+  - 对比对象树；✓（exact 按位置全等 / subset 按 id/name/index 定位）
+  - 对比关键属性；✓（spec 节点沿用 VERIFIED_KEYS 断言）
+  - 检查 XML 是否包含预期值。✓（覆盖根节点 + displayList 直接子节点；嵌套组件内部记入 `xmlSkipped`）
 - [x] 保存后支持可选的 external reload 验证。（2026-10-15 完成并真机验证：`externalReload: true` 会在保存后关闭当前文档、重新打开、在新文档上按 target 重新定位并比对 `expected`。关闭方式不硬编码，运行时按 `CloseDocuments` → `CloseDocument` 依次探测并在 `verification.reload.closeStrategy` 回报实测结果；FairyGUI Editor 6.1.4 实测命中 `CloseDocuments`。响应新增 `strength` 字段（`reload` / `disk` / `none`）标明验证强度，使 `persisted: true` 的含义不再有歧义。要求 save、拒绝 `verify:false` 冲突、关闭后不触碰旧句柄均已实现并覆盖。证据见 `tests/reports/external-reload-live.json`。）
 - [x] 避免只返回请求队列已写入；必须等待编辑器响应。（Python Bridge client 按请求 ID 等待响应。）
 - [ ] 统一错误类型：target not found、ambiguous target、unsupported property、editor rejected、persistence failed、publish failed。（部分完成：结构化错误映射和 Python 透传已实现，缺目标/非文本/非法颜色有 Editor 证据；真实持久化失败检测未完成。）

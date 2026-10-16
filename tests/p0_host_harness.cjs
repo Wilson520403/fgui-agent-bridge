@@ -116,6 +116,11 @@ function makePackage(){
   DeleteItem(item){const i=packageItems.indexOf(item);if(i>=0)packageItems.splice(i,1);delete resources[item.GetURL()];delete files[item.file];}
  };
 }
+// The inner child of the comp1 fixture component; rebuilt on reload so the
+// reopened document keeps modelling a nested component's content.
+function makeInner(){
+ return {id:'inner1',name:'innerLabel',objectType:'text',font:'',fontSize:12,color:new Color(1,1,1,1),align:'left',verticalAlign:'top',leading:0,letterSpacing:0,autoSize:'none',width:50,height:20,x:0,y:0,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
+}
 function setup() {
  files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
@@ -125,6 +130,9 @@ function setup() {
  resources={'ui://fixture0red':resource('red'),'ui://fixture0blue':resource('blue',128,128)};
  objects=[{id:'image1',name:'picture',objectType:'image',resourceURL:'ui://fixture0red',width:64,height:64,x:10,y:20}, {id:'loader1',name:'icon',objectType:'loader',url:'ui://fixture0red',width:64,height:64,x:80,y:20}, {id:'text1',name:'title',objectType:'text',font:'',fontSize:24,color:new Color(1,1,1,1),align:'center',verticalAlign:'middle',leading:4,letterSpacing:1,autoSize:'none',width:240,height:60,x:0,y:100}];
  for(const o of objects)Object.assign(o,{scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}});
+ // A nested component child: its own serialized file is out of scope for this
+ // document's XML stage, which is exactly what the tree verification must skip.
+ objects.push({id:'comp1',name:'panel',objectType:'component',resourceURL:'ui://fixture0panel',width:100,height:50,x:200,y:200,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;},get numChildren(){return 1},GetChildAt:()=>makeInner()});
  doc=makeDoc();
  resources['ui://fixture0component']={file:'fixture.xml',owner:{id:'fixture0'}};
  const mc={id:'mc1',name:'loop.jta',type:'movieclip',title:'loop',path:'/',file:'/pkg/mc.jta',width:64,height:64,exported:true,folderAtlas:'',owner:pkg,
@@ -147,7 +155,8 @@ function setup() {
  ctx.describeObject=o=>({id:o.id});ctx.describeDocument=()=>({modified:doc.isModified});
 }
 function makeDoc(){
- const d={content:{resourceURL:'ui://fixture0component',transitions:makeTransitionsCollection(transitions)},docURL:'ui://fixture0component',dead:false,
+ const d={content:{id:'root',name:'root',objectType:'component',resourceURL:'ui://fixture0component',transitions:makeTransitionsCollection(transitions),x:0,y:0,width:400,height:300,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
+  get numChildren(){return objects.length},GetChildAt:i=>objects[i],GetChild:n=>objects.find(o=>o.name===n)||null},docURL:'ui://fixture0component',dead:false,
   history:{CanUndo:()=>false,CanRedo:()=>false,GetPendingList:()=>({Count:0})},
   SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;},SelectObject(){},
   UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
@@ -181,6 +190,7 @@ function reloadFromDisk(){
   const scale=(a.scale||'1,1').split(',').map(Number);
   const o={id:a.id,name:a.name,x:xy[0],y:xy[1],width:size[0],height:size[1],scaleX:scale[0],scaleY:scale[1]??scale[0],rotation:Number(a.rotation||0),alpha:Number(a.alpha||1),visible:a.visible!=='false',touchable:a.touchable!=='false',grayed:a.grayed==='true',text:a.text??a.title??'',icon:a.icon||'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
   if(n.name==='image'){o.objectType='image';o.resourceURL='ui://fixture0'+a.src;}
+  if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;}
   if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
   if(n.name==='text'){Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none'});}
   return o;
@@ -212,6 +222,7 @@ function serialize() {
  if(o.text)a[o.objectType==='text'?'text':'title']=o.text;
  if(o.icon)a.icon=o.icon;
  if(o.objectType==='image')a.src=o.resourceURL.slice('ui://fixture0'.length);
+ if(o.objectType==='component')a.src=o.resourceURL.slice('ui://fixture0'.length);
  if(o.objectType==='loader')a.url=o.url;
  if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);}
  return `<${o.objectType} ${Object.entries(a).map(([k,v])=>`${k}="${esc(v)}"`).join(' ')}/>`;
@@ -233,7 +244,7 @@ test('Editor ignored replacement is not masked by input URL',()=>{replaceMode='i
 test('Invalid resource is rejected before mutation',()=>{assert.throws(()=>replace('image1',{resourceURL:'ui://missing'}));assert.equal(replaceCount,0);assert.equal(doc.isModified,false);});
 test('Unsupported resource type rejected before mutation',()=>{resources['ui://fixture0blue'].type='font';rejects(()=>replace('image1'),'invalid_argument','input');assert.equal(replaceCount,0);});
 test('Missing target rejected before save',()=>{assert.throws(()=>replace('missing'));assert.equal(files['fixture.xml'],fixture);});
-test('Repeated Image replacement does not recreate objects',()=>{replace('image1');const disk=files['fixture.xml'];replace('image1');assert.equal(replaceCount,1);assert.equal(objects.length,3);assert.equal(files['fixture.xml'],disk);});
+test('Repeated Image replacement does not recreate objects',()=>{replace('image1');const disk=files['fixture.xml'];replace('image1');assert.equal(replaceCount,1);assert.equal(objects.length,4);assert.equal(files['fixture.xml'],disk);});
 test('Read-only verify compares expected Editor and disk',()=>{const r=ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24,lineGap:4,color:'#ffffff'}});assert.equal(r.persisted,true);assert.equal(r.verification.externalReload,false);assert.equal(doc.isModified,false);});
 test('Wrong expected value returns editor failure',()=>rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:99}}),'editor_rejected','editor'));
 test('No expected value is a snapshot, not verification',()=>{const r=ctx.verifyDocument({});assert.equal(r.persisted,false);assert.equal(r.verification.editorReadback,false);});
@@ -269,9 +280,9 @@ test('set_property without save never claims persistence',()=>{const r=set('text
 test('set_property rejects non-whitelist property before mutation',()=>{rejects(()=>set('text1','evil',1),'unsupported_property','input');assert.equal(objects[2].x,0);});
 test('set_property rejects invalid numeric before mutation',()=>{rejects(()=>set('text1','x','abc'),'invalid_argument','input');assert.equal(objects[2].x,0);});
 test('set_property external reload round-trips the value',()=>{const r=set('text1','scaleX',1.5,{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.scaleX,1.5);assert.equal(closeCount,1);});
-test('insert_object saves and reads the new node back from XML',()=>{const r=insert();assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.name,'inserted');assert.equal(r.verification.xml.resourceURL,'ui://fixture0red');assert.equal(r.verification.xml.x,5);assert.equal(objects.length,4);});
-test('insert_object rejects reload without save before inserting',()=>{rejects(()=>insert({save:false,externalReload:true}),'invalid_argument','input');assert.equal(objects.length,3);});
-test('remove_object verifies absence on disk after save',()=>{const r=remove('loader1');assert.equal(r.persisted,true);assert.equal(r.verification.xmlReadback,true);assert.equal(objects.length,2);assert.ok(!files['fixture.xml'].includes('loader1'));});
+test('insert_object saves and reads the new node back from XML',()=>{const r=insert();assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.name,'inserted');assert.equal(r.verification.xml.resourceURL,'ui://fixture0red');assert.equal(r.verification.xml.x,5);assert.equal(objects.length,5);});
+test('insert_object rejects reload without save before inserting',()=>{rejects(()=>insert({save:false,externalReload:true}),'invalid_argument','input');assert.equal(objects.length,4);});
+test('remove_object verifies absence on disk after save',()=>{const r=remove('loader1');assert.equal(r.persisted,true);assert.equal(r.verification.xmlReadback,true);assert.equal(objects.length,3);assert.ok(!files['fixture.xml'].includes('loader1'));});
 test('remove_object external reload proves the node stays gone',()=>{const r=remove('loader1',{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.absent,true);assert.equal(closeCount,1);});
 test('remove_object without save does not claim persistence',()=>{const r=remove('loader1',{save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(files['fixture.xml'],fixture);});
 test('remove_object fails closed when the disk write is stale',()=>{saveMode='stale';rejects(()=>remove('loader1'),'persistence_failed','xml');});
@@ -297,6 +308,29 @@ test('create_component saves the package manifest',()=>{const r=ctx.createCompon
 test('remove_movieclip verifies absence in package.xml after save',async()=>{const r=await ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:true});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.present,false);assert.ok(!files['/pkg/package.xml'].includes('mc1'));});
 test('remove_movieclip rejects externalReload before deleting',async()=>{await assert.rejects(()=>ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:true,externalReload:true}),e=>e.code==='invalid_argument'&&e.details.stage==='input');assert.ok(resources['ui://fixture0mc1']);});
 test('remove_movieclip without save keeps absence unverified',async()=>{const r=await ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(r.strength,'none');});
+// --- verify_document tree spec --------------------------------------------
+const TREE_SPEC={type:'component',children:[
+ {id:'image1',type:'image',resourceURL:'ui://fixture0red'},
+ {name:'icon',type:'loader'},
+ {name:'title',type:'text',fontSize:24},
+ {name:'panel',type:'component',children:[{name:'innerLabel',fontSize:12}]}
+]};
+test('Tree spec compares structure and props on Editor and disk',()=>{const r=ctx.verifyDocument({expected:TREE_SPEC});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.mode,'tree');assert.equal(r.verification.checked,6);assert.equal(r.verification.xmlChecked,5);assert.equal(r.verification.xmlSkipped,1);});
+test('Tree spec targets a subtree and leaves XML deeper levels unclaimed',()=>{const r=ctx.verifyDocument({target:{id:'comp1'},expected:{type:'component',children:[{name:'innerLabel',fontSize:12}]}});assert.equal(r.persisted,true);assert.equal(r.verification.checked,2);assert.equal(r.verification.xmlChecked,1);assert.equal(r.verification.xmlSkipped,1);});
+test('Tree spec exact mode fails on missing child',()=>rejects(()=>ctx.verifyDocument({expected:{children:[{id:'image1'}]}}),'editor_rejected','editor'));
+test('Tree spec exact mode fails on extra child',()=>{objects.push({id:'extra1',name:'extra',objectType:'image',resourceURL:'ui://fixture0red'});rejects(()=>ctx.verifyDocument({expected:TREE_SPEC}),'editor_rejected','editor');});
+test('Tree spec fails on property mismatch deep in the tree',()=>{assert.throws(()=>ctx.verifyDocument({expected:{children:[{id:'image1'},{name:'icon'},{name:'title',fontSize:99},{name:'panel',children:[{name:'innerLabel'}]}]}}),e=>e.code==='editor_rejected'&&e.details.node==='expected.children[2]');});
+test('Tree spec subset mode tolerates extra children',()=>{objects.push({id:'extra1',name:'extra',objectType:'image',resourceURL:'ui://fixture0red'});const r=ctx.verifyDocument({expected:{childrenMode:'subset',children:[{id:'text1',fontSize:24},{name:'panel'}]}});assert.equal(r.verification.editorReadback,true);assert.equal(r.persisted,true);assert.equal(r.strength,'disk');});
+test('Tree spec subset mode reports a missing node as target_not_found',()=>rejects(()=>ctx.verifyDocument({expected:{childrenMode:'subset',children:[{name:'nope'}]}}),'target_not_found','editor'));
+test('Tree spec subset child without a locator is rejected at input',()=>rejects(()=>ctx.verifyDocument({expected:{childrenMode:'subset',children:[{fontSize:24}]}}),'invalid_argument','input'));
+test('Tree spec unknown property is rejected at input',()=>rejects(()=>ctx.verifyDocument({expected:{children:[{id:'image1',evil:1}]}}),'unsupported_property','input'));
+test('Tree spec childrenMode without children is rejected',()=>rejects(()=>ctx.verifyDocument({expected:{childrenMode:'subset'}}),'invalid_argument','input'));
+test('Tree spec flat expected still requires target',()=>rejects(()=>ctx.verifyDocument({expected:{fontSize:24}}),'invalid_argument','input'));
+test('Tree spec XML count mismatch fails closed',()=>{files['fixture.xml']=files['fixture.xml'].replace(/<component id="comp1"[^/]*\/>/,'');rejects(()=>ctx.verifyDocument({expected:TREE_SPEC}),'persistence_failed','xml');});
+test('Tree spec XML property mismatch names the node',()=>{files['fixture.xml']=files['fixture.xml'].replace('fontSize="24"','fontSize="99"');assert.throws(()=>ctx.verifyDocument({expected:TREE_SPEC}),e=>e.code==='persistence_failed'&&e.details.stage==='xml'&&e.details.node==='expected.children[2]');});
+test('Tree spec reload walks the whole tree on the reopened document',()=>{const r=ctx.verifyDocument({expected:TREE_SPEC,externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.checked,6);assert.equal(closeCount,1);});
+test('Tree spec reload catches a value the reload drops',()=>{text();dropOnReload=true;assert.throws(()=>ctx.verifyDocument({expected:{childrenMode:'subset',children:[{id:'text1',fontSize:40}]},externalReload:true}),e=>e.code==='persistence_failed'&&e.details.stage==='reload');});
+test('Tree spec reload refuses a dirty document before closing',()=>{doc.SetModified(true);rejects(()=>ctx.verifyDocument({expected:TREE_SPEC,externalReload:true}),'invalid_argument','reload');assert.equal(closeCount,0);});
 // externalReloadVerified stays false on purpose: this suite proves the reload
 // verification *logic* against a mocked host, never Editor acceptance.
 (async()=>{

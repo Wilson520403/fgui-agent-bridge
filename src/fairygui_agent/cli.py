@@ -269,7 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--path")
     verify_parser.add_argument("--id")
     verify_parser.add_argument("--name")
-    verify_parser.add_argument("--expected", help="预期属性 JSON 对象；必须指定目标")
+    verify_parser.add_argument("--expected", help="预期属性 JSON 对象；含 children 时执行对象树比对且可省略 target（默认根组件）")
     verify_parser.add_argument("--editor-only", action="store_true", help="只比对 Editor，不读取 XML")
     verify_parser.add_argument("--external-reload", action="store_true", help="关闭并重新打开文档再比对；要求文档已保存，本命令不会保存")
 
@@ -561,9 +561,11 @@ def main() -> int:
             action = "verify_document"
             params = {"maxDepth": args.max_depth, "readXml": not args.editor_only, "externalReload": args.external_reload}
             if args.expected is not None:
-                if not any((args.path, args.id, args.name)):
-                    raise ValueError("--expected 必须指定目标")
-                params["expected"] = load_json_value(args.expected)
+                expected_value = load_json_value(args.expected)
+                is_tree = isinstance(expected_value, dict) and any(k in expected_value for k in ("children", "childrenMode", "index"))
+                if not any((args.path, args.id, args.name)) and not is_tree:
+                    raise ValueError("--expected 必须指定目标；含 children 的树结构比对可省略 target（默认根组件）")
+                params["expected"] = expected_value
             target = {k: v for k, v in (("path", args.path), ("id", args.id), ("name", args.name)) if v}
             if len(target) > 1: raise ValueError("verify-document 的 target 参数只能提供一个")
             if target: params["target"] = target
