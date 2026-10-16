@@ -27,6 +27,7 @@ const tests=[];
 let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
+let controllers;
 function makeTransitionItem(targetId,type,frame){
  const it={targetId,type,frame,label:'',tween:false,easeType:'Quad',repeat:0,yoyo:false,usePath:false,pathData:'',customEaseData:'',value:{f1:0,f2:0,b1:true,b2:true,b3:false,i:0,s:'',s2:'',iu:null},prevItem:null,nextItem:null,_path:[],
   pathPoints:{get Count(){return it._path.length},get_Item:i=>it._path[i],set_Item(i,v){it._path[i]=v;}},
@@ -121,18 +122,62 @@ function makePackage(){
 function makeInner(){
  return {id:'inner1',name:'innerLabel',objectType:'text',font:'',fontSize:12,color:new Color(1,1,1,1),align:'left',verticalAlign:'top',leading:0,letterSpacing:0,autoSize:'none',width:50,height:20,x:0,y:0,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
 }
+function makeController(name,pageNames){
+ const pages=pageNames.map((n,i)=>({id:String(i),name:n}));
+ const c={name,_selectedIndex:0,exported:false,autoRadioGroupDepth:false,homePage:'',alias:'',homePageType:'common',parent:null,changing:false,
+  get selectedIndex(){return c._selectedIndex;},set selectedIndex(v){c._selectedIndex=v;},
+  get selectedPage(){return pages[c._selectedIndex]?pages[c._selectedIndex].name:'';},
+  set selectedPage(n){const i=pages.findIndex(p=>p.name===n);if(i>=0)c._selectedIndex=i;},
+  get selectedPageId(){return pages[c._selectedIndex]?pages[c._selectedIndex].id:'';},
+  get pageCount(){return pages.length;},
+  _pages:pages,
+  GetPages(){return {Count:pages.length,get_Item:i=>pages[i]};},
+  GetPageIds(){return {Count:pages.length,get_Item:i=>pages[i].id};},
+  GetPageNames(){return {Count:pages.length,get_Item:i=>pages[i].name};},
+  HasPageId:v=>pages.some(p=>p.id===String(v)),
+  HasPageName:v=>pages.some(p=>p.name===String(v)),
+  AddPage(n){pages.push({id:String(pages.length),name:String(n)});return pages[pages.length-1];},
+  AddPageAt(n,i){const p={id:String(pages.length),name:String(n)};pages.splice(i,0,p);return p;},
+  RemovePageAt(i){pages.splice(i,1);},
+  SetPages(names){pages.length=0;names.forEach((n,i)=>pages.push({id:String(i),name:String(n)}));},
+  SetSelectedIndex(i){c._selectedIndex=i;}};
+ return c;
+}
+function makeRelations(){
+ const r={_items:[],
+  get items(){return {Count:r._items.length,get_Item:i=>r._items[i]}},
+  get isEmpty(){return r._items.length===0;},
+  AddItem(t,sp){const it={owner:null,target:t,sidePair:String(sp||''),desc:String(sp||'')};r._items.push(it);return it;},
+  RemoveItem(it){const i=r._items.indexOf(it);if(i>=0)r._items.splice(i,1);},
+  RemoveTarget(t){r._items=r._items.filter(i=>i.target!==t);},
+  GetItem(t){return r._items.find(i=>i.target===t)||null;},
+  HasTarget(t){return r._items.some(i=>i.target===t);},
+  Reset(){r._items.length=0;},
+  Write(){return new XML({name:'relations',attrs:{},children:r._items.map(i=>({name:'relation',attrs:{target:i.target?String(i.target.id||''):'',sidePair:i.sidePair},children:[]}))});}};
+ return r;
+}
+function attachLayoutMembers(o){
+ o.relations=makeRelations();
+ o._gears=[];
+ o.GetGear=(i,create)=>{if(!o._gears[i]&&create)o._gears[i]={controller:null,pages:[]};return o._gears[i]||null;};
+ o.CheckGearDisplay=()=>{};
+}
 function setup() {
  files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
  transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
+ controllers=[makeController('c1',['page0','page1'])];
  pkg=makePackage();
  const resource=(id,w=64,h=64)=>({id,owner:{id:'fixture0'},type:'image',width:w,height:h,GetURL:()=>`ui://fixture0${id}`});
  resources={'ui://fixture0red':resource('red'),'ui://fixture0blue':resource('blue',128,128)};
+ resources['ui://fixture0panel']={id:'panel',owner:{id:'fixture0'},type:'component',width:100,height:50,GetURL:()=>'ui://fixture0panel'};
  objects=[{id:'image1',name:'picture',objectType:'image',resourceURL:'ui://fixture0red',width:64,height:64,x:10,y:20}, {id:'loader1',name:'icon',objectType:'loader',url:'ui://fixture0red',width:64,height:64,x:80,y:20}, {id:'text1',name:'title',objectType:'text',font:'',fontSize:24,color:new Color(1,1,1,1),align:'center',verticalAlign:'middle',leading:4,letterSpacing:1,autoSize:'none',width:240,height:60,x:0,y:100}];
  for(const o of objects)Object.assign(o,{scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}});
+ objects.forEach(attachLayoutMembers);
  // A nested component child: its own serialized file is out of scope for this
  // document's XML stage, which is exactly what the tree verification must skip.
  objects.push({id:'comp1',name:'panel',objectType:'component',resourceURL:'ui://fixture0panel',width:100,height:50,x:200,y:200,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;},get numChildren(){return 1},GetChildAt:()=>makeInner()});
+ attachLayoutMembers(objects[objects.length-1]);
  doc=makeDoc();
  resources['ui://fixture0component']={file:'fixture.xml',owner:{id:'fixture0'}};
  const mc={id:'mc1',name:'loop.jta',type:'movieclip',title:'loop',path:'/',file:'/pkg/mc.jta',width:64,height:64,exported:true,folderAtlas:'',owner:pkg,
@@ -146,7 +191,7 @@ function setup() {
  };
  const app={activeDoc:null,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
   GetItemByURL:url=>resources[url] || null,GetPackage:()=>pkg,GetPackageByName:()=>pkg,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,SetChanged(){},Save(){}},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  ctx.getActiveDocument=()=>doc;
@@ -155,8 +200,13 @@ function setup() {
  ctx.describeObject=o=>({id:o.id});ctx.describeDocument=()=>({modified:doc.isModified});
 }
 function makeDoc(){
- const d={content:{id:'root',name:'root',objectType:'component',resourceURL:'ui://fixture0component',transitions:makeTransitionsCollection(transitions),x:0,y:0,width:400,height:300,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
-  get numChildren(){return objects.length},GetChildAt:i=>objects[i],GetChild:n=>objects.find(o=>o.name===n)||null},docURL:'ui://fixture0component',dead:false,
+ const content={id:'root',name:'root',objectType:'component',resourceURL:'ui://fixture0component',transitions:makeTransitionsCollection(transitions),x:0,y:0,width:400,height:300,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
+  get numChildren(){return objects.length},GetChildAt:i=>objects[i],GetChild:n=>objects.find(o=>o.name===n)||null,
+  get controllers(){return {Count:controllers.length,get_Item:i=>controllers[i]}},
+  GetController:n=>controllers.find(c=>c.name===n)||null,
+  AddController(c){controllers.push(c);return c;},
+  RemoveController(c){const i=controllers.indexOf(c);if(i>=0)controllers.splice(i,1);}};
+ const d={content,docURL:'ui://fixture0component',dead:false,
   history:{CanUndo:()=>false,CanRedo:()=>false,GetPendingList:()=>({Count:0})},
   SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;},SelectObject(){},
   UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
@@ -183,6 +233,12 @@ function hexToColor(hex){
 // which is exactly what the reload stage is supposed to detect.
 function reloadFromDisk(){
  const parsed=parseXML(files['fixture.xml']);
+ controllers.length=0;
+ for(const n of parsed.children.filter(c=>c.name==='controller')){
+  const c=makeController(n.attrs.name,(n.attrs.pages||'').split(',').filter((s,i)=>i%2===1));
+  if(n.attrs.selected!==undefined)c._selectedIndex=Number(n.attrs.selected);
+  controllers.push(c);
+ }
  const list=parsed.children.find(n=>n.name==='displayList');
  objects=(list?list.children:[]).map(n=>{
   const a=n.attrs;
@@ -193,6 +249,13 @@ function reloadFromDisk(){
   if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;}
   if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
   if(n.name==='text'){Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none'});}
+  if(n.name==='list'){Object.assign(o,{objectType:'list',layout:a.layout||'column',selectionMode:a.selectionMode||'single',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),defaultItem:a.defaultItem||'',autoResizeItem:a.autoItemSize==='true',align:a.align||'none',verticalAlign:a.vAlign||'none',selectionController:a.selectionController||'',foldInvisibleItems:a.foldInvisibleItems==='true',clearOnPublish:a.autoClearItems==='true',scrollItemToViewOnClick:a.scrollItemToViewOnClick==='true',overflow:a.overflow||'visible',marginStr:a.margin||'0,0,0,0',numChildren:0,GetChildAt:()=>null});}
+  if(n.name==='group'){Object.assign(o,{objectType:'group',advanced:a.advanced==='true',layout:a.layout||'',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),excludeInvisibles:a.excludeInvisibles==='true',mainGridMinSize:Number(a.gridMinSize||0),mainGridIndex:Number(a.gridIndex||0),autoSizeDisabled:a.autoSizeDisabled==='true',collapsed:a.collapsed==='true'});}
+  attachLayoutMembers(o);
+  for(const c of n.children){
+   if(c.name==='relation')o.relations._items.push({owner:o,target:c.attrs.target?{id:c.attrs.target}:null,sidePair:c.attrs.sidePair||'',desc:c.attrs.sidePair||''});
+   if(c.name==='gearDisplay'){const g={controller:controllers.find(x=>x.name===c.attrs.controller)||null,pages:(c.attrs.pages||'').split(',').filter(s=>s.length)};o._gears[0]=g;}
+  }
   return o;
  });
  // Models an attribute the Editor silently drops when parsing: disk XML is
@@ -211,7 +274,8 @@ function omitDefaults(a){
 }
 function serialize() {
  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
- return '<component size="400,300"><displayList>'+objects.map(o=>{
+ const ctrlXml=controllers.map(c=>`<controller name="${esc(c.name)}" pages="${c._pages.map(p=>`${p.id},${p.name}`).join(',')}" selected="${c._selectedIndex}"/>`).join('');
+ return '<component size="400,300">'+ctrlXml+'<displayList>'+objects.map(o=>{
  const a={id:o.id,name:o.name,xy:`${o.x},${o.y}`,size:`${o.width},${o.height}`};
  if(o.scaleX!==1||o.scaleY!==1)a.scale=`${o.scaleX},${o.scaleY}`;
  if(o.rotation)a.rotation=o.rotation;
@@ -225,7 +289,37 @@ function serialize() {
  if(o.objectType==='component')a.src=o.resourceURL.slice('ui://fixture0'.length);
  if(o.objectType==='loader')a.url=o.url;
  if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);}
- return `<${o.objectType} ${Object.entries(a).map(([k,v])=>`${k}="${esc(v)}"`).join(' ')}/>`;
+ if(o.objectType==='list'){
+  if(o.layout&&o.layout!=='column')a.layout=o.layout;
+  if(o.selectionMode&&o.selectionMode!=='single')a.selectionMode=o.selectionMode;
+  if(o.lineGap)a.lineGap=o.lineGap;
+  if(o.columnGap)a.colGap=o.columnGap;
+  if(o.defaultItem)a.defaultItem=o.defaultItem;
+  if(o.autoResizeItem)a.autoItemSize='true';
+  a.align=o.align||'none';a.vAlign=o.verticalAlign||'none';
+  if(o.selectionController)a.selectionController=o.selectionController;
+  if(o.foldInvisibleItems)a.foldInvisibleItems='true';
+  if(o.clearOnPublish)a.autoClearItems='true';
+  if(o.scrollItemToViewOnClick)a.scrollItemToViewOnClick='true';
+  if(o.overflow&&o.overflow!=='visible')a.overflow=o.overflow;
+  if(o.marginStr&&o.marginStr!=='0,0,0,0')a.margin=o.marginStr;
+ }
+ if(o.objectType==='group'){
+  if(o.advanced)a.advanced='true';
+  if(o.layout)a.layout=o.layout;
+  if(o.lineGap)a.lineGap=o.lineGap;
+  if(o.columnGap)a.colGap=o.columnGap;
+  if(o.excludeInvisibles)a.excludeInvisibles='true';
+  if(o.autoSizeDisabled)a.autoSizeDisabled='true';
+  if(o.collapsed)a.collapsed='true';
+ }
+ const attrs=Object.entries(a).map(([k,v])=>`${k}="${esc(v)}"`).join(' ');
+ const children=[];
+ const relItems=o.relations&&o.relations._items||[];
+ for(const r of relItems)children.push(`<relation target="${r.target?esc(String(r.target.id||'')):''}" sidePair="${esc(r.sidePair||'')}"/>`);
+ const gear=o._gears&&o._gears[0];
+ if(gear&&gear.controller)children.push(`<gearDisplay controller="${esc(gear.controller.name)}" pages="${(gear.pages||[]).join(',')}"/>`);
+ return children.length?`<${o.objectType} ${attrs}>${children.join('')}</${o.objectType}>`:`<${o.objectType} ${attrs}/>`;
  }).join('')+'</displayList>'+serializeTransitions()+'</component>';
 }
 function test(name,run){tests.push({name,run});}
@@ -331,6 +425,49 @@ test('Tree spec XML property mismatch names the node',()=>{files['fixture.xml']=
 test('Tree spec reload walks the whole tree on the reopened document',()=>{const r=ctx.verifyDocument({expected:TREE_SPEC,externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.checked,6);assert.equal(closeCount,1);});
 test('Tree spec reload catches a value the reload drops',()=>{text();dropOnReload=true;assert.throws(()=>ctx.verifyDocument({expected:{childrenMode:'subset',children:[{id:'text1',fontSize:40}]},externalReload:true}),e=>e.code==='persistence_failed'&&e.details.stage==='reload');});
 test('Tree spec reload refuses a dirty document before closing',()=>{doc.SetModified(true);rejects(()=>ctx.verifyDocument({expected:TREE_SPEC,externalReload:true}),'invalid_argument','reload');assert.equal(closeCount,0);});
+// --- Phase 4: list/group layout, relation, gearDisplay, controller ----------
+function addListObject(){
+ const o={id:'list1',name:'lst',objectType:'list',x:300,y:10,width:200,height:100,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
+  layout:'column',selectionMode:'single',lineGap:0,columnGap:0,defaultItem:'',autoResizeItem:false,align:'none',verticalAlign:'none',selectionController:'',foldInvisibleItems:false,clearOnPublish:false,scrollItemToViewOnClick:false,overflow:'visible',marginStr:'0,0,0,0',numChildren:0,GetChildAt:()=>null,GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
+ attachLayoutMembers(o);objects.push(o);return o;
+}
+function addGroupObject(){
+ const o={id:'grp1',name:'grp',objectType:'group',x:300,y:200,width:120,height:60,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:false,grayed:false,text:'',icon:'',
+  advanced:false,layout:'',lineGap:0,columnGap:0,excludeInvisibles:false,mainGridMinSize:0,mainGridIndex:0,autoSizeDisabled:false,collapsed:false,GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
+ attachLayoutMembers(o);objects.push(o);return o;
+}
+const setList=(fields,extra={})=>ctx.handleCommand({action:'set_list_layout',params:{target:{id:'list1'},save:true,...fields,...extra}});
+const setGroup=(fields,extra={})=>ctx.handleCommand({action:'set_group_layout',params:{target:{id:'grp1'},save:true,...fields,...extra}});
+const setRel=(id,relations,extra={})=>ctx.handleCommand({action:'set_relation',params:{target:{id},relations,save:true,...extra}});
+const setGear=(id,controller,pages,extra={})=>ctx.handleCommand({action:'set_gear_display',params:{target:{id},controller,pages,save:true,...extra}});
+const setCtrl=(extra={})=>ctx.handleCommand({action:'set_controller',params:{name:'c1',save:true,...extra}});
+
+test('set_list_layout persists typed fields through save and disk readback',()=>{addListObject();const r=setList({layout:'flow_vertical',lineGap:8,columnGap:4});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.after.layout,'flow_vt');assert.equal(r.verification.xml.lineGap,8);assert.equal(r.verification.xml.columnGap,4);});
+test('set_list_layout rejects a non-list target',()=>{rejects(()=>ctx.handleCommand({action:'set_list_layout',params:{target:{id:'text1'},lineGap:8,save:true}}),'invalid_argument','input');});
+test('set_list_layout rejects an unknown field before mutating',()=>{addListObject();rejects(()=>setList({evil:1}),'unsupported_property','input');assert.equal(objects.find(o=>o.id==='list1').lineGap,0);});
+test('set_list_layout without fields is rejected',()=>{addListObject();rejects(()=>ctx.handleCommand({action:'set_list_layout',params:{target:{id:'list1'},save:true}}),'invalid_argument','input');});
+test('set_list_layout resolves defaultItem to a component resource',()=>{addListObject();const r=setList({defaultItem:'ui://fixture0panel'});assert.equal(r.persisted,true);assert.equal(r.verification.xml.defaultItem,'ui://fixture0panel');});
+test('set_list_layout external reload round-trips layout fields',()=>{addListObject();const r=setList({layout:'flow_horizontal',lineGap:6},{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.layout,'flow_hz');assert.equal(closeCount,1);});
+test('set_list_layout fails closed on stale XML',()=>{addListObject();saveMode='stale';rejects(()=>setList({lineGap:8}),'persistence_failed','xml');});
+test('set_group_layout requires advanced for layout fields',()=>{addGroupObject();rejects(()=>setGroup({layout:'vt'}),'invalid_argument','input');});
+test('set_group_layout persists advanced group fields',()=>{addGroupObject();const r=setGroup({advanced:true,layout:'vertical',lineGap:12,excludeInvisibles:true});assert.equal(r.persisted,true);assert.equal(r.verification.xml.advanced,true);assert.equal(r.verification.xml.excludeInvisibles,true);assert.equal(r.after.layout,'vt');});
+test('set_relation persists parent and object-target relations',()=>{const r=setRel('text1',[{sidePair:'right-right'},{target:{id:'image1'},pairs:[{source:'width',target:'width'}]}]);assert.equal(r.persisted,true);assert.equal(r.verification.xml['relation.'],'right-right');assert.equal(r.verification.xml['relation.image1'],'width-width');});
+test('set_relation round-trips through external reload',()=>{const r=setRel('text1',[{sidePair:'width-width,height-height'}],{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values['relation.'],'height-height,width-width');});
+test('set_relation rejects an invalid sidePair before mutating',()=>{rejects(()=>setRel('text1',[{sidePair:'bogus-pair'}]),'invalid_argument','input');assert.equal(objects[2].relations._items.length,0);});
+test('set_relation rejects a self target',()=>{rejects(()=>setRel('text1',[{target:{id:'text1'},sidePair:'left-left'}]),'invalid_argument','input');});
+test('set_gear_display binds a controller page and persists',()=>{const r=setGear('image1','c1',['1']);assert.equal(r.persisted,true);assert.equal(r.verification.xml['gearDisplay.controller'],'c1');assert.equal(r.verification.xml['gearDisplay.pages'],'1');});
+test('set_gear_display accepts page names and resolves to ids',()=>{const r=setGear('image1','c1',['page1']);assert.equal(r.persisted,true);assert.equal(r.verification.xml['gearDisplay.pages'],'1');});
+test('set_gear_display clears the gear when controller is empty',()=>{setGear('image1','c1',['0']);const r=setGear('image1','');assert.equal(r.persisted,true);assert.equal(r.verification.xml['gearDisplay.controller'],'');});
+test('set_gear_display rejects a missing controller',()=>{rejects(()=>setGear('image1','nope',['0']),'target_not_found','input');assert.equal(objects[0]._gears.length,0);});
+test('set_gear_display reload round-trips controller and pages',()=>{const r=setGear('image1','c1',['0','1'],{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values['gearDisplay.controller'],'c1');});
+test('set_controller creates a controller and persists pages',()=>{const r=ctx.handleCommand({action:'set_controller',params:{name:'c2',create:true,pages:['a','b'],save:true}});assert.equal(r.persisted,true);assert.equal(r.verification.xml.pageCount,2);assert.equal(r.verification.xml.pageNames,'a,b');});
+test('set_controller replaces pages and updates selection',()=>{const r=setCtrl({pages:['x','y','z'],selectedIndex:2});assert.equal(r.persisted,true);assert.equal(r.after.pageNames,'x,y,z');assert.equal(r.verification.xml.selectedIndex,2);});
+test('set_controller missing name without create fails as target_not_found',()=>{rejects(()=>ctx.handleCommand({action:'set_controller',params:{name:'ghost',pages:['a'],save:true}}),'target_not_found','input');});
+test('set_controller remove verifies absence on disk',()=>{const r=setCtrl({remove:true});assert.equal(r.persisted,true);assert.equal(r.verification.xml.present,false);assert.ok(!files['fixture.xml'].includes('name="c1"'));});
+test('set_controller reload proves the controller survives reopen',()=>{const r=setCtrl({selectedIndex:1,externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.selectedIndex,1);assert.equal(closeCount,1);});
+test('list_controllers returns the component controller set',()=>{const r=ctx.handleCommand({action:'list_controllers',params:{}});assert.equal(r.controllers.length,1);assert.equal(r.controllers[0].name,'c1');assert.equal(r.controllers[0].pageNames,'page0,page1');});
+test('Phase 4 write actions are refused without a save-safe reload combo',()=>{addListObject();rejects(()=>ctx.handleCommand({action:'set_list_layout',params:{target:{id:'list1'},lineGap:8,externalReload:true}}),'invalid_argument','input');});
+
 // externalReloadVerified stays false on purpose: this suite proves the reload
 // verification *logic* against a mocked host, never Editor acceptance.
 (async()=>{

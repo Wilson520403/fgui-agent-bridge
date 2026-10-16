@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fairygui_agent import mcp_server
-from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
+from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
 from fairygui_agent.cli import build_parser
 
 
@@ -137,12 +137,20 @@ class CapabilityConsistencyTests(unittest.TestCase):
             self.assertIn(f'case "{action}"', plugin)
             self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
 
+    def test_layout_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        for action in LAYOUT_CAPABILITIES:
+            self.assertIn(f'"{action}"', plugin)
+            self.assertIn(f'case "{action}"', plugin)
+            self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+
     def test_documented_mcp_tool_count_is_current(self) -> None:
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")
         tool_names = [name for name in vars(mcp_server) if name.startswith("fgui_")]
-        self.assertEqual(len(tool_names), 42)
-        self.assertIn("MCP 工具数：42", documented)
+        self.assertEqual(len(tool_names), 48)
+        self.assertIn("MCP 工具数：48", documented)
 
 
 if __name__ == "__main__":

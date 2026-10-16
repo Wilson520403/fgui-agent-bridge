@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-`v0.8.7` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4` · 本地 JSON 队列 + MCP stdio
+`v0.8.8` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4` · 本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
 
@@ -207,6 +207,7 @@ uv run fgui-agent publish --scope active
 | **动画预览** | `fgui_preview_animation` | 在编辑器中实时播放、暂停、停止、跳帧预览 Transition 或 MovieClip |
 | **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 属性与操作撤销/重做、保存文档或放弃全部未保存修改 |
 | **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树（`expected.children` 递归比对）、替换 Image/Loader 资源引用、读写文本样式 |
+| **布局与控制器** | `fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 修改 List/Group 布局字段、整体替换 Relation 绑定、设置 gearDisplay 联动、增删改组件 Controller |
 | **发布** | `fgui_get_publish_settings`、`fgui_publish` | 查询发布设置、执行资源发布（支持活动包/指定包/全部包） |
 
 ---
@@ -218,6 +219,7 @@ uv run fgui-agent publish --scope active
 - **大图独立图集**：达到 `1920×1080` 或任一边达到 `2048` 的图片自动标记为 `alone` 纹理集，发布时自动纠正历史大图配置。
 - **写操作验证**：写操作支持保存后磁盘 XML 比对，以及「关闭重开再比对」的强持久化验证。
 - **对象树比对**：`fgui_verify_document` 的 `expected` 可携带递归 `children` spec，逐层比对名称、类型和关键属性；`childrenMode` 支持 `exact`（按位置全等）与 `subset`（按 id/name/index 定位、允许多余节点），磁盘比对覆盖当前组件 XML 序列化范围。
+- **布局与联动（0.8.8）**：List/Group 布局字段经类型化校验写入（对象模型未暴露的属性回退 `GetProperty`/`SetProperty`）；`fgui_set_relation` 为整体替换语义；`fgui_set_gear_display` 的 `pages` 接受页面 id 或名称；`fgui_set_controller` 的 `pages` 整体替换会重新分配页面 id。五个写 Action 沿用 `save`/`verify`/`external_reload` 验证梯子，序列化缺省的枚举属性计入 `verification.xmlSkippedKeys`，不虚报验证覆盖。
 
 ---
 

@@ -644,6 +644,140 @@ def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, obje
 
 
 @mcp.tool()
+def fgui_set_list_layout(
+    fields: dict[str, Any],
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """修改 List 对象的布局与滚动属性（0.8.8+）。fields 支持：
+
+    layout（single_column/single_row/flow_horizontal/flow_vertical/pagination）、
+    selectionMode（none/single/multiple/multiple_singleclick）、lineGap、columnGap、
+    defaultItem（ui:// 组件资源）、autoItemSize、align/vAlign（含 none）、
+    selectionController（控制器名）、foldInvisibleItems、clearOnPublish、
+    scrollItemToViewOnClick、overflow（visible/hidden/scroll）、margin（"l,t,r,b"）。
+
+    external_reload=True 需 save=True，关闭重开文档后重新比对；strength 标明验证强度。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "save": save, "verify": verify, "externalReload": external_reload}
+    params.update(fields)
+    return _client.call("set_list_layout", params)
+
+
+@mcp.tool()
+def fgui_set_group_layout(
+    fields: dict[str, Any],
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """修改 Group 对象的布局属性（0.8.8+）。fields 支持：
+
+    advanced、layout（horizontal/vertical 或 hz/vt）、lineGap、columnGap、
+    excludeInvisibles、mainGridMinSize、mainGridIndex、autoSizeDisabled、collapsed。
+    layout/lineGap/columnGap/excludeInvisibles 仅对 advanced=true 的高级组有效。
+
+    external_reload=True 需 save=True，关闭重开文档后重新比对；strength 标明验证强度。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "save": save, "verify": verify, "externalReload": external_reload}
+    params.update(fields)
+    return _client.call("set_group_layout", params)
+
+
+@mcp.tool()
+def fgui_set_relation(
+    relations: list[dict[str, Any]],
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """整体替换对象的 Relation 绑定（0.8.8+）。relations 每项为：
+
+    {"target": {"id"/"path"/"name"} 或 null（null/缺省 = 父组件）,
+     "sidePair": "left-left,right-right" 或 "pairs": [{"source": "right", "target": "right", "percent": false}]}
+
+    sidePair 方向名：left/center/right/leftext/rightext/width（水平），
+    top/middle/bottom/topext/bottomext/height（垂直）；percent 追加 % 后缀。
+
+    external_reload=True 需 save=True，关闭重开文档后重新比对；strength 标明验证强度。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "relations": relations, "save": save, "verify": verify, "externalReload": external_reload}
+    return _client.call("set_relation", params)
+
+
+@mcp.tool()
+def fgui_set_gear_display(
+    controller: str | None,
+    pages: list[str] | str | None = None,
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """设置对象的 gearDisplay 联动（0.8.8+）：指定控制器与可见页面。
+
+    controller=None 或空字符串清除联动；pages 为页面 id 或名称列表（也接受 "0,1" 逗号串），
+    省略 pages 保持现有页面不变。
+
+    external_reload=True 需 save=True，关闭重开文档后重新比对；strength 标明验证强度。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "controller": controller, "save": save, "verify": verify, "externalReload": external_reload}
+    if pages is not None:
+        params["pages"] = pages
+    return _client.call("set_gear_display", params)
+
+
+@mcp.tool()
+def fgui_list_controllers() -> dict[str, Any]:
+    """列出当前文档根组件的全部 Controller（0.8.8+）。"""
+    return _client.call("list_controllers")
+
+
+@mcp.tool()
+def fgui_set_controller(
+    name: str,
+    pages: list[str] | None = None,
+    add_pages: list[str] | None = None,
+    selected_index: int | None = None,
+    selected_page: str | None = None,
+    exported: bool | None = None,
+    auto_radio_group_depth: bool | None = None,
+    home_page: str | None = None,
+    create: bool = False,
+    remove: bool = False,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """创建、修改或删除当前组件的 Controller（0.8.8+）。
+
+    create=True 创建不存在的控制器；remove=True 删除；pages 整体替换页面集
+    （会重新分配页面 id，gearDisplay 中的页面引用需重新核对）；add_pages 追加；
+    selected_index/selected_page 设置选中页。
+
+    external_reload=True 需 save=True，关闭重开文档后重新比对；strength 标明验证强度。
+    """
+    params: dict[str, Any] = {"name": name, "create": create, "remove": remove, "save": save, "verify": verify, "externalReload": external_reload}
+    for key, value in (("pages", pages), ("addPages", add_pages), ("selectedIndex", selected_index), ("selectedPage", selected_page),
+                       ("exported", exported), ("autoRadioGroupDepth", auto_radio_group_depth), ("homePage", home_page)):
+        if value is not None:
+            params[key] = value
+    return _client.call("set_controller", params)
+
+
+@mcp.tool()
 def fgui_insert_object(
     url: str,
     x: float = 0,

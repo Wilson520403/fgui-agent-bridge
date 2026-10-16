@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.7";
+const BRIDGE_VERSION = "0.8.8";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -156,7 +156,9 @@ function writeStatus() {
             "discard_document",
             "undo",
             "redo",
-            "verify_document", "replace_object_resource", "get_text_style", "set_text_style"
+            "verify_document", "replace_object_resource", "get_text_style", "set_text_style",
+            "set_list_layout", "set_group_layout", "set_relation", "set_gear_display",
+            "set_controller", "list_controllers"
         ]
     });
     lastStatusWrittenMs = Date.now();
@@ -902,7 +904,7 @@ function displayListElements(xml) {
             nodes.push(list.elements.get_Item(i));
     return nodes;
 }
-function persistedObjectValues(doc, obj) {
+function findPersistedObjectNode(doc, obj) {
     const parsed = documentXml(doc, obj);
     let node = null;
     if (obj === doc.content)
@@ -920,7 +922,20 @@ function persistedObjectValues(doc, obj) {
     }
     if (!node)
         verificationError("persistence_failed", "XML 中未找到目标对象", { stage: "xml", target: targetSummary(obj, null) });
-    return { values: xmlNodeValues(parsed.item, node), file: parsed.file };
+    return { node, item: parsed.item, file: parsed.file };
+}
+function persistedObjectValues(doc, obj) {
+    const found = findPersistedObjectNode(doc, obj);
+    return { values: xmlNodeValues(found.item, found.node), file: found.file };
+}
+function childXmlNodes(node, tag) {
+    const out = [];
+    for (let i = 0; i < node.elements.Count; i++) {
+        const child = node.elements.get_Item(i);
+        if (String(child.name) === tag)
+            out.push(child);
+    }
+    return out;
 }
 function xmlNodeValues(item, node) {
     const attr = (key) => { const v = node.GetAttribute(key); return v === null || v === undefined ? null : String(v); };
@@ -1028,7 +1043,7 @@ function reloadDocument(doc, context) {
         verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", Object.assign({ stage: "reload", url, closeStrategy }, details));
     return { doc: reopened, url, closeStrategy };
 }
-function externalReloadVerify(doc, locator, expected, state) {
+function externalReloadVerify(doc, locator, expected, state, memoryFn) {
     const rr = reloadDocument(doc, { expected });
     // Every handle captured before the close is now stale; re-locate the target by
     // its recorded locator instead of reusing the pre-close object reference.
@@ -1039,7 +1054,7 @@ function externalReloadVerify(doc, locator, expected, state) {
     catch (error) {
         verificationError("persistence_failed", "external reload 后无法在重新载入的文档中定位目标", { stage: "reload", url: rr.url, closeStrategy: rr.closeStrategy, target: locator, reason: String(error), expected });
     }
-    const values = compareVerification(expected, verifiedObjectValues(reloaded), "reload", reloaded);
+    const values = compareVerification(expected, (memoryFn || verifiedObjectValues)(reloaded), "reload", reloaded);
     // Hand the fresh handle back through state: it is not serializable and cannot
     // be returned in the response, but later code still needs a live document.
     state.doc = rr.doc;
@@ -1095,13 +1110,32 @@ function strengthNote(verification, saved, base) {
         return `${base}persisted 仅代表保存成功且磁盘 XML 匹配；未执行 external reload，不能排除编辑器重新载入时丢值。`;
     return `${base}未验证持久化。`;
 }
-function verifyObject(doc, obj, expected, readXml, reload, state) {
-    const editor = compareVerification(expected, verifiedObjectValues(obj), "editor", obj);
+// `readers` lets a dedicated write action verify a value space outside
+// VERIFIED_KEYS (list layout attrs, <relation>/<gearDisplay> child elements)
+// while staying on the same save → disk → reload ladder. memory(obj) returns a
+// flat map from the live object; persisted(doc, obj) returns
+// {values, file, skipped?} — skipped lists keys whose XML attribute was absent
+// and whose serialized default is not yet pinned, so they are reported as
+// uncovered rather than guessed at.
+function verifyObject(doc, obj, expected, readXml, reload, state, readers) {
+    const memoryReader = readers && readers.memory ? readers.memory : verifiedObjectValues;
+    const persistedReader = readers && readers.persisted ? readers.persisted : persistedObjectValues;
+    const editor = compareVerification(expected, memoryReader(obj), "editor", obj);
     let disk = null;
     if (readXml) {
         try {
-            disk = persistedObjectValues(doc, obj);
-            compareVerification(expected, disk.values, "xml", obj);
+            disk = persistedReader(doc, obj);
+            // Skipped keys (absent serialized attrs whose default is not pinned)
+            // are reported via xmlSkippedKeys rather than compared — the absent
+            // attribute is ambiguous, not evidence of a failed write.
+            const skipped = {};
+            for (const k of (disk.skipped || []))
+                skipped[k] = true;
+            const xmlExpected = {};
+            for (const k of Object.keys(expected))
+                if (!skipped[k])
+                    xmlExpected[k] = expected[k];
+            compareVerification(xmlExpected, disk.values, "xml", obj);
         }
         catch (error) {
             if (error.code)
@@ -1113,7 +1147,7 @@ function verifyObject(doc, obj, expected, readXml, reload, state) {
     // the open handle to resolve the component URL.
     let reloaded = null;
     if (reload)
-        reloaded = externalReloadVerify(doc, reload.target, expected, state || {});
+        reloaded = externalReloadVerify(doc, reload.target, expected, state || {}, memoryReader);
     return {
         editorReadback: true,
         xmlReadback: Boolean(disk),
@@ -1121,6 +1155,7 @@ function verifyObject(doc, obj, expected, readXml, reload, state) {
         expected,
         editor,
         xml: disk ? disk.values : null,
+        xmlSkippedKeys: disk && disk.skipped && disk.skipped.length ? disk.skipped : undefined,
         file: disk ? disk.file : null,
         reload: reloaded
     };
@@ -1136,14 +1171,14 @@ function validateReloadOptions(params, target) {
     if (!params.save)
         verificationError("invalid_argument", "external reload 需要 save:true：未保存时重载只会回到旧值，无法证明持久化", { stage: "input", target });
 }
-function writeVerification(doc, obj, before, after, params, expected) {
+function writeVerification(doc, obj, before, after, params, expected, readers) {
     const wantsReload = Boolean(params.externalReload);
     // Captured before any reload: the target summary must not read a closed handle.
     const target = targetSummary(obj, params.target);
     // Guard repeated here so a new write action cannot skip the precondition.
     validateReloadOptions(params, target);
     // Editor acceptance is checked even with verify=false; that flag only skips disk readback.
-    const verification = verifyObject(doc, obj, expected, false);
+    const verification = verifyObject(doc, obj, expected, false, null, null, readers);
     let saved = false;
     if (params.save) {
         try {
@@ -1159,7 +1194,7 @@ function writeVerification(doc, obj, before, after, params, expected) {
     const state = {};
     // After a reload the original handle is dead; state.doc carries the fresh one.
     const checked = saved && params.verify !== false
-        ? verifyObject(doc, obj, expected, true, wantsReload ? { target: params.target || { id: obj.id } } : null, state)
+        ? verifyObject(doc, obj, expected, true, wantsReload ? { target: params.target || { id: obj.id } } : null, state, readers)
         : verification;
     const liveDoc = state.doc || doc;
     const strength = verificationStrength(checked, saved);
@@ -1169,6 +1204,923 @@ function writeVerification(doc, obj, before, after, params, expected) {
         saved, persisted: strength !== NONE_STRENGTH, strength, verification: checked,
         note: `${strengthNote(checked, saved, "仅验证 expected 中的字段；")}失败不自动回滚。`
     };
+}
+// ---------- Phase 4: typed layout / relation / gear / controller writes ----------
+function numOrNull(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+// Each entry: `read` pulls the live value from the editor object, `attr` is the
+// serialized XML attribute name, `kind` drives input coercion and the
+// absent-attribute fallback at the XML stage. number/bool/string absent values
+// resolve to 0/false/"" (the editor only writes non-defaults); enums whose
+// serialized default is not yet pinned against a live build are skipped at the
+// XML stage instead of guessing, and land in verification.xmlSkippedKeys.
+// `member` is the typed object-model property (FList/FGroup expose the
+// serialized string form directly); `attr` is the XML attribute name and also
+// the name used by the generic GetProperty/SetProperty path for members the
+// object model does not surface (overflow, autoClearItems, margin...).
+const LIST_LAYOUT_KEYS = {
+    layout: { member: "layout", attr: "layout", kind: "enum" },
+    selectionMode: { member: "selectionMode", attr: "selectionMode", kind: "enum" },
+    lineGap: { member: "lineGap", attr: "lineGap", kind: "number" },
+    columnGap: { member: "columnGap", attr: "colGap", kind: "number" },
+    defaultItem: { member: "defaultItem", attr: "defaultItem", kind: "string" },
+    autoItemSize: { member: "autoResizeItem", attr: "autoItemSize", kind: "bool" },
+    align: { member: "align", attr: "align", kind: "enum" },
+    vAlign: { member: "verticalAlign", attr: "vAlign", kind: "enum" },
+    selectionController: { member: "selectionController", attr: "selectionController", kind: "string" },
+    foldInvisibleItems: { member: "foldInvisibleItems", attr: "foldInvisibleItems", kind: "bool" },
+    clearOnPublish: { member: "clearOnPublish", attr: "autoClearItems", kind: "bool" },
+    // scrollItemToViewOnClick defaults to true on a live 6.1.4 document — the
+    // attr is omitted while the member reads true, so absence must resolve true.
+    scrollItemToViewOnClick: { member: "scrollItemToViewOnClick", attr: "scrollItemToViewOnClick", kind: "bool", xmlDefault: true },
+    overflow: { member: "overflow", attr: "overflow", kind: "enum" },
+    margin: { member: "marginStr", attr: "margin", kind: "string" }
+};
+const GROUP_LAYOUT_KEYS = {
+    advanced: { member: "advanced", attr: "advanced", kind: "bool" },
+    layout: { member: "layout", attr: "layout", kind: "enum" },
+    lineGap: { member: "lineGap", attr: "lineGap", kind: "number" },
+    columnGap: { member: "columnGap", attr: "colGap", kind: "number" },
+    excludeInvisibles: { member: "excludeInvisibles", attr: "excludeInvisibles", kind: "bool" },
+    mainGridMinSize: { member: "mainGridMinSize", attr: "gridMinSize", kind: "number", skipIfAbsent: true },
+    mainGridIndex: { member: "mainGridIndex", attr: "gridIndex", kind: "number", skipIfAbsent: true },
+    autoSizeDisabled: { member: "autoSizeDisabled", attr: "autoSizeDisabled", kind: "bool", skipIfAbsent: true },
+    collapsed: { member: "collapsed", attr: "collapsed", kind: "bool", skipIfAbsent: true }
+};
+// Reads prefer the typed member; object-model-absent properties (overflow,
+// autoClearItems, margin, gridMinSize...) fall back to the editor's generic
+// GetProperty, which speaks serialized attribute names. A field that resolves
+// nowhere reads as its kind default so a rejected write shows up as
+// editor_rejected rather than a cryptic null mismatch.
+function layoutMemberValue(obj, spec) {
+    const member = spec.member || spec.attr;
+    if (obj[member] !== undefined)
+        return safeValue(obj[member]);
+    if (typeof obj.GetProperty === "function") {
+        try {
+            const v = obj.GetProperty(spec.attr);
+            if (v !== undefined && v !== null)
+                return safeValue(v);
+        }
+        catch (_) { }
+    }
+    if (spec.kind === "number")
+        return 0;
+    if (spec.kind === "bool")
+        return false;
+    return "";
+}
+function assignLayoutMember(obj, spec, value) {
+    const member = spec.member || spec.attr;
+    if (obj[member] !== undefined) {
+        obj[member] = value;
+        return;
+    }
+    if (typeof obj.SetProperty === "function") {
+        obj.SetProperty(spec.attr, value);
+        return;
+    }
+    obj[member] = value;
+}
+// Write-path support probe run during validation, before any mutation: a field
+// the editor has neither as member nor as generic property is reported as
+// unsupported_property instead of blowing up mid-apply (C# side throws
+// "<prop> not exists").
+function layoutMemberSupported(obj, spec) {
+    const member = spec.member || spec.attr;
+    if (obj[member] !== undefined)
+        return true;
+    if (typeof obj.GetProperty === "function") {
+        try {
+            obj.GetProperty(spec.attr);
+            return true;
+        }
+        catch (_) {
+            return false;
+        }
+    }
+    return false;
+}
+function typedLayoutValues(obj, keys) {
+    const out = { id: obj.id || "", name: obj.name || "", type: String(obj.objectType || "unknown").toLowerCase() };
+    for (const key of Object.keys(keys)) {
+        const spec = keys[key];
+        const raw = layoutMemberValue(obj, spec);
+        if (spec.kind === "number")
+            out[key] = numOrNull(raw) === null ? 0 : numOrNull(raw);
+        else if (spec.kind === "bool")
+            out[key] = raw === true || raw === "true";
+        else
+            out[key] = raw === null || raw === undefined ? "" : String(raw);
+    }
+    return out;
+}
+function persistedLayoutValues(doc, obj, keys) {
+    const found = findPersistedObjectNode(doc, obj);
+    const node = found.node;
+    const attr = (key) => { const v = node.GetAttribute(key); return v === null || v === undefined ? null : String(v); };
+    const out = { id: attr("id") || "", name: attr("name") || "", type: String(node.name) };
+    const skipped = [];
+    for (const key of Object.keys(keys)) {
+        const spec = keys[key];
+        const raw = attr(spec.attr);
+        if (raw === null) {
+            if (spec.skipIfAbsent || spec.kind === "enum") {
+                skipped.push(key);
+                continue;
+            }
+            if (spec.xmlDefault !== undefined) {
+                out[key] = spec.xmlDefault;
+                continue;
+            }
+            out[key] = spec.kind === "number" ? 0 : spec.kind === "bool" ? false : "";
+        }
+        else if (spec.kind === "number")
+            out[key] = Number(raw);
+        else if (spec.kind === "bool")
+            out[key] = raw === "true";
+        else
+            out[key] = raw;
+    }
+    return { values: out, file: found.file, skipped };
+}
+function layoutReaders(keys) {
+    return {
+        memory: (o) => typedLayoutValues(o, keys),
+        persisted: (d, o) => persistedLayoutValues(d, o, keys)
+    };
+}
+// Layout fields arrive as flat params alongside the control keys; everything
+// outside the reserved set is treated as a field to write.
+const LAYOUT_RESERVED_PARAMS = ["target", "save", "verify", "externalReload"];
+function layoutFieldSubset(params) {
+    const fields = {};
+    for (const key of Object.keys(params || {}))
+        if (LAYOUT_RESERVED_PARAMS.indexOf(key) < 0)
+            fields[key] = params[key];
+    return fields;
+}
+function listLayoutConstant(value) {
+    const key = String(value);
+    const map = {
+        single_column: "SINGLE_COLUMN", single_row: "SINGLE_ROW",
+        flow_horizontal: "FLOW_HZ", flow_vertical: "FLOW_VT", pagination: "PAGINATION"
+    };
+    const constants = FairyEditor.FList || {};
+    if (map[key] !== undefined) {
+        const resolved = constants[map[key]];
+        if (resolved === undefined || resolved === null)
+            verificationError("invalid_argument", `编辑器未暴露 FList.${map[key]} 常量`, { stage: "input", layout: key });
+        return String(resolved);
+    }
+    const raw = ["hz", "vt", "flow_hz", "flow_vt", "pagination"];
+    if (raw.indexOf(key) >= 0)
+        return key;
+    verificationError("invalid_argument", `layout 无效：${key}`, { stage: "input", allowed: Object.keys(map).concat(raw) });
+}
+function groupLayoutConstant(value) {
+    const key = String(value);
+    const map = { horizontal: "HORIZONTAL", vertical: "VERTICAL" };
+    const constants = FairyEditor.FGroup || {};
+    if (map[key] !== undefined) {
+        const resolved = constants[map[key]];
+        if (resolved === undefined || resolved === null)
+            verificationError("invalid_argument", `编辑器未暴露 FGroup.${map[key]} 常量`, { stage: "input", layout: key });
+        return String(resolved);
+    }
+    const raw = ["hz", "vt"];
+    if (raw.indexOf(key) >= 0)
+        return key;
+    verificationError("invalid_argument", `layout 无效：${key}`, { stage: "input", allowed: Object.keys(map).concat(raw) });
+}
+function applyTypedLayoutWrite(doc, params, objectType, keys, values) {
+    const obj = resolveObject(doc, params.target);
+    validateReloadOptions(params, targetSummary(obj, params.target));
+    const type = String(obj.objectType || "").toLowerCase();
+    if (type !== objectType)
+        verificationError("invalid_argument", `目标不是 ${objectType} 对象（实际：${type}）`, { stage: "input", target: targetSummary(obj, params.target) });
+    const before = typedLayoutValues(obj, keys);
+    const provided = Object.keys(values);
+    if (!provided.length)
+        verificationError("invalid_argument", "至少需要提供一个布局字段", { stage: "input" });
+    // Two passes: every field is validated and coerced first, so a bad trailing
+    // field cannot leave the earlier ones half-applied on the document.
+    const coerced = [];
+    for (const key of provided) {
+        const spec = keys[key];
+        const value = values[key];
+        if (!spec)
+            verificationError("unsupported_property", `不支持的布局字段：${key}`, { stage: "input", property: key });
+        if (!layoutMemberSupported(obj, spec))
+            verificationError("unsupported_property", `当前编辑器不支持写入属性：${spec.attr}`, { stage: "input", property: key });
+        switch (key) {
+            case "layout":
+                coerced.push({ key, spec, value: type === "list" ? listLayoutConstant(value) : groupLayoutConstant(value) });
+                break;
+            case "selectionMode":
+                if (["none", "single", "multiple", "multiple_singleclick"].indexOf(String(value)) < 0)
+                    verificationError("invalid_argument", `selectionMode 枚举值无效：${value}`, { stage: "input" });
+                coerced.push({ key, spec, value: String(value) });
+                break;
+            case "lineGap":
+            case "columnGap":
+            case "mainGridMinSize":
+            case "mainGridIndex": {
+                const n = numOrNull(value);
+                if (n === null)
+                    verificationError("invalid_argument", `${key} 必须是数字`, { stage: "input", property: key });
+                coerced.push({ key, spec, value: n });
+                break;
+            }
+            case "defaultItem": {
+                const url = String(value || "");
+                if (url === "") {
+                    coerced.push({ key, spec, value: "" });
+                    break;
+                }
+                if (url.indexOf("ui://") !== 0)
+                    verificationError("invalid_argument", "defaultItem 必须是 ui:// URL", { stage: "input", value: url });
+                const item = resolveItem({ url });
+                if (String(item.type) !== FairyEditor.FPackageItemType.COMPONENT)
+                    verificationError("invalid_argument", "defaultItem 必须引用组件资源", { stage: "input", resourceURL: url });
+                coerced.push({ key, spec, value: String(item.GetURL()) });
+                break;
+            }
+            case "autoItemSize":
+            case "foldInvisibleItems":
+            case "clearOnPublish":
+            case "scrollItemToViewOnClick":
+            case "advanced":
+            case "excludeInvisibles":
+            case "autoSizeDisabled":
+            case "collapsed":
+                coerced.push({ key, spec, value: Boolean(value) });
+                break;
+            case "align":
+                if (["none", "left", "center", "right"].indexOf(String(value)) < 0)
+                    verificationError("invalid_argument", `align 枚举值无效：${value}`, { stage: "input" });
+                coerced.push({ key, spec, value: String(value) });
+                break;
+            case "vAlign":
+                if (["none", "top", "middle", "bottom"].indexOf(String(value)) < 0)
+                    verificationError("invalid_argument", `vAlign 枚举值无效：${value}`, { stage: "input" });
+                coerced.push({ key, spec, value: String(value) });
+                break;
+            case "selectionController": {
+                const name = String(value || "");
+                if (name && !doc.content.GetController(name))
+                    verificationError("invalid_argument", `selectionController 引用的控制器不存在：${name}`, { stage: "input" });
+                coerced.push({ key, spec, value: name });
+                break;
+            }
+            case "overflow":
+                if (["visible", "auto", "hidden", "scroll"].indexOf(String(value)) < 0)
+                    verificationError("invalid_argument", `overflow 枚举值无效：${value}`, { stage: "input" });
+                coerced.push({ key, spec, value: String(value) });
+                break;
+            case "margin":
+                coerced.push({ key, spec, value: String(value) });
+                break;
+            default:
+                verificationError("unsupported_property", `不支持的布局字段：${key}`, { stage: "input", property: key });
+        }
+    }
+    if (type === "group") {
+        const requestedAdvanced = coerced.filter(c => c.key === "advanced").map(c => c.value).pop();
+        const willBeAdvanced = requestedAdvanced !== undefined ? Boolean(requestedAdvanced) : Boolean(obj.advanced);
+        if (!willBeAdvanced && ["layout", "lineGap", "columnGap", "excludeInvisibles"].some(k => values[k] !== undefined))
+            verificationError("invalid_argument", "layout/lineGap/columnGap/excludeInvisibles 仅对 advanced=true 的高级组有效", { stage: "input", target: targetSummary(obj, params.target) });
+    }
+    for (const entry of coerced)
+        assignLayoutMember(obj, entry.spec, entry.value);
+    doc.SetModified(true);
+    doc.RefreshInspectors();
+    const after = typedLayoutValues(obj, keys);
+    const expected = { id: obj.id, name: obj.name || "", type };
+    for (const key of provided)
+        expected[key] = specValueForExpected(key, values[key], after, keys[key]);
+    return writeVerification(doc, obj, before, after, params, expected, layoutReaders(keys));
+}
+// Enum-ish values are normalized to the canonical serialized form only where a
+// constant is known; otherwise the post-write readback is used as expected so
+// editor-side canonicalization cannot produce a false mismatch.
+function specValueForExpected(key, requested, after, spec) {
+    // Enum members store the serialized string in the editor object model, but
+    // the Editor may still canonicalize differently from what was requested —
+    // trust the readback for every enum-kind field.
+    if (spec && spec.kind === "enum")
+        return after[key];
+    if (spec && spec.kind === "bool")
+        return Boolean(requested);
+    if (spec && spec.kind === "number")
+        return numOrNull(requested);
+    return requested === undefined || requested === null ? "" : String(requested);
+}
+// <relation> and <gearDisplay> serialize as child elements of the object node,
+// so they get their own flat keyspace: `relation.<targetId>` ("" = parent) and
+// `gearDisplay.controller`/`gearDisplay.pages`.
+const RELATION_SIDES = ["left", "center", "right", "leftext", "rightext", "width",
+    "top", "middle", "bottom", "topext", "bottomext", "height"];
+function canonicalSidePair(sidePair) {
+    const parts = String(sidePair || "").split(",").map(s => s.trim()).filter(s => s.length);
+    parts.sort();
+    return parts.join(",");
+}
+function validateSidePair(sidePair, specPath) {
+    const parts = String(sidePair || "").split(",").map(s => s.trim()).filter(s => s.length);
+    for (const part of parts) {
+        const m = /^([a-zA-Z]+)-([a-zA-Z]+)(%?)$/.exec(part);
+        if (!m || RELATION_SIDES.indexOf(m[1].toLowerCase()) < 0 || RELATION_SIDES.indexOf(m[2].toLowerCase()) < 0)
+            verificationError("invalid_argument", `无效的 relation sidePair：${part}`, { stage: "input", node: specPath });
+        const src = m[1].toLowerCase(), tgt = m[2].toLowerCase();
+        const horizontal = ["left", "center", "right", "leftext", "rightext", "width"];
+        const vertical = ["top", "middle", "bottom", "topext", "bottomext", "height"];
+        if ((horizontal.indexOf(src) >= 0) !== (horizontal.indexOf(tgt) >= 0) ||
+            (vertical.indexOf(src) >= 0) !== (vertical.indexOf(tgt) >= 0))
+            verificationError("invalid_argument", `sidePair 混用了水平与垂直方向：${part}`, { stage: "input", node: specPath });
+    }
+    return parts.join(",");
+}
+// A relation entry with an empty sidePair carries no binding semantics; the
+// editor still serializes `<relation target="" sidePair=""/>` on untouched
+// objects, so empty entries are dropped from comparison on both stages.
+function relationsFromXml(node) {
+    const out = {};
+    for (const child of childXmlNodes(node, "relation")) {
+        const sidePair = canonicalSidePair(child.GetAttribute("sidePair") || "");
+        if (sidePair)
+            out[`relation.${child.GetAttribute("target") || ""}`] = sidePair;
+    }
+    return out;
+}
+function relationMemoryValues(obj) {
+    const out = {};
+    const rel = obj.relations;
+    if (!rel)
+        return out;
+    // Prefer the serialized form so canonicalization matches the XML stage.
+    try {
+        if (typeof rel.Write === "function") {
+            const xml = rel.Write();
+            const collect = (n) => {
+                const sidePair = canonicalSidePair(n.GetAttribute("sidePair") || "");
+                if (sidePair)
+                    out[`relation.${n.GetAttribute("target") || ""}`] = sidePair;
+            };
+            if (xml && String(xml.name) === "relation")
+                collect(xml);
+            else if (xml)
+                for (const child of childXmlNodes(xml, "relation"))
+                    collect(child);
+            return out;
+        }
+    }
+    catch (_) { /* fall through to item iteration */ }
+    if (rel.items) {
+        for (let i = 0; i < rel.items.Count; i++) {
+            const item = rel.items.get_Item(i);
+            const targetId = item.target && item.target.id ? String(item.target.id) : "";
+            out[`relation.${targetId}`] = canonicalSidePair(item.desc || "");
+        }
+    }
+    return out;
+}
+function persistedRelationValues(doc, obj) {
+    const found = findPersistedObjectNode(doc, obj);
+    const values = relationsFromXml(found.node);
+    values.id = found.node.GetAttribute("id") || "";
+    values.name = found.node.GetAttribute("name") || "";
+    values.type = String(found.node.name);
+    return { values, file: found.file };
+}
+function relationReaders() {
+    return {
+        memory: (o) => {
+            const out = relationMemoryValues(o);
+            out.id = o.id || "";
+            out.name = o.name || "";
+            out.type = String(o.objectType || "unknown").toLowerCase();
+            return out;
+        },
+        persisted: persistedRelationValues
+    };
+}
+function setRelation(params) {
+    const doc = getActiveDocument();
+    const obj = resolveObject(doc, params.target);
+    validateReloadOptions(params, targetSummary(obj, params.target));
+    if (obj === doc.content)
+        verificationError("invalid_argument", "不支持对文档根组件设置 relation", { stage: "input", target: targetSummary(obj, params.target) });
+    if (!Array.isArray(params.relations))
+        verificationError("invalid_argument", "relations 必须是数组", { stage: "input" });
+    const specs = params.relations.map((spec, i) => {
+        if (!spec || typeof spec !== "object")
+            verificationError("invalid_argument", `relations[${i}] 必须是对象`, { stage: "input" });
+        let sidePair = "";
+        if (spec.sidePair !== undefined)
+            sidePair = validateSidePair(String(spec.sidePair), `relations[${i}]`);
+        else if (Array.isArray(spec.pairs)) {
+            const parts = spec.pairs.map((p, j) => {
+                if (!p || typeof p !== "object" || !p.source || !p.target)
+                    verificationError("invalid_argument", `relations[${i}].pairs[${j}] 需要 source 与 target`, { stage: "input" });
+                return `${String(p.source).toLowerCase()}-${String(p.target).toLowerCase()}${p.percent ? "%" : ""}`;
+            });
+            sidePair = validateSidePair(parts.join(","), `relations[${i}]`);
+        }
+        else
+            verificationError("invalid_argument", `relations[${i}] 需要 sidePair 或 pairs`, { stage: "input" });
+        let targetObj = null;
+        if (spec.target !== undefined && spec.target !== null && spec.target !== "") {
+            targetObj = resolveObject(doc, spec.target);
+            if (targetObj === obj)
+                verificationError("invalid_argument", `relations[${i}] 不能把对象自身作为 target`, { stage: "input" });
+        }
+        return { targetObj, sidePair };
+    });
+    const before = relationMemoryValues(obj);
+    const rel = obj.relations;
+    if (!rel)
+        verificationError("unsupported_property", "目标对象不支持 relation", { stage: "input", target: targetSummary(obj, params.target) });
+    const el = obj.docElement;
+    let applied = false;
+    if (el && typeof el.UpdateRelations === "function") {
+        // Preferred path: replace the whole relation set through the serialized
+        // <relations> document (same shape FRelations.Write() emits). Direct
+        // FRelations.Reset()+AddItem() bypasses the document model and leaves
+        // the doc stuck modified on 6.1.4.
+        const inner = specs.map((s) => `<relation target="${s.targetObj && s.targetObj.id ? String(s.targetObj.id) : ""}" sidePair="${s.sidePair}"/>`).join("");
+        try {
+            el.UpdateRelations(new CS.FairyGUI.Utils.XML(`<relations>${inner}</relations>`));
+            applied = true;
+        }
+        catch (_) {
+            applied = false;
+        }
+    }
+    if (!applied && el && typeof el.SetRelation === "function") {
+        try {
+            const wantedIds = {};
+            for (const spec of specs)
+                wantedIds[spec.targetObj && spec.targetObj.id ? String(spec.targetObj.id) : ""] = true;
+            if (rel.items && typeof el.RemoveRelation === "function") {
+                for (let i = rel.items.Count - 1; i >= 0; i--) {
+                    const oldItem = rel.items.get_Item(i);
+                    const oldId = oldItem.target && oldItem.target.id ? String(oldItem.target.id) : "";
+                    if (!wantedIds[oldId])
+                        el.RemoveRelation(oldItem.target);
+                }
+            }
+            for (const spec of specs)
+                el.SetRelation(spec.targetObj, spec.sidePair);
+            applied = true;
+        }
+        catch (_) {
+            applied = false;
+        }
+    }
+    if (!applied) {
+        if (typeof rel.Reset === "function")
+            rel.Reset();
+        else if (rel.items)
+            while (rel.items.Count > 0)
+                rel.RemoveItem(rel.items.get_Item(0));
+        for (const spec of specs)
+            rel.AddItem(spec.targetObj, spec.sidePair);
+    }
+    doc.SetModified(true);
+    doc.RefreshInspectors();
+    const after = relationMemoryValues(obj);
+    // Requested state (normalized) must match what the editor actually applied;
+    // after-readback supplies the canonical sidePair encoding.
+    const wanted = {};
+    for (const spec of specs)
+        wanted[`relation.${spec.targetObj && spec.targetObj.id ? String(spec.targetObj.id) : ""}`] = canonicalSidePair(spec.sidePair);
+    const actual = {};
+    for (const key of Object.keys(after))
+        if (key.indexOf("relation.") === 0)
+            actual[key] = after[key];
+    const rejection = diffExpectedValues(wanted, actual);
+    if (rejection.length)
+        verificationError("editor_rejected", "编辑器未按请求写入 relation", { stage: "editor", target: targetSummary(obj, params.target), expected: wanted, actual, differences: rejection });
+    const expected = Object.assign({ id: obj.id, name: obj.name || "", type: String(obj.objectType || "").toLowerCase() }, actual);
+    return writeVerification(doc, obj, before, after, params, expected, relationReaders());
+}
+// GearDisplay rides on gear index 0 (FairyGUI gear order: Display=0, XY=1, ...).
+const GEAR_INDEX_DISPLAY = 0;
+function normalizeGearPages(pages) {
+    if (pages === undefined || pages === null)
+        return "";
+    const list = Array.isArray(pages) ? pages.map(String) : String(pages).split(",");
+    const cleaned = list.map(s => s.trim()).filter(s => s.length);
+    cleaned.sort();
+    return cleaned.join(",");
+}
+// FObject.GetGear returns FairyEditor.Framework.Gears.IGear — an empty marker
+// interface — so the live gear state must be read through WriteGears()'s
+// serialized XML instead of member access.
+function gearValuesFromXml(xml, out) {
+    const collect = (n) => {
+        out["gearDisplay.controller"] = String(n.GetAttribute("controller") || "");
+        out["gearDisplay.pages"] = normalizeGearPages(n.GetAttribute("pages") || "");
+    };
+    if (xml && String(xml.name) === "gearDisplay")
+        collect(xml);
+    else if (xml)
+        for (const child of childXmlNodes(xml, "gearDisplay")) {
+            collect(child);
+            break;
+        }
+    return out;
+}
+function gearMemoryValues(obj) {
+    const out = { "gearDisplay.controller": "", "gearDisplay.pages": "" };
+    try {
+        if (typeof obj.WriteGears === "function")
+            gearValuesFromXml(obj.WriteGears(), out);
+        else if (typeof obj.GetGear === "function") {
+            // Mock-host / older-API fallback via member access.
+            const gear = obj.GetGear(GEAR_INDEX_DISPLAY);
+            if (gear) {
+                const controller = gear.controller;
+                if (controller)
+                    out["gearDisplay.controller"] = String(controller.name || controller);
+                if (gear.pages)
+                    out["gearDisplay.pages"] = normalizeGearPages(Array.from(gear.pages) || []);
+            }
+        }
+    }
+    catch (_) { /* gear layer not readable; report empty */ }
+    out.id = obj.id || "";
+    out.name = obj.name || "";
+    out.type = String(obj.objectType || "unknown").toLowerCase();
+    return out;
+}
+function persistedGearValues(doc, obj) {
+    const found = findPersistedObjectNode(doc, obj);
+    const nodes = childXmlNodes(found.node, "gearDisplay");
+    const node = nodes.length ? nodes[0] : null;
+    const values = {
+        "gearDisplay.controller": node ? String(node.GetAttribute("controller") || "") : "",
+        "gearDisplay.pages": node ? normalizeGearPages(node.GetAttribute("pages") || "") : "",
+        id: found.node.GetAttribute("id") || "",
+        name: found.node.GetAttribute("name") || "",
+        type: String(found.node.name)
+    };
+    return { values, file: found.file };
+}
+function gearReaders() {
+    return { memory: gearMemoryValues, persisted: persistedGearValues };
+}
+function resolveController(doc, name) {
+    const content = doc.content;
+    if (!content || typeof content.GetController !== "function")
+        return null;
+    return content.GetController(name);
+}
+function setGearDisplay(params) {
+    const doc = getActiveDocument();
+    const obj = resolveObject(doc, params.target);
+    validateReloadOptions(params, targetSummary(obj, params.target));
+    if (params.controller === undefined)
+        verificationError("invalid_argument", "缺少 controller 字段（null/空字符串表示清除联动）", { stage: "input" });
+    const controllerName = String(params.controller || "");
+    let controller = null;
+    if (controllerName) {
+        controller = resolveController(doc, controllerName);
+        if (!controller)
+            verificationError("target_not_found", `控制器不存在：${controllerName}`, { stage: "input", controller: controllerName });
+    }
+    let pagesCsv = null;
+    if (params.pages !== undefined) {
+        if (!controller)
+            verificationError("invalid_argument", "清除联动时不允许携带 pages", { stage: "input" });
+        pagesCsv = normalizeGearPages(params.pages);
+        if (pagesCsv) {
+            for (const pageId of pagesCsv.split(",")) {
+                const ok = controller.HasPageId && controller.HasPageId(pageId);
+                const okName = !ok && controller.HasPageName && controller.HasPageName(pageId);
+                if (!ok && !okName)
+                    verificationError("invalid_argument", `pages 包含控制器 ${controllerName} 不存在的页面：${pageId}`, { stage: "input", controller: controllerName, page: pageId });
+            }
+            // Accept page names too: resolve to ids before writing.
+            const resolved = [];
+            for (const pageId of pagesCsv.split(",")) {
+                if (controller.HasPageId && controller.HasPageId(pageId))
+                    resolved.push(pageId);
+                else if (controller.GetPages) {
+                    const pageList = controller.GetPages();
+                    for (let i = 0; i < pageList.Count; i++) {
+                        const p = pageList.get_Item(i);
+                        if (String(p.name) === pageId) {
+                            resolved.push(String(p.id));
+                            break;
+                        }
+                    }
+                }
+            }
+            resolved.sort();
+            pagesCsv = resolved.join(",");
+        }
+    }
+    // Unbinding the controller leaves a controller-less gear with dangling page
+    // references; clear the pages as well so the gear is fully removed.
+    if (!controllerName && params.pages === undefined)
+        pagesCsv = "";
+    const before = gearMemoryValues(obj);
+    const el = obj.docElement;
+    let applied = false;
+    if (el && typeof el.UpdateGears === "function") {
+        // Preferred path: rewrite the whole <gears> set through the document
+        // model. Every non-gearDisplay child is copied across unchanged so the
+        // update never wipes gearXY/gearSize/etc. the caller did not touch.
+        try {
+            const XmlType = CS.FairyGUI.Utils.XML;
+            const gears = new XmlType("<gears/>");
+            if (typeof obj.WriteGears === "function") {
+                const current = obj.WriteGears();
+                if (current && String(current.name) !== "gearDisplay") {
+                    for (let i = 0; i < current.elements.Count; i++) {
+                        const child = current.elements.get_Item(i);
+                        if (String(child.name) === "gearDisplay")
+                            continue;
+                        gears.AppendChild(new XmlType(String(child.ToXMLString())));
+                    }
+                }
+            }
+            if (controllerName) {
+                const pagesAttr = pagesCsv === null ? (before["gearDisplay.pages"] || "") : pagesCsv;
+                const escAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+                gears.AppendChild(new XmlType(`<gearDisplay controller="${escAttr(controllerName)}" pages="${escAttr(pagesAttr)}"/>`));
+            }
+            el.UpdateGears(gears);
+            applied = true;
+        }
+        catch (_) {
+            applied = false;
+        }
+    }
+    if (!applied && el && typeof el.SetGearProperty === "function") {
+        try {
+            el.SetGearProperty(GEAR_INDEX_DISPLAY, "controller", controller);
+            if (pagesCsv !== null)
+                el.SetGearProperty(GEAR_INDEX_DISPLAY, "pages", pagesCsv);
+            applied = true;
+        }
+        catch (_) {
+            applied = false;
+        }
+    }
+    if (!applied) {
+        const gear = typeof obj.GetGear === "function" ? obj.GetGear(GEAR_INDEX_DISPLAY, true) : null;
+        if (!gear)
+            verificationError("unsupported_property", "目标对象不支持 gearDisplay 写入路径", { stage: "editor", target: targetSummary(obj, params.target) });
+        try {
+            gear.controller = controller;
+        }
+        catch (_) {
+            try {
+                gear.controller = controllerName || null;
+            }
+            catch (error) {
+                verificationError("editor_rejected", `gearDisplay.controller 赋值失败：${String(error)}`, { stage: "editor", target: targetSummary(obj, params.target) });
+            }
+        }
+        if (pagesCsv !== null) {
+            try {
+                gear.pages = pagesCsv ? pagesCsv.split(",") : [];
+            }
+            catch (_) {
+                try {
+                    gear.pages = pagesCsv;
+                }
+                catch (error) {
+                    verificationError("editor_rejected", `gearDisplay.pages 赋值失败：${String(error)}`, { stage: "editor", target: targetSummary(obj, params.target) });
+                }
+            }
+        }
+    }
+    doc.SetModified(true);
+    doc.RefreshInspectors();
+    if (typeof obj.CheckGearDisplay === "function") {
+        try {
+            obj.CheckGearDisplay();
+        }
+        catch (_) { }
+    }
+    const after = gearMemoryValues(obj);
+    const wanted = { "gearDisplay.controller": controllerName, "gearDisplay.pages": pagesCsv === null ? after["gearDisplay.pages"] : pagesCsv };
+    const actual = { "gearDisplay.controller": after["gearDisplay.controller"], "gearDisplay.pages": after["gearDisplay.pages"] };
+    const rejection = diffExpectedValues(wanted, actual);
+    if (rejection.length)
+        verificationError("editor_rejected", "编辑器未按请求写入 gearDisplay", { stage: "editor", target: targetSummary(obj, params.target), expected: wanted, actual, differences: rejection });
+    const expected = Object.assign({ id: obj.id, name: obj.name || "", type: String(obj.objectType || "").toLowerCase() }, actual);
+    return writeVerification(doc, obj, before, after, params, expected, gearReaders());
+}
+// ---------- Controllers ----------
+function controllerMemoryValues(doc, name) {
+    const c = resolveController(doc, name);
+    if (!c)
+        return { name, present: false, pageCount: null, pageNames: null, selectedIndex: null };
+    let names = [];
+    try {
+        // GetPageNames() returns "id:name" entries in the live editor; the real
+        // page names (matching the serialized form) live on the page objects.
+        const list = c.GetPages ? c.GetPages() : null;
+        if (list)
+            for (let i = 0; i < list.Count; i++)
+                names.push(String(list.get_Item(i).name));
+        else {
+            const fallback = c.GetPageNames ? c.GetPageNames() : null;
+            if (fallback)
+                for (let i = 0; i < fallback.Count; i++)
+                    names.push(String(fallback.get_Item(i)));
+        }
+    }
+    catch (_) { }
+    return {
+        name, present: true,
+        pageCount: numOrNull(c.pageCount),
+        pageNames: names.join(","),
+        selectedIndex: numOrNull(c.selectedIndex)
+    };
+}
+function persistedControllerValues(doc, name) {
+    const parsed = documentXml(doc, null);
+    let node = null;
+    for (let i = 0; i < parsed.xml.elements.Count; i++) {
+        const candidate = parsed.xml.elements.get_Item(i);
+        if (String(candidate.name) === "controller" && String(candidate.GetAttribute("name") || "") === name) {
+            if (node)
+                verificationError("persistence_failed", "XML 中存在同名 Controller", { stage: "xml", name });
+            node = candidate;
+        }
+    }
+    if (!node)
+        return { values: { name, present: false, pageCount: null, pageNames: null, selectedIndex: null }, file: parsed.file };
+    // pages serializes as alternating id,name pairs.
+    const rawPages = String(node.GetAttribute("pages") || "").split(",").filter((s) => s.length);
+    const names = [];
+    for (let i = 1; i < rawPages.length; i += 2)
+        names.push(rawPages[i]);
+    const values = {
+        name, present: true,
+        pageCount: names.length,
+        pageNames: names.join(","),
+        selectedIndex: numOrNull(node.GetAttribute("selected"))
+    };
+    return { values, file: parsed.file };
+}
+function externalReloadVerifyController(doc, name, expected, state) {
+    const rr = reloadDocument(doc, {});
+    const values = compareVerification(expected, controllerMemoryValues(rr.doc, name), "reload", { id: name, name, objectType: "controller" });
+    state.doc = rr.doc;
+    return { performed: true, url: rr.url, closeStrategy: rr.closeStrategy, values };
+}
+// Same ladder as transitionWriteVerification: the controller lives on the
+// component rather than in the display list, so every stage re-reads it by name.
+function controllerWriteVerification(doc, name, params, expected) {
+    const target = { id: null, name, path: null, type: "controller" };
+    const stub = { id: name, name, objectType: "controller" };
+    validateReloadOptions(params, target);
+    const memory = controllerMemoryValues(doc, name);
+    compareVerification(expected, memory, "editor", stub);
+    let saved = false;
+    if (params.save) {
+        try {
+            doc.Save();
+        }
+        catch (error) {
+            verificationError("persistence_failed", "保存失败", { stage: "save", target, reason: String(error), expected });
+        }
+        saved = doc.isModified === false;
+        if (!saved)
+            verificationError("persistence_failed", "保存后文档仍处于修改状态", { stage: "save", target, expected });
+    }
+    let xmlReadback = false;
+    let xmlFile = null;
+    let xmlValues = null;
+    if (saved && params.verify !== false) {
+        const disk = persistedControllerValues(doc, name);
+        xmlFile = disk.file;
+        xmlValues = disk.values;
+        compareVerification(expected, xmlValues, "xml", stub);
+        xmlReadback = true;
+    }
+    const state = {};
+    let reloaded = null;
+    if (xmlReadback && params.externalReload)
+        reloaded = externalReloadVerifyController(doc, name, expected, state);
+    const verification = { editorReadback: true, xmlReadback, externalReload: Boolean(reloaded), expected, editor: memory, xml: xmlValues, file: xmlFile, reload: reloaded };
+    const strength = verificationStrength(verification, saved);
+    return {
+        state, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+        note: `${strengthNote(verification, saved, "仅验证 Controller 名称、页面集与选中页；")}失败不自动回滚。`
+    };
+}
+function setController(params) {
+    const doc = getActiveDocument();
+    const name = String(params.name || "");
+    if (!name)
+        verificationError("invalid_argument", "缺少控制器 name", { stage: "input" });
+    const content = doc.content;
+    const target = { id: null, name, path: null, type: "controller" };
+    validateReloadOptions(params, target);
+    let controller = resolveController(doc, name);
+    const removing = params.remove === true;
+    if (removing) {
+        if (!controller)
+            verificationError("target_not_found", `控制器不存在：${name}`, { stage: "input" });
+        const before = controllerMemoryValues(doc, name);
+        content.RemoveController(controller);
+        doc.SetModified(true);
+        doc.RefreshInspectors();
+        const verification = controllerWriteVerification(doc, name, params, { name, present: false });
+        return {
+            ok: true, target, before, removed: before,
+            documentModified: Boolean((verification.state && verification.state.doc || doc).isModified),
+            saved: verification.saved, persisted: verification.persisted, strength: verification.strength,
+            verification: verification.verification, note: verification.note
+        };
+    }
+    if (!controller) {
+        if (!params.create)
+            verificationError("target_not_found", `控制器不存在：${name}（创建需传 create:true）`, { stage: "input" });
+        controller = new CS.FairyEditor.FController();
+        controller.name = name;
+        content.AddController(controller, false);
+    }
+    const before = controllerMemoryValues(doc, name);
+    if (params.pages !== undefined) {
+        if (!Array.isArray(params.pages))
+            verificationError("invalid_argument", "pages 必须是页面名数组（整体替换页面集）", { stage: "input" });
+        const pageNames = params.pages.map((p) => String(p));
+        if (pageNames.length !== new Set(pageNames).size)
+            verificationError("invalid_argument", "pages 存在重复页面名", { stage: "input" });
+        // SetPages regenerates page ids; warn callers that gearDisplay page
+        // references by id must be re-checked after a full page replacement.
+        try {
+            controller.SetPages(pageNames);
+        }
+        catch (_) {
+            // Puerts may not coerce a JS array into IList<string>; fall back to
+            // rebuilding the page set one entry at a time.
+            while (controller.pageCount > 0)
+                controller.RemovePageAt(0);
+            for (const pageName of pageNames)
+                controller.AddPage(pageName);
+        }
+    }
+    if (params.addPages !== undefined) {
+        if (!Array.isArray(params.addPages))
+            verificationError("invalid_argument", "addPages 必须是页面名数组", { stage: "input" });
+        for (const pageName of params.addPages)
+            controller.AddPage(String(pageName));
+    }
+    if (params.selectedIndex !== undefined) {
+        const index = Number(params.selectedIndex);
+        if (!Number.isInteger(index) || index < 0)
+            verificationError("invalid_argument", "selectedIndex 必须是非负整数", { stage: "input" });
+        controller.SetSelectedIndex(index);
+    }
+    if (params.selectedPage !== undefined) {
+        const pageName = String(params.selectedPage);
+        if (controller.HasPageName && !controller.HasPageName(pageName))
+            verificationError("invalid_argument", `selectedPage 页面不存在：${pageName}`, { stage: "input", controller: name });
+        controller.selectedPage = pageName;
+    }
+    if (params.exported !== undefined)
+        controller.exported = Boolean(params.exported);
+    if (params.autoRadioGroupDepth !== undefined)
+        controller.autoRadioGroupDepth = Boolean(params.autoRadioGroupDepth);
+    if (params.homePage !== undefined)
+        controller.homePage = String(params.homePage);
+    doc.SetModified(true);
+    doc.RefreshInspectors();
+    const after = controllerMemoryValues(doc, name);
+    const expected = { name, present: true, pageCount: after.pageCount, pageNames: after.pageNames };
+    if (params.selectedIndex !== undefined || params.selectedPage !== undefined)
+        expected.selectedIndex = after.selectedIndex;
+    const verification = controllerWriteVerification(doc, name, params, expected);
+    return {
+        ok: true, target, before, after,
+        documentModified: Boolean((verification.state && verification.state.doc || doc).isModified),
+        saved: verification.saved, persisted: verification.persisted, strength: verification.strength,
+        verification: verification.verification, note: verification.note
+    };
+}
+function listControllers() {
+    const doc = getActiveDocument();
+    const content = doc.content;
+    const list = [];
+    if (content && content.controllers) {
+        for (let i = 0; i < content.controllers.Count; i++) {
+            const c = content.controllers.get_Item(i);
+            list.push(controllerMemoryValues(doc, String(c.name)));
+        }
+    }
+    return { ok: true, document: describeDocument(doc), controllers: list };
 }
 // Transitions and package items live outside the display list, so the
 // object-centric verifyObject path cannot check them. The helpers below keep
@@ -3260,6 +4212,11 @@ function handleCommand(request) {
         set_property: true,
         insert_object: true,
         remove_object: true,
+        set_list_layout: true,
+        set_group_layout: true,
+        set_relation: true,
+        set_gear_display: true,
+        set_controller: true,
         save_document: true,
         save_all: true,
         discard_document: true,
@@ -3359,6 +4316,24 @@ function handleCommand(request) {
             return setTextStyle(params);
         case "verify_document":
             return verifyDocument(params);
+        case "set_list_layout": {
+            const doc = getActiveDocument();
+            const fields = layoutFieldSubset(params);
+            return applyTypedLayoutWrite(doc, params, "list", LIST_LAYOUT_KEYS, fields);
+        }
+        case "set_group_layout": {
+            const doc = getActiveDocument();
+            const fields = layoutFieldSubset(params);
+            return applyTypedLayoutWrite(doc, params, "group", GROUP_LAYOUT_KEYS, fields);
+        }
+        case "set_relation":
+            return setRelation(params);
+        case "set_gear_display":
+            return setGearDisplay(params);
+        case "set_controller":
+            return setController(params);
+        case "list_controllers":
+            return listControllers();
         case "set_property": {
             const doc = getActiveDocument();
             const obj = resolveObject(doc, params.target);

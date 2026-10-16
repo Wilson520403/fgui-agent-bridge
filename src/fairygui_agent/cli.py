@@ -289,6 +289,52 @@ def build_parser() -> argparse.ArgumentParser:
     remove_parser.add_argument("--no-verify", action="store_true")
     remove_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认目标在重载后仍不存在（需 --save）")
 
+    list_layout_parser = subparsers.add_parser("set-list-layout", help="修改 List 布局属性（layout/gap/defaultItem/align/overflow 等）")
+    _add_target_arguments(list_layout_parser)
+    list_layout_parser.add_argument("fields", help="布局字段 JSON 对象，如 {\"layout\":\"flow_vertical\",\"lineGap\":8}")
+    list_layout_parser.add_argument("--save", action="store_true")
+    list_layout_parser.add_argument("--no-verify", action="store_true")
+    list_layout_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+
+    group_layout_parser = subparsers.add_parser("set-group-layout", help="修改 Group 布局属性（advanced/layout/gap/excludeInvisibles 等）")
+    _add_target_arguments(group_layout_parser)
+    group_layout_parser.add_argument("fields", help="布局字段 JSON 对象，如 {\"advanced\":true,\"layout\":\"vt\",\"lineGap\":12}")
+    group_layout_parser.add_argument("--save", action="store_true")
+    group_layout_parser.add_argument("--no-verify", action="store_true")
+    group_layout_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+
+    relation_parser = subparsers.add_parser("set-relation", help="整体替换对象 Relation 绑定")
+    _add_target_arguments(relation_parser)
+    relation_parser.add_argument("relations", help="JSON 数组，如 [{\"target\":{\"id\":\"n1\"},\"sidePair\":\"right-right\"}]；target 省略表示父组件")
+    relation_parser.add_argument("--save", action="store_true")
+    relation_parser.add_argument("--no-verify", action="store_true")
+    relation_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+
+    gear_parser = subparsers.add_parser("set-gear-display", help="设置对象 gearDisplay 联动（控制器 + 页面）")
+    _add_target_arguments(gear_parser)
+    gear_parser.add_argument("--controller", help="控制器名；空字符串清除联动", required=True)
+    gear_parser.add_argument("--pages", help="页面 id 或名称，逗号分隔或 JSON 数组；省略保持不变")
+    gear_parser.add_argument("--save", action="store_true")
+    gear_parser.add_argument("--no-verify", action="store_true")
+    gear_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+
+    subparsers.add_parser("controllers", help="列出当前组件的全部 Controller")
+
+    controller_parser = subparsers.add_parser("set-controller", help="创建、修改或删除当前组件的 Controller")
+    controller_parser.add_argument("name")
+    controller_parser.add_argument("--pages", help="页面名 JSON 数组，整体替换页面集（会重新分配页面 id）")
+    controller_parser.add_argument("--add-pages", help="页面名 JSON 数组，追加到页面集")
+    controller_parser.add_argument("--selected-index", type=int)
+    controller_parser.add_argument("--selected-page")
+    controller_parser.add_argument("--exported", help="true/false")
+    controller_parser.add_argument("--auto-radio-group-depth", help="true/false")
+    controller_parser.add_argument("--home-page")
+    controller_parser.add_argument("--create", action="store_true", help="控制器不存在时创建")
+    controller_parser.add_argument("--remove", action="store_true", help="删除控制器")
+    controller_parser.add_argument("--save", action="store_true")
+    controller_parser.add_argument("--no-verify", action="store_true")
+    controller_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+
     subparsers.add_parser("save", help="保存当前文档")
     subparsers.add_parser("discard", help="放弃当前文档未保存的修改")
     subparsers.add_parser("save-all", help="保存全部文档、已打开包和工程")
@@ -589,6 +635,37 @@ def main() -> int:
         elif args.command == "remove":
             action = "remove_object"
             params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+        elif args.command == "set-list-layout":
+            action = "set_list_layout"
+            params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+            params.update(load_json_value(args.fields))
+        elif args.command == "set-group-layout":
+            action = "set_group_layout"
+            params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+            params.update(load_json_value(args.fields))
+        elif args.command == "set-relation":
+            action = "set_relation"
+            params = {"target": target_from_args(args), "relations": load_json_value(args.relations), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+        elif args.command == "set-gear-display":
+            action = "set_gear_display"
+            params = {"target": target_from_args(args), "controller": args.controller, "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+            if args.pages is not None:
+                params["pages"] = load_json_value(args.pages)
+        elif args.command == "controllers":
+            action = "list_controllers"
+        elif args.command == "set-controller":
+            action = "set_controller"
+            params = {"name": args.name, "create": args.create, "remove": args.remove, "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+            if args.pages is not None:
+                params["pages"] = load_json_value(args.pages)
+            if args.add_pages is not None:
+                params["addPages"] = load_json_value(args.add_pages)
+            for key, value in (("selectedIndex", args.selected_index), ("selectedPage", args.selected_page), ("homePage", args.home_page)):
+                if value is not None:
+                    params[key] = value
+            for key, value in (("exported", args.exported), ("autoRadioGroupDepth", args.auto_radio_group_depth)):
+                if value is not None:
+                    params[key] = bool(load_json_value(value))
         elif args.command == "save":
             action = "save_document"
         elif args.command == "discard":

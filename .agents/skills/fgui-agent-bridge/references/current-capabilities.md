@@ -1,15 +1,15 @@
 # Agent Bridge 当前能力参考
 
-> 这是独立 `fgui-agent-bridge` 仓库在 2026-09-20 的能力快照。功能变动时必须同步本文件，并以源码实际签名为最终依据。
+> 这是独立 `fgui-agent-bridge` 仓库的能力快照。功能变动时必须同步本文件，并以源码实际签名为最终依据。
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.6`
+- Bridge 版本：`0.8.8`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：42，其中新增资源引用、文本样式和文档验证工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：48，其中新增 List/Group 布局、Relation、gearDisplay 和 Controller 工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -34,6 +34,11 @@
 | `fgui_replace_object_resource` | target、resource_url、expected_type、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用（Button 状态显式拒绝） |
 | `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读 |
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态；expected 含 children 时执行递归对象树比对 |
+| `fgui_set_list_layout` | target、`fields`（布局字段集）、save?、verify?、external_reload? | 修改 List 布局：`layout`/`selectionMode`/`lineGap`/`columnGap`/`defaultItem`/`autoItemSize`/`align`/`vAlign`/`selectionController`/`foldInvisibleItems`/`clearOnPublish`/`scrollItemToViewOnClick`/`overflow`/`margin` |
+| `fgui_set_group_layout` | target、`fields`、save?、verify?、external_reload? | 修改 Group 布局：`advanced`/`layout`/`lineGap`/`columnGap`/`excludeInvisibles`/`mainGridMinSize`/`mainGridIndex`/`autoSizeDisabled`/`collapsed` |
+| `fgui_set_relation` | target、`relations` 数组、save?、verify?、external_reload? | 整体替换对象 Relation 绑定（sidePair 或 pairs 两种写法） |
+| `fgui_set_gear_display` | target、`controller`（null/空清除）、`pages?`、save?、verify?、external_reload? | 设置 gearDisplay 联动的控制器与可见页面 |
+| `fgui_list_controllers` / `fgui_set_controller` | 无 / `name`、pages/add_pages/selected_index/selected_page/exported/auto_radio_group_depth/home_page、create?、remove?、save?、verify?、external_reload? | 列出或创建/修改/删除当前组件 Controller |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
 | `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name`，均支持 `save?`、`verify?`、`external_reload?` | 声明式创建、完整替换或删除 Transition |
@@ -81,6 +86,7 @@
 - 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`；均支持 `--save` / `--no-verify`，image/font/sound/movieclip 另支持 `--external-reload`（asset 重载）
 - Transition：`transitions`、`get-transition`、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
+- 布局与控制器（0.8.8）：`set-list-layout`、`set-group-layout`、`set-relation`、`set-gear-display`、`controllers`、`set-controller`；写命令支持 `--save` / `--no-verify` / `--external-reload`
 - 预览：`preview-transition`、`preview-movieclip`
 - 保存发布：`save`、`discard`、`save-all`、`history`、`undo`、`redo`、`publish-settings`、`publish`
 - `call` 仅调试原始 Action，不替代正式命令。
@@ -144,3 +150,15 @@
 - 三阶段验证沿用同一梯子：editor 内存树比对 → 磁盘 XML 比对（仅活动文档序列化范围：根节点 + displayList 直接子节点；嵌套组件内部计入 `verification.xmlSkipped`，不比对其他文件的 XML）→ `external_reload` 关闭重开后在重新载入的文档上整树重走。
 - 响应 `verification` 新增 `mode:"tree"`、`checked`（比对节点数）、`xmlChecked`/`xmlSkipped`（XML 阶段覆盖/跳过数）；失败 `error.details` 带 `node`（如 `expected.children[2]`）定位到具体 spec 路径。
 - 模拟宿主新增 16 项树比对用例（总数 87）；**已在 FairyGUI Editor 6.1.4 真机验证**：exact 全树 10 节点（XML 覆盖 9、嵌套组件内部跳过 1）、subset 容忍多余节点、`editor_rejected`/`target_not_found`/`persistence_failed`(stage xml)/`invalid_argument` 各类失败路径、非根 target 子树的 xmlSkipped 记账，以及 `external_reload` 经 `CloseDocuments` 关闭重开后整树 10 节点重走（`strength:reload`）。
+
+### List/Group 布局、Relation、gearDisplay、Controller（0.8.8）
+
+- `set_list_layout` / `set_group_layout` 走 `fields` 扁平字段集；字段经类型化校验后优先写对象模型成员（编辑器中 List/Group 的布局成员本身就是序列化字符串），对象模型未暴露的属性（如 `overflow`、`autoClearItems`、`margin`）回退到 `GetProperty`/`SetProperty`。不支持的字段报 `unsupported_property`，不产生半写入。
+- `set_list_layout` 的 `layout` 接受语义名 `single_column`/`single_row`/`flow_horizontal`/`flow_vertical`/`pagination`（内部解析为 `FList` 常量的序列化值）或原始序列化值 `column`/`row`/`flow_hz`/`flow_vt`/`pagination`；`defaultItem` 必须是 `ui://` 组件资源 URL；`selectionController` 校验控制器存在。
+- `set_group_layout` 的 `layout`/`lineGap`/`columnGap`/`excludeInvisibles` 仅对 `advanced=true` 的高级组有效；普通组提交这些字段会在写入前报 `invalid_argument`。
+- `set_relation` 是**整体替换**语义：`relations` 数组每项给 `target`（对象定位，缺省/null 表示父组件）+ `sidePair`（如 `"right-right"`）或 `pairs`（`[{source,target,percent?}]`）。sidePair 校验方向合法性（水平↔水平、垂直↔垂直），空 sidePair 的关系条目不参与比对（编辑器对未触碰对象也会序列化空 `<relation target="" sidePair=""/>`）。写入走 `DocElement.UpdateRelations`（真机 6.1.4 实测：直接 `FRelations.Reset()+AddItem` 会把文档卡在 modified 且 save 静默失败），回退 `SetRelation`/`RemoveRelation`。
+- `set_gear_display` 绑定 gear 0（Display）：`controller` 必须已存在；`pages` 接受页面 id 或名称（名称解析为 id 后写入）；`controller` 传 null/空字符串清除联动并同时清空 pages。写入走 `DocElement.UpdateGears`（保留其他 gear 子元素），读取走 `FObject.WriteGears()` 序列化 XML——`GetGear` 返回的 `IGear` 是空接口，无法读成员。
+- `set_controller`：`create:true` 创建；`remove:true` 按缺失性验证删除；`pages` 整体替换页面集（**会重新分配页面 id**，依赖页面 id 的 gearDisplay 引用需重新核对）；`add_pages` 追加；`selected_index`/`selected_page` 设置选中页。`exported`/`auto_radio_group_depth`/`home_page` 可写但当前验证层只钉住 `pageCount`/`pageNames`/`selectedIndex`。
+- 五个写 Action 沿用统一验证梯子（editor → save → 磁盘 XML → external reload）；Controller/Relation/gearDisplay 的 XML 阶段分别比对顶层 `<controller>` 元素和对象节点下的 `<relation>`/`<gearDisplay>` 子元素；枚举型序列化属性缺省（未写出）时计入 `verification.xmlSkippedKeys`，不当作失败也不声称已验证。
+- 真机 6.1.4 已确认的序列化行为：`GetPageNames()` 返回 `id:name` 混合串（读取页面名须用 `GetPages().name`）；`scrollItemToViewOnClick` 序列化默认值为 `true`（缺省不写出）；`selectionMode` 仅在非默认时序列化；`FList` 的 `clearOnPublish`/`foldInvisibleItems`/`scrollItemToViewOnClick` 是公开字段，`overflow`/`marginStr` 在 `FComponent` 基类。
+- 模拟宿主新增 25 项用例（总数 112）；**真机 6.1.4 已验证**（证据：`tests/reports/phase4-live-0.8.8.json`）：list/group 布局写+存+重载、relation 整组替换（含 external reload）、gearDisplay 绑定/名称页面解析/清除、controller 创建/页面/选中页/删除与 external reload、全部错误路径按结构化 code+stage 失败。

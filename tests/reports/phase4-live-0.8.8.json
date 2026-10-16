@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "suite": "phase4-layout-controller-live",
+  "date": "2026-10-16",
+  "bridgeVersion": "0.8.8",
+  "evidence": "live-editor",
+  "liveEditorVerified": true,
+  "editor": { "app": "FairyGUI Editor", "version": "6.1.4", "platform": "macOS" },
+  "project": { "name": "sample", "component": "Package1/BridgeFixture" },
+  "closeStrategyObserved": "CloseDocuments",
+  "cases": [
+    { "action": "set_list_layout", "params": {"layout": "flow_horizontal", "lineGap": 10, "columnGap": 6, "align": "center"}, "save": true, "result": "persisted", "strength": "disk", "note": "语义名 flow_horizontal 解析为序列化值 flow_hz 并写入 XML" },
+    { "action": "set_list_layout", "params": {"overflow": "hidden", "selectionMode": "multiple", "clearOnPublish": false, "margin": "1,2,3,4"}, "save": true, "result": "persisted", "strength": "disk", "note": "overflow/margin 走 FComponent 基类成员；clearOnPublish 是 FList 公开字段（非属性名）；selectionMode 非默认时会序列化" },
+    { "action": "set_list_layout", "params": {"layout": "flow_vertical", "lineGap": 5}, "save": true, "externalReload": true, "result": "persisted", "strength": "reload" },
+    { "action": "set_list_layout", "params": {"layout": "bogus"}, "result": "invalid_argument", "stage": "input" },
+    { "action": "set_list_layout", "params": {"target": "n2_fix01(text)", "lineGap": 8}, "result": "invalid_argument", "stage": "input", "note": "非 list 目标" },
+    { "action": "set_group_layout", "params": {"layout": "horizontal", "lineGap": 4, "excludeInvisibles": false}, "save": true, "result": "persisted", "strength": "disk", "note": "horizontal 解析为序列化值 hz" },
+    { "action": "set_group_layout", "params": {"advanced": false, "layout": "vt"}, "result": "invalid_argument", "stage": "input", "note": "普通组拒绝 layout 字段" },
+    { "action": "set_relation", "params": {"relations": [{"sidePair": "right-right"}, {"target": {"id": "n0_fix01"}, "pairs": [{"source": "width", "target": "width"}]}]}, "save": true, "result": "persisted", "strength": "disk", "note": "走 DocElement.UpdateRelations；直接 FRelations.Reset+AddItem 会把文档卡在 modified（已改路径）" },
+    { "action": "set_relation", "params": {"relations": [{"sidePair": "width-width,height-height"}, {"target": {"id": "n0_fix01"}, "sidePair": "center-center"}]}, "save": true, "externalReload": true, "result": "persisted", "strength": "reload" },
+    { "action": "set_relation", "params": {"relations": [{"sidePair": "bogus-pair"}]}, "result": "invalid_argument", "stage": "input" },
+    { "action": "set_gear_display", "params": {"controller": "ctrlState", "pages": ["busy"]}, "save": true, "result": "persisted", "strength": "disk", "note": "走 DocElement.UpdateGears；页面名 busy 解析为 id 1；IGear 是空接口，内存读必须经 WriteGears()" },
+    { "action": "set_gear_display", "params": {"controller": ""}, "save": true, "result": "persisted", "strength": "disk", "note": "清除联动同时清空 pages" },
+    { "action": "set_gear_display", "params": {"controller": "ctrlState", "pages": ["0", "busy"]}, "save": true, "externalReload": true, "result": "persisted", "strength": "reload", "note": "id 与名称混用解析为 0,1" },
+    { "action": "set_gear_display", "params": {"controller": "nope"}, "result": "target_not_found", "stage": "input" },
+    { "action": "set_controller", "params": {"name": "ctrlTest", "create": true, "pages": ["a", "b", "c"]}, "save": true, "result": "persisted", "strength": "disk" },
+    { "action": "set_controller", "params": {"name": "ctrlTest", "selectedPage": "b", "addPages": ["d"]}, "save": true, "result": "persisted", "strength": "disk", "note": "selectedPage→selectedIndex=1；addPages 追加至 pageCount=4" },
+    { "action": "set_controller", "params": {"name": "ctrlTest", "selectedIndex": 2}, "save": true, "externalReload": true, "result": "persisted", "strength": "reload" },
+    { "action": "set_controller", "params": {"name": "ctrlTest", "remove": true}, "save": true, "result": "persisted", "strength": "disk", "note": "缺失性验证通过" },
+    { "action": "set_controller", "params": {"name": "ghost", "pages": ["a"]}, "result": "target_not_found", "stage": "input" },
+    { "action": "list_controllers", "result": "ok", "note": "返回 pageNames 形如 idle,busy（GetPageNames 返回 id:name 混合串，已改用 GetPages().name）" }
+  ],
+  "liveFindings": [
+    "GetPageNames() 返回 'id:name' 形式而非纯页面名，controllerMemoryValues 改用 GetPages().name",
+    "FList.clearOnPublish/foldInvisibleItems/scrollItemToViewOnClick 是公开字段而非序列化属性名；SetProperty('autoClearItems') 报 'not exists'",
+    "overflow/scroll/marginStr 位于 FComponent 基类",
+    "scrollItemToViewOnClick 的序列化默认值为 true（缺省不写出）",
+    "selectionMode 非默认值时会序列化到 XML",
+    "FRelations.Reset()+AddItem 直接改集合会让文档卡在 modified 且 save 静默失败；必须用 DocElement.UpdateRelations",
+    "FObject.GetGear 返回空接口 IGear；写入用 DocElement.UpdateGears，读取用 FObject.WriteGears"
+  ],
+  "fixtureRestored": true
+}

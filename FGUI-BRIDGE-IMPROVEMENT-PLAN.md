@@ -18,7 +18,7 @@
 | Phase 1 | 部分完成 | locator、等待 Editor 响应、结构化错误、expected 比对和组件 XML 回读已实现；**external reload 已于 2026-10-15 完成并在 FairyGUI Editor 6.1.4 真机验证**（关闭方式实测为 `CloseDocuments`）；**2026-10-16 `set_property`/`insert_object`/`remove_object` 已迁入统一 `writeVerification` 语义并真机验证**，验证层新增 scale/rotation/alpha/visible/touchable/grayed/text/icon 通用属性；**同日 0.8.6 起全部 Transition 写操作与包资源写操作（创建/导入/MovieClip）已接入统一验证**：Transition 按 `<transition>` 名称与公开条目数验证、组件级 external reload；包资源按 `package.xml` 条目+资源文件验证、asset 类资源支持 `UnloadAsset`/`GetAsset` 重载；**0.8.7 起 `verify_document` 的 `expected` 支持递归 `children` 对象树比对**（`exact`/`subset` 模式、XML 阶段限活动文档序列化范围、external reload 整树重走），**已在 FairyGUI Editor 6.1.4 真机验证**。 |
 | Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
 | Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
-| Phase 4 | 未完成 | 未找到计划中的 List/Group/Relation/Controller/gearDisplay 专用 Action。 |
+| Phase 4 | 部分完成 | **0.8.8 已实现** `set_list_layout`/`set_group_layout`/`set_relation`/`set_gear_display`/`set_controller`/`list_controllers` 六个 Action 并接入统一验证梯子（editor → save → 磁盘 XML → external reload）；模拟宿主 112 项全过，**已在 FairyGUI Editor 6.1.4 真机验证**（`tests/reports/phase4-live-0.8.8.json`）；List 的 numItems/item placeholder 写入、Controller page 批量资源替换尚未实现。 |
 | Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API 已实现；自动同步关键帧、专用验证及截图未完成。 |
 | Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
 | Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。 |
@@ -33,6 +33,7 @@
 - **2026-10-15 修复「XML 缺省属性导致假失败」：** FairyGUI 序列化时会省略仍为默认值的属性，而 `persistedObjectValues` 把缺失属性读成 `null`，导致断言任何默认值属性（典型如默认色 `#FFFFFF`、默认对齐 `left`）时抛出**虚假的** `persistence_failed`——表现像严重的持久化故障，足以诱发对正确改动的错误回滚。修复把缺失属性解析为 FairyGUI 默认值，使「期望默认值」通过、「期望非默认值而 XML 缺失」仍然失败关闭。原有测试 `Read-only verify compares expected Editor and disk` 此前是因为夹具把默认属性也写进 XML 才通过，属于因错因通过，已随夹具改为真实序列化行为而转为因对因通过。**已于 2026-10-16 在 FairyGUI Editor 6.1.4 真机复验**：`verify_document` 断言 XML 缺失的默认属性 `align:"left"` 通过（`persisted:true`、`strength:disk`）；断言 `align:"center"` 在「内存已改、磁盘未存」时仍以 `persistence_failed`（stage `xml`）失败关闭；`set_text_style fontSize:36 --save --external-reload` 经 `CloseDocuments` 关闭重开后回读一致（`strength:reload`），随后已还原 fontSize:32。同时修复夹具脚本一个跨会话假失败：`get_tree` 中 List item 实例等运行时节点的 id 由编辑器按会话分配（如 `n0_dftm`→`n0_jrnu`），`snapshot.tree.match` 现只严格比对持久化到组件 XML 的 id，运行时节点仅比对 name/type/结构。证据见 `tests/reports/phase0-live-recheck.json`。
 - **2026-10-16 `set_property`/`insert_object`/`remove_object` 迁入统一写验证（0.8.5）：** 三个 Action 复用 `writeVerification`/`validateReloadOptions`，返回统一的 `{ok,target,before/after,documentModified,saved,persisted,strength,verification,note}` 并支持 `save`/`verify`/`externalReload`。`set_property` 保留 Agent 属性事务栈，新增类型归一化（数值/布尔/字符串在写入前校验）与 `font` 的 `ui://` 解析；验证层 `VERIFIED_KEYS` 扩展 `scaleX/scaleY/rotation/alpha/visible/touchable/grayed/text/icon` 通用属性（序列化名与默认值已按 6.1.4 实测钉住，如 `visible` 仅在 `false` 时序列化）。`remove_object` 改为缺失性验证：编辑器回读确认不可解析、保存后磁盘 XML 不含节点 id、external reload 重开后仍缺失才报 `persisted`；`insert_object` 验证新节点 `id/name/type/x/y`（含引用时 `resourceURL`）。模拟宿主 51 项全过；真机 6.1.4 已验证 `x`、`visible` 双向、`scaleX` 关闭重开、insert 磁盘回读与 remove 重载后仍缺失。Transition/MovieClip/创建导入类 Action 未在本轮接入。
 - **2026-10-16 剩余写 Action 迁入统一写验证（0.8.6）：** `mutateTransitions` 拆分 mutation 与验证：验证失败（如保存失败）不再触发快照回滚，与对象级写一致；新增 `transitionWriteVerification`/`writePackageVerification` 两条等效梯子。Transition 验证 `<transition>` 名称与公开条目数（tween 合成端点按磁盘序列化折叠），`externalReload` 关闭重开文档后在新文档上重读 Transition 集合并回报 `closeStrategy`；包资源验证 `package.xml` 条目 + `checkFile` 资源文件，image/sound/font/movieclip 的 `externalReload` 为 `UnloadAsset` + `GetAsset` asset 重载，组件创建与删除按 `invalid_argument` 在任何变更前拒绝该参数。`mutateTransitions` 变更前统一走 `validateReloadOptions`，不允许 `externalReload` 缺 `save` 或配 `verify:false`。响应统一带 `saved`/`persisted`/`strength`/`verification`/`note`，`requiresSave` 改为按实际保存结果返回。MCP/CLI 同步暴露 `save`/`verify`/`external_reload`。模拟宿主扩到 71 项全过（含 Transition 三态、stale XML、reload 丢值、包清单回读与缺失性验证）。**真机 6.1.4 已复验**：`upsert_transition`/`add_transition_item` 磁盘回读正确（tween 折叠 itemCount）、`remove_transition` external reload 经 `CloseDocuments` 关闭重开后仍缺失、`create_movieclip --save --external-reload` 走 asset 重载得 `strength:reload`、`remove_movieclip` 保存后包清单缺失、`create_component` 清单回读 `strength:disk`。真机还抓到一个名称归一化时序问题：`item.name` 在 MovieClip 创建时不带扩展名而 `package.xml` `name` 为文件名，已改为按去扩展名归一化比对。
+- **0.8.8 Phase 4 落地（本轮）：** 新增 `set_list_layout`/`set_group_layout`/`set_relation`/`set_gear_display`/`set_controller`/`list_controllers` 六个 Action。布局字段经类型化校验后优先写对象模型成员（编辑器对象模型中 List/Group 布局成员本身就是序列化字符串），未暴露成员回退 `GetProperty`/`SetProperty`；未知字段报 `unsupported_property`，不产生半写入。Relation/gearDisplay 验证对象节点下的 `<relation>`/`<gearDisplay>` 子元素，Controller 验证顶层 `<controller>` 元素；三者均在 external reload 后按名称/id 在新文档上重新定位。枚举型序列化属性缺省时计入 `verification.xmlSkippedKeys`（不当作失败，也不声称已验证）。模拟宿主扩到 112 项全过。**已在 FairyGUI Editor 6.1.4 真机复验**（`tests/reports/phase4-live-0.8.8.json`，含 list/group 写存重载、relation/gear/controller 全链路与全部错误路径），真机暴露了三个模拟宿主无法发现的问题并已全部修复：①`GetPageNames()` 返回 `id:name` 混合串（页面名改用 `GetPages().name`）；②`FRelations.Reset()+AddItem` 绕过文档模型会使文档卡在 modified 且 save 静默失败（relation 写入改为 `DocElement.UpdateRelations`）；③`GetGear` 返回空接口 `IGear`（gearDisplay 读写改为 `DocElement.UpdateGears`/`FObject.WriteGears`），另确认 `scrollItemToViewOnClick` 序列化默认为 `true`、`selectionMode` 非默认才序列化、`clearOnPublish` 等是公开字段而非 `SetProperty` 属性。
 - capability 文档实际路径为 `.agents/skills/fgui-agent-bridge/references/current-capabilities.md`，而非仓库根目录 `references/`。
 - **环境记录（2026-10-15 夜）：** FairyGUI Editor 反复进入「进程存活但插件 `onUpdate` 停摆」的状态——桥接写入一次 status 后心跳即冻结，请求长期滞留在 `requests/` 不被认领。已排除插件自身原因（快照 `main.js` 与仓库字节完全一致且结尾完整；Player.log 中 `JsEnv has been disposed!` 是 Puerts 在编辑器关闭时的收尾噪音，非运行期异常）。已观察到两点可复现规律：编辑器**退到后台会被节流**，`App.runInBackground = true` 并未完全避免；以及工程打开后 `activeDocument` 可能为 `null`。同一现象在 20:07（尚未改动该修复时）也出现过，因此与本次修复无因果关系。后续真机复验前建议先手工打开编辑器并确认已有活动文档。
 
@@ -448,13 +449,13 @@ get_text_style
 
 ## Phase 4：List、Group、Relation 和 Controller
 
-**状态：未完成。** 以下专用 Action 尚未实现；已有通用属性或按钮状态能力不等于本阶段完成。
+**状态：部分完成（0.8.8）。** 六个专用 Action 已实现，模拟宿主 112 项与 FairyGUI Editor 6.1.4 真机复验均通过。
 
 ### 目标
 
 覆盖复杂 UI 布局，避免使用原生编辑器面板修改高级属性。
 
-### 新增 Action
+### 新增 Action（0.8.8 已实现）
 
 ```text
 set_list_layout
@@ -462,48 +463,35 @@ set_group_layout
 set_relation
 set_controller
 set_gear_display
+list_controllers   # 附加的只读 Action
 ```
 
-### List 支持
+### 已实现范围（0.8.8）
 
-- layout：flow horizontal、flow vertical、single column、single row；
-- lineGap、colGap；
-- itemSize、autoItemSize；
-- defaultItem；
-- align、vAlign；
-- overflow；
-- numItems 和 item placeholders；
-- foldInvisibleItems。
+- List：`layout`（语义名或序列化值，内部经 `FList` 常量解析）、`selectionMode`、`lineGap`/`columnGap`、`defaultItem`（必须是 `ui://` 组件资源）、`autoItemSize`、`align`/`vAlign`、`selectionController`（校验控制器存在）、`foldInvisibleItems`、`clearOnPublish`、`scrollItemToViewOnClick`、`overflow`、`margin`；对象模型未暴露的属性回退 `GetProperty`/`SetProperty`。
+- Group：`advanced`、`layout`（`horizontal`/`vertical` 或 `hz`/`vt`）、`lineGap`/`columnGap`、`excludeInvisibles`、`mainGridMinSize`/`mainGridIndex`、`autoSizeDisabled`、`collapsed`；layout 系字段仅对 `advanced=true` 高级组有效。
+- Relation：`set_relation` 为整体替换语义，`relations` 每项为 `{target（缺省=父组件）, sidePair}` 或 `{target, pairs:[{source,target,percent?}]}`；sidePair 校验方向合法性；空 sidePair 条目不参与比对。
+- gearDisplay：`controller` + `pages`（页面 id 或名称，名称解析为 id）；`controller` 为空清除联动并清空 pages；写入优先 `DocElement.UpdateGears`（保留其他 gear 子元素），读取走 `FObject.WriteGears()`（`GetGear` 返回空接口 `IGear`），回退 `SetGearProperty`/`GetGear` 成员路径。
+- Controller：`create`/`remove`、pages 整体替换（重新分配页面 id）、`addPages` 追加、`selectedIndex`/`selectedPage`；XML 阶段比对顶层 `<controller>` 元素的名称、页面集与 `selected`。
+- 五个写 Action 统一 `save`/`verify`/`externalReload` 验证梯子；枚举型序列化属性缺省时计入 `verification.xmlSkippedKeys`。
 
-### Group 支持
+### 尚未实现
 
-- layout；
-- rowGap、colGap；
-- excludeInvisibles；
-- advanced group；
-- 自动计算尺寸。
+- List 的 `numItems` / item placeholder 写入、`repeatX`/`repeatY`/`indent`/`treeViewEnabled`；
+- Controller 每个 page 下的批量资源替换（`set_controller_page_resource`）；
+- `exported`/`autoRadioGroupDepth`/`homePage` 已可写，但验证层只钉住 `pageCount`/`pageNames`/`selectedIndex`。
 
-### Relation 支持
-
-参数应使用结构化表达，而不是逗号字符串：
+### Relation 参数示例
 
 ```json
 {
-  "target": "n45_jfoi",
+  "target": { "id": "n45_jfoi" },
   "relations": [
-    { "source": "right", "target": "right" },
-    { "source": "top", "target": "top" }
+    { "sidePair": "right-right" },
+    { "target": { "id": "n1_xxxx" }, "pairs": [{ "source": "width", "target": "width" }] }
   ]
 }
 ```
-
-### Controller 支持
-
-- 创建、读取、设置 page；
-- 修改 selected page；
-- 修改节点的 gearDisplay；
-- 批量替换每个 page 下的资源；
-- 验证 page 数量与资源状态一致。
 
 ### 验收标准
 
