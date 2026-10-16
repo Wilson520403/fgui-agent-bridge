@@ -244,8 +244,32 @@ def verify_xml_snapshot(fixture_xml: Path, snapshot_xml: Path) -> Check:
     return check
 
 
-def verify_tree_snapshot(tree: dict[str, Any], snapshot_path: Path) -> Check:
-    """编辑器回读的对象树必须与初始快照一致。"""
+def _persisted_ids(fixture_xml: Path) -> set[str]:
+    """组件 XML 中持久化的节点 id；其余 id 由编辑器运行时生成，跨会话不可比。"""
+
+    try:
+        root = ET.parse(fixture_xml).getroot()
+    except ET.ParseError:
+        return set()
+    return {element.get("id") for element in root.iter() if element.get("id")}
+
+
+def _strip_volatile_ids(node: dict[str, Any], persisted_ids: set[str]) -> dict[str, Any]:
+    normalized = {key: value for key, value in node.items() if key != "children"}
+    if node.get("id") not in persisted_ids:
+        normalized.pop("id", None)
+    normalized["children"] = [
+        _strip_volatile_ids(child, persisted_ids) for child in node.get("children") or []
+    ]
+    return normalized
+
+
+def verify_tree_snapshot(tree: dict[str, Any], snapshot_path: Path, fixture_xml: Path) -> Check:
+    """编辑器回读的对象树必须与初始快照一致。
+
+    List item 实例等运行时节点的 id 由编辑器按会话分配，不参与比对；
+    持久化到组件 XML 的 id 仍严格比对。
+    """
 
     check = Check(
         id="snapshot.tree.match",
@@ -258,14 +282,17 @@ def verify_tree_snapshot(tree: dict[str, Any], snapshot_path: Path) -> Check:
         return check
     expected = json.loads(snapshot_path.read_text(encoding="utf-8"))
     expected_tree = expected.get("tree", expected)
-    if tree == expected_tree:
+    persisted_ids = _persisted_ids(fixture_xml)
+    normalized_expected = _strip_volatile_ids(expected_tree, persisted_ids)
+    normalized_actual = _strip_volatile_ids(tree, persisted_ids)
+    if normalized_actual == normalized_expected:
         check.status = "pass"
         check.actual = {"nodes": count_nodes(tree)}
         return check
     check.status = "fail"
-    check.expected = flatten(expected_tree)[:12]
-    check.actual = flatten(tree)[:12]
-    check.detail = "对象树与快照不一致（显示前若干节点的 id/name/type）"
+    check.expected = flatten(normalized_expected)[:12]
+    check.actual = flatten(normalized_actual)[:12]
+    check.detail = "对象树与快照不一致（id 为 None 的是未持久化的运行时节点，仅比对 name/type）"
     return check
 
 
@@ -459,7 +486,7 @@ def verify(
                         actual={"nodeType": node_type, "present": sorted(t for t in present_types if t)},
                     )
                 )
-            checks.append(verify_tree_snapshot(tree, fixture_dir / "initial-tree.json"))
+            checks.append(verify_tree_snapshot(tree, fixture_dir / "initial-tree.json", fixture_xml))
             checks.append(verify_resource_snapshot(items, fixture_dir / "initial-resources.json"))
 
             status = client.describe_status()

@@ -1,0 +1,326 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "fgui-bridge-phase0-report",
+  "generatedAt": "2026-10-16T11:30:31+08:00",
+  "summary": {
+    "total": 21,
+    "passed": 21,
+    "failed": 0,
+    "skipped": 0,
+    "status": "pass"
+  },
+  "checks": [
+    {
+      "id": "fixture.xml.present",
+      "description": "夹具组件 XML 存在",
+      "status": "pass",
+      "target": {
+        "path": "sample/assets/Package1/BridgeFixture.xml"
+      },
+      "actual": "1818 bytes"
+    },
+    {
+      "id": "fixture.xml.parse",
+      "description": "夹具组件 XML 可解析",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "root": "component",
+        "size": "800,600"
+      }
+    },
+    {
+      "id": "matrix.image",
+      "description": "对象矩阵包含 Image",
+      "status": "pass",
+      "target": {
+        "path": "//Image"
+      },
+      "actual": {
+        "id": "n0_fix01",
+        "name": "imgIcon"
+      },
+      "xmlFragment": "<image id=\"n0_fix01\" name=\"imgIcon\" src=\"p93m2\" fileName=\"Blue.png\" xy=\"40,40\" size=\"64,64\">    <gearDisplay controller=\"ctrlState\" pages=\"0\" />    <relation target=\"\" sidePair=\"\" />   </image>"
+    },
+    {
+      "id": "matrix.loader",
+      "description": "对象矩阵包含 Loader",
+      "status": "pass",
+      "target": {
+        "path": "//Loader"
+      },
+      "actual": {
+        "id": "n1_fix01",
+        "name": "loaderItem"
+      },
+      "xmlFragment": "<loader id=\"n1_fix01\" name=\"loaderItem\" xy=\"120,40\" size=\"64,64\" url=\"ui://qsezbqtwp93m1\" align=\"center\" vAlign=\"middle\">    <gearDisplay controller=\"ctrlState\" pages=\"1\" />    <relation target=\"\" sidePair=\"\" />   </loader>"
+    },
+    {
+      "id": "matrix.button",
+      "description": "对象矩阵包含 Button",
+      "status": "pass",
+      "target": {
+        "nodeId": "n3_fix01",
+        "component": "BridgeTestButton.xml (extention=Button)"
+      },
+      "actual": {
+        "kind": "instance-of-button-component",
+        "target": "BridgeTestButton.xml (extention=Button)",
+        "nodeId": "n3_fix01"
+      }
+    },
+    {
+      "id": "matrix.text",
+      "description": "对象矩阵包含 Text",
+      "status": "pass",
+      "target": {
+        "path": "//Text"
+      },
+      "actual": {
+        "id": "n2_fix01",
+        "name": "txtLabel"
+      },
+      "xmlFragment": "<text id=\"n2_fix01\" name=\"txtLabel\" xy=\"200,48\" size=\"202,44\" fontSize=\"32\" color=\"#ffffff\" text=\"Fixture Label\" />"
+    },
+    {
+      "id": "matrix.list",
+      "description": "对象矩阵包含 List",
+      "status": "pass",
+      "target": {
+        "path": "//List"
+      },
+      "actual": {
+        "id": "n4_fix01",
+        "name": "listItems"
+      },
+      "xmlFragment": "<list id=\"n4_fix01\" name=\"listItems\" xy=\"440,130\" size=\"320,240\" overflow=\"scroll\" colGap=\"8\" defaultItem=\"ui://qsezbqtwp93m3\" align=\"none\" vAlign=\"none\" autoClearItems=\"true\">    <relation target=\"\" sidePair=\"\" />    <item />    <item />  "
+    },
+    {
+      "id": "matrix.group",
+      "description": "对象矩阵包含 Group",
+      "status": "pass",
+      "target": {
+        "path": "//Group"
+      },
+      "actual": {
+        "id": "n7_fix01",
+        "name": "grpRows"
+      },
+      "xmlFragment": "<group id=\"n7_fix01\" name=\"grpRows\" xy=\"40,240\" size=\"140,84\" advanced=\"true\" layout=\"vt\" lineGap=\"12\" excludeInvisibles=\"true\">    <relation target=\"\" sidePair=\"\" />   </group>"
+    },
+    {
+      "id": "matrix.controller",
+      "description": "对象矩阵包含 Controller",
+      "status": "pass",
+      "target": {
+        "path": "//Controller"
+      },
+      "actual": {
+        "id": null,
+        "name": "ctrlState"
+      },
+      "xmlFragment": "<controller name=\"ctrlState\" pages=\"0,idle,1,busy\" selected=\"0\" />"
+    },
+    {
+      "id": "matrix.transition",
+      "description": "对象矩阵包含 Transition",
+      "status": "pass",
+      "target": {
+        "path": "//Transition"
+      },
+      "actual": {
+        "id": null,
+        "name": "transFade"
+      },
+      "xmlFragment": "<transition name=\"transFade\" frameRate=\"60\">   <item time=\"0\" type=\"Alpha\" target=\"n0_fix01\" tween=\"true\" startValue=\"0\" endValue=\"1\" duration=\"30\" />   <item time=\"0\" type=\"XY\" target=\"n1_fix01\" tween=\"true\" startValue=\"120,20\" endValue=\"1"
+    },
+    {
+      "id": "matrix.transition.tracks",
+      "description": "Transition 至少包含一条关键帧轨道",
+      "status": "pass",
+      "target": {
+        "path": "//transition/item"
+      },
+      "expected": {
+        "minimumTracks": 1
+      },
+      "actual": {
+        "name": "transFade",
+        "frameRate": "60",
+        "tracks": 2,
+        "targets": [
+          "n0_fix01",
+          "n1_fix01"
+        ]
+      },
+      "xmlFragment": "<transition name=\"transFade\" frameRate=\"60\">   <item time=\"0\" type=\"Alpha\" target=\"n0_fix01\" tween=\"true\" startValue=\"0\" endValue=\"1\" duration=\"30\" />   <item time=\"0\" type=\"XY\" target=\"n1_fix01\" tween=\"true\" startValue=\"120,20\" endValue=\"1"
+    },
+    {
+      "id": "snapshot.xml.match",
+      "description": "夹具 XML 与初始快照 initial-xml.xml 一致",
+      "status": "pass",
+      "target": {
+        "path": "sample/assets/Package1/BridgeFixture.xml"
+      },
+      "actual": {
+        "bytes": 1818
+      }
+    },
+    {
+      "id": "live.editor.online",
+      "description": "编辑器回读到夹具组件",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "title": "BridgeFixture",
+        "savedVersion": 5,
+        "transitions": [
+          "transFade"
+        ]
+      }
+    },
+    {
+      "id": "live.matrix.image",
+      "description": "编辑器对象树中存在 Image 节点",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "nodeType": "image",
+        "present": [
+          "component",
+          "graph",
+          "group",
+          "image",
+          "list",
+          "loader",
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "live.matrix.loader",
+      "description": "编辑器对象树中存在 Loader 节点",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "nodeType": "loader",
+        "present": [
+          "component",
+          "graph",
+          "group",
+          "image",
+          "list",
+          "loader",
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "live.matrix.button",
+      "description": "编辑器对象树中存在 Button 节点",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "nodeType": "component",
+        "present": [
+          "component",
+          "graph",
+          "group",
+          "image",
+          "list",
+          "loader",
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "live.matrix.text",
+      "description": "编辑器对象树中存在 Text 节点",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "nodeType": "text",
+        "present": [
+          "component",
+          "graph",
+          "group",
+          "image",
+          "list",
+          "loader",
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "live.matrix.list",
+      "description": "编辑器对象树中存在 List 节点",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "nodeType": "list",
+        "present": [
+          "component",
+          "graph",
+          "group",
+          "image",
+          "list",
+          "loader",
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "live.matrix.group",
+      "description": "编辑器对象树中存在 Group 节点",
+      "status": "pass",
+      "target": {},
+      "actual": {
+        "nodeType": "group",
+        "present": [
+          "component",
+          "graph",
+          "group",
+          "image",
+          "list",
+          "loader",
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "snapshot.tree.match",
+      "description": "编辑器对象树与初始快照 initial-tree.json 一致",
+      "status": "pass",
+      "target": {
+        "path": "tests/fixtures/phase0/initial-tree.json"
+      },
+      "actual": {
+        "nodes": 17
+      }
+    },
+    {
+      "id": "snapshot.resources.match",
+      "description": "包资源与初始快照 initial-resources.json 一致",
+      "status": "pass",
+      "target": {
+        "path": "tests/fixtures/phase0/initial-resources.json"
+      },
+      "actual": {
+        "count": 6
+      }
+    }
+  ],
+  "mode": "verify-live",
+  "fixture": {
+    "package": "Package1",
+    "component": "BridgeFixture",
+    "path": "sample/assets/Package1/BridgeFixture.xml"
+  },
+  "editor": {
+    "online": true,
+    "heartbeatAgeSeconds": 0.79,
+    "bridgeClientVersion": "0.8.4",
+    "pluginVersion": "0.8.4",
+    "versionMatch": true
+  }
+}
