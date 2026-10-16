@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.3";
+const BRIDGE_VERSION = "0.8.4";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -987,9 +987,40 @@ function compareVerification(expected: any, actual: any, stage: string, obj: any
         if (!(typeof e === "number" && typeof a === "number" ? Math.abs(e - a) <= 0.00001 : e === a))
             differences.push({ property: key, expected: e, actual: a });
     }
+    // Only a mismatch against the live Editor object is an acceptance failure.
+    // Once the value has left the Editor (disk XML, or a document reloaded from
+    // disk), a mismatch means the value was not persisted — never "rejected".
     if (differences.length)
-        verificationError(stage === "xml" ? "persistence_failed" : "editor_rejected", `验证失败：${stage}`, { stage, target: targetSummary(obj, null), expected, actual, differences, mutationMayHaveOccurred: true });
+        verificationError(stage === "editor" ? "editor_rejected" : "persistence_failed", `验证失败：${stage}`, { stage, target: targetSummary(obj, null), expected, actual, differences, mutationMayHaveOccurred: true });
     return actual;
+}
+
+// FairyGUI's serializer omits any attribute that still holds its default, so an
+// absent attribute is not "unknown" — on reload the Editor produces the default.
+// Reading it as null made every default-valued assertion fail with a bogus
+// persistence_failed, which reads like a serious persistence bug and invites
+// rolling back correct changes. Resolving absence to the default keeps the
+// check honest in both directions: expecting the default passes, and expecting
+// anything else still fails closed.
+//
+// Defaults mirror FairyGUI Editor 6.1.x text-object construction values; they are
+// pinned by tests/p0_host_harness.cjs and re-checked against a live Editor.
+const XML_SERIALIZED_DEFAULTS: { [key: string]: any } = {
+    font: "",
+    fontSize: 12,
+    color: "#FFFFFF",
+    align: "left",
+    vAlign: "top",
+    autoSize: "none",
+    letterSpacing: 0,
+    lineGap: 0
+};
+
+function serializedAttr(attr: any, key: string): any {
+    const v = attr(key === "lineGap" ? "leading" : key);
+    if (v !== null) return v;
+    const fallback = XML_SERIALIZED_DEFAULTS[key];
+    return fallback === undefined ? null : fallback;
 }
 
 function persistedObjectValues(doc: any, obj: any): any {
@@ -1019,10 +1050,8 @@ function persistedObjectValues(doc: any, obj: any): any {
     const value: any = { id: attr("id") || "", name: attr("name") || "", type: String(node.name), resourceURL: null };
     if (value.type === "loader") value.resourceURL = attr("url");
     else if (attr("src")) value.resourceURL = `ui://${attr("pkg") || item.owner.id}${attr("src")}`;
-    for (const key of ["font", "fontSize", "color", "align", "vAlign", "autoSize", "letterSpacing"])
-        value[key] = attr(key);
-    value.font = value.font || "";
-    value.lineGap = attr("leading");
+    for (const key of ["font", "fontSize", "color", "align", "vAlign", "autoSize", "letterSpacing", "lineGap"])
+        value[key] = serializedAttr(attr, key);
     if (value.color !== null) value.color = normalizedColor(value.color, "XML color");
     for (const key of ["fontSize", "letterSpacing", "lineGap"])
         if (value[key] !== null) value[key] = Number(value[key]);
@@ -1039,7 +1068,101 @@ function persistedObjectValues(doc: any, obj: any): any {
     return { values: value, file: String(item.file) };
 }
 
-function verifyObject(doc: any, obj: any, expected: any, readXml: boolean): any {
+// Stage 4 of the verification ladder described in the improvement plan: prove the
+// write survives a real Editor reload. The cheaper stages can all pass while the
+// Editor still drops the value on the next parse (an unsupported or renamed
+// attribute is silently dropped on load), so only a close + reopen round-trip
+// separates "reached the disk file" from "actually loads back".
+//
+// This closes the user's document, so it must be explicitly requested and it must
+// never be faked: a skipped round-trip that still reported success would recreate
+// exactly the false-positive this layer exists to eliminate.
+
+const RELOAD_STRENGTH = "reload";
+const DISK_STRENGTH = "disk";
+const NONE_STRENGTH = "none";
+
+// FairyGUI Editor has shipped both a singular and a plural close overload, and
+// which of them survives the editor build's IL2CPP stripping is build-dependent.
+// Probe them in place instead of hard-coding a guess, and report which one worked
+// so a live run records the real answer. There is deliberately no close-all
+// fallback: it would destroy unrelated open documents, which is beyond what the
+// caller asked for.
+function closeDocumentForReload(docView: any, url: string): any {
+    const attempts: string[] = [];
+    const strategies: any[] = [
+        { name: "CloseDocuments", call: () => docView.CloseDocuments(url) },
+        { name: "CloseDocument", call: () => docView.CloseDocument(url) }
+    ];
+    for (const strategy of strategies) {
+        if (typeof docView[strategy.name] !== "function") {
+            attempts.push(`${strategy.name}: 不可用`);
+            continue;
+        }
+        try {
+            strategy.call();
+            return strategy.name;
+        }
+        catch (error) {
+            attempts.push(`${strategy.name}: ${String(error)}`);
+        }
+    }
+    verificationError("persistence_failed", "无法关闭文档以执行 external reload：所有候选关闭方式均不可用", { stage: "reload", url, attempted: attempts });
+}
+
+function externalReloadVerify(doc: any, locator: any, expected: any, state: any): any {
+    const url = String(doc.docURL || "");
+    if (!url) verificationError("persistence_failed", "无法获取文档 URL，拒绝执行 external reload", { stage: "reload", expected });
+    // An unsaved buffer closes back to the pre-write state and would compare as a
+    // false positive. Refuse instead of verifying nothing and reporting success.
+    if (doc.isModified) verificationError("invalid_argument", "external reload 要求文档已保存：有未保存改动时重载只会回到旧值", { stage: "reload", url, expected });
+
+    const docView = App.docView;
+    if (!docView || typeof docView.OpenDocument !== "function")
+        verificationError("persistence_failed", "编辑器未暴露可用的 docView.OpenDocument，无法执行 external reload", { stage: "reload", url, expected });
+
+    const closeStrategy = closeDocumentForReload(docView, url);
+
+    let reopened: any = null;
+    try {
+        reopened = docView.OpenDocument(url, true);
+    } catch (error) {
+        verificationError("persistence_failed", "external reload 重新打开文档失败", { stage: "reload", url, closeStrategy, reason: String(error), expected });
+    }
+    if (!reopened) verificationError("persistence_failed", "external reload 重新打开文档失败：文档未载入", { stage: "reload", url, closeStrategy, expected });
+
+    // Every handle captured before the close is now stale; re-locate the target by
+    // its recorded locator instead of reusing the pre-close object reference.
+    let reloaded: any = null;
+    try {
+        reloaded = resolveObject(reopened, locator);
+    } catch (error) {
+        verificationError("persistence_failed", "external reload 后无法在重新载入的文档中定位目标", { stage: "reload", url, closeStrategy, target: locator, reason: String(error), expected });
+    }
+
+    const values = compareVerification(expected, verifiedObjectValues(reloaded), "reload", reloaded);
+    // Hand the fresh handle back through state: it is not serializable and cannot
+    // be returned in the response, but later code still needs a live document.
+    state.doc = reopened;
+    return { performed: true, url, closeStrategy, values };
+}
+
+function verificationStrength(verification: any, saved: boolean): string {
+    if (verification && verification.reload && verification.reload.performed) return RELOAD_STRENGTH;
+    if (saved && verification && verification.xmlReadback) return DISK_STRENGTH;
+    return NONE_STRENGTH;
+}
+
+function strengthNote(verification: any, saved: boolean, base: string): string {
+    const strength = verificationStrength(verification, saved);
+    if (strength === RELOAD_STRENGTH)
+        return "已执行关闭重开验证：写入值在从磁盘重新载入的文档上重新定位并比对通过，可确认持久化。";
+    if (strength === DISK_STRENGTH)
+        return `${base}persisted 仅代表保存成功且磁盘 XML 匹配；未执行 external reload，不能排除编辑器重新载入时丢值。`;
+    return `${base}未验证持久化。`;
+}
+
+function verifyObject(doc: any, obj: any, expected: any, readXml: boolean, reload?: any, state?: any): any {
     const editor = compareVerification(expected, verifiedObjectValues(obj), "editor", obj);
     let disk: any = null;
     if (readXml) {
@@ -1051,27 +1174,68 @@ function verifyObject(doc: any, obj: any, expected: any, readXml: boolean): any 
             verificationError("persistence_failed", "XML 读取或解析失败", { stage: "xml", target: targetSummary(obj, null), reason: String(error), expected });
         }
     }
-    return { editorReadback: true, xmlReadback: Boolean(disk), externalReload: false, expected, editor, xml: disk ? disk.values : null, file: disk ? disk.file : null };
+    // Must run last: it closes the document, and the disk read above still needs
+    // the open handle to resolve the component URL.
+    let reloaded: any = null;
+    if (reload) reloaded = externalReloadVerify(doc, reload.target, expected, state || {});
+    return {
+        editorReadback: true,
+        xmlReadback: Boolean(disk),
+        externalReload: Boolean(reloaded),
+        expected,
+        editor,
+        xml: disk ? disk.values : null,
+        file: disk ? disk.file : null,
+        reload: reloaded
+    };
+}
+
+// Rejects reload combinations that cannot prove anything. Called at the top of
+// every write action, before any mutation, so an impossible request never leaves
+// the user's document half-written.
+function validateReloadOptions(params: any, target: any): void {
+    if (!params.externalReload) return;
+    if (params.verify === false)
+        verificationError("invalid_argument", "external reload 与 verify:false 冲突：verify:false 表示调用方主动关闭验证", { stage: "input", target });
+    if (!params.save)
+        verificationError("invalid_argument", "external reload 需要 save:true：未保存时重载只会回到旧值，无法证明持久化", { stage: "input", target });
 }
 
 function writeVerification(doc: any, obj: any, before: any, after: any, params: any, expected: any): any {
+    const wantsReload = Boolean(params.externalReload);
+    // Captured before any reload: the target summary must not read a closed handle.
+    const target = targetSummary(obj, params.target);
+    // Guard repeated here so a new write action cannot skip the precondition.
+    validateReloadOptions(params, target);
+
     // Editor acceptance is checked even with verify=false; that flag only skips disk readback.
     const verification = verifyObject(doc, obj, expected, false);
     let saved = false;
     if (params.save) {
         try { doc.Save(); }
-        catch (error) { verificationError("persistence_failed", "保存失败", { stage: "save", target: targetSummary(obj, null), reason: String(error), expected }); }
+        catch (error) { verificationError("persistence_failed", "保存失败", { stage: "save", target, reason: String(error), expected }); }
         saved = doc.isModified === false;
-        if (!saved) verificationError("persistence_failed", "保存后文档仍处于修改状态", { stage: "save", target: targetSummary(obj, null), expected });
+        if (!saved) verificationError("persistence_failed", "保存后文档仍处于修改状态", { stage: "save", target, expected });
     }
-    const checked = saved && params.verify !== false ? verifyObject(doc, obj, expected, true) : verification;
-    return { ok: true, target: targetSummary(obj, params.target), before, after, documentModified: Boolean(doc.isModified), saved, persisted: saved && checked.xmlReadback, verification: checked, note: "仅验证 expected 中的字段；未执行 external reload。失败不自动回滚。" };
+    const state: any = {};
+    // After a reload the original handle is dead; state.doc carries the fresh one.
+    const checked = saved && params.verify !== false
+        ? verifyObject(doc, obj, expected, true, wantsReload ? { target: params.target || { id: obj.id } } : null, state)
+        : verification;
+    const liveDoc = state.doc || doc;
+    const strength = verificationStrength(checked, saved);
+    return {
+        ok: true, target, before, after,
+        documentModified: Boolean(liveDoc.isModified),
+        saved, persisted: strength !== NONE_STRENGTH, strength, verification: checked,
+        note: `${strengthNote(checked, saved, "仅验证 expected 中的字段；")}失败不自动回滚。`
+    };
 }
 
 function replaceObjectResource(params: any): any {
     const doc = getActiveDocument();
     let obj: any = resolveObject(doc, params.target);
-    if (params.externalReload) verificationError("unsupported_property", "暂不支持自动 external reload", { stage: "input" });
+    validateReloadOptions(params, targetSummary(obj, params.target));
     const type = String(obj.objectType || "").toLowerCase();
     if (["image", "loader"].indexOf(type) < 0 || params.state)
         verificationError("unsupported_property", "可信资源替换目前仅支持 Image/Loader；Button 状态请使用专用 API", { stage: "input" });
@@ -1132,7 +1296,7 @@ function getTextStyle(params: any): any {
 function setTextStyle(params: any): any {
     const doc = getActiveDocument();
     const obj: any = resolveObject(doc, params.target);
-    if (params.externalReload) verificationError("unsupported_property", "暂不支持自动 external reload", { stage: "input" });
+    validateReloadOptions(params, targetSummary(obj, params.target));
     const type = String(obj.objectType || "").toLowerCase();
     if (type.indexOf("text") < 0 && type.indexOf("rich") < 0) throw new Error("目标不是文本对象");
     const style = validateExpectations(params.style);
@@ -1162,16 +1326,30 @@ function setTextStyle(params: any): any {
 
 function verifyDocument(params: any): any {
     const doc = getActiveDocument();
-    if (params.externalReload) verificationError("unsupported_property", "暂不支持自动 external reload", { stage: "input" });
     const tree = describeObject(doc.content, 0, params.maxDepth === undefined ? 12 : Number(params.maxDepth));
     if (params.expected !== undefined) {
         if (!params.target) verificationError("invalid_argument", "expected 必须提供 target", { stage: "input" });
         const expected = validateExpectations(params.expected);
         const obj = resolveObject(doc, params.target);
-        const verification = verifyObject(doc, obj, expected, params.readXml !== false);
-        return { ok: true, document: describeDocument(doc), target: targetSummary(obj, params.target), tree, verification, saved: !doc.isModified, persisted: !doc.isModified && verification.xmlReadback, note: "只验证 expected 字段；不会保存或重载文档。" };
+        const wantsReload = Boolean(params.externalReload);
+        // Snapshot-only mode must not silently close the user's document. Checked
+        // here as well so the failure names this action's read-only contract; the
+        // reload stage raises the same precondition for the write path.
+        if (wantsReload && doc.isModified)
+            verificationError("invalid_argument", "external reload 要求文档已保存；本 Action 不会保存，请先保存后重试", { stage: "reload", url: String(doc.docURL || ""), target: targetSummary(obj, params.target) });
+        const state: any = {};
+        const verification = verifyObject(doc, obj, expected, params.readXml !== false, wantsReload ? { target: params.target } : null, state);
+        // A reload replaced the document handle; every later read must use the new one.
+        const liveDoc = state.doc || doc;
+        const saved = !liveDoc.isModified;
+        const strength = verificationStrength(verification, saved);
+        return {
+            ok: true, document: describeDocument(liveDoc), target: targetSummary(obj, params.target), tree, verification,
+            saved, persisted: strength !== NONE_STRENGTH, strength,
+            note: `${strengthNote(verification, saved, "只验证 expected 字段；不会保存文档。")}`
+        };
     }
-    return { ok: true, document: describeDocument(doc), target: params.target ? describeObject(resolveObject(doc, params.target), 0, 1) : null, tree, verification: { editorReadback: false, xmlReadback: false, externalReload: false }, persisted: false, note: "仅返回快照，未比对预期值。传入 target 和 expected 执行验证。" };
+    return { ok: true, document: describeDocument(doc), target: params.target ? describeObject(resolveObject(doc, params.target), 0, 1) : null, tree, verification: { editorReadback: false, xmlReadback: false, externalReload: false, strength: NONE_STRENGTH }, persisted: false, strength: NONE_STRENGTH, note: "仅返回快照，未比对预期值。传入 target 和 expected 执行验证。" };
 }
 
 // Animation bridge helpers. FairyGUI Editor 6.1.4 exposes these APIs through Puerts.

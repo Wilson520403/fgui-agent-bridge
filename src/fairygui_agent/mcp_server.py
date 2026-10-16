@@ -510,9 +510,12 @@ def fgui_set_property(
 
 
 @mcp.tool()
-def fgui_replace_object_resource(resource_url: str, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected_type: str = "image", state: str | None = None, save: bool = False, verify: bool = True) -> dict[str, Any]:
-    """通过 Editor API 替换 Image/Loader 图片引用；保存后默认比对磁盘 XML。Button 状态暂不支持。"""
-    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "resourceURL": resource_url, "expectedType": expected_type, "save": save, "verify": verify}
+def fgui_replace_object_resource(resource_url: str, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected_type: str = "image", state: str | None = None, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """通过 Editor API 替换 Image/Loader 图片引用；保存后默认比对磁盘 XML。Button 状态暂不支持。
+
+    external_reload=True 会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证；需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "resourceURL": resource_url, "expectedType": expected_type, "save": save, "verify": verify, "externalReload": external_reload}
     if state: params["state"] = state
     return _client.call("replace_object_resource", params)
 
@@ -524,15 +527,21 @@ def fgui_get_text_style(object_id: str | None = None, object_path: str | None = 
 
 
 @mcp.tool()
-def fgui_set_text_style(style: dict[str, Any], object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, save: bool = False, verify: bool = True) -> dict[str, Any]:
-    """设置 TextField/RichText 的统一文本样式。"""
-    return _client.call("set_text_style", {"target": _target(object_id, object_path, object_name), "style": style, "save": save, "verify": verify})
+def fgui_set_text_style(style: dict[str, Any], object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """设置 TextField/RichText 的统一文本样式。
+
+    external_reload=True 会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证；需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
+    return _client.call("set_text_style", {"target": _target(object_id, object_path, object_name), "style": style, "save": save, "verify": verify, "externalReload": external_reload})
 
 
 @mcp.tool()
-def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected: dict[str, Any] | None = None, read_xml: bool = True) -> dict[str, Any]:
-    """只读验证 target 的 expected 属性；默认比对磁盘 XML，不保存、不重载。无 expected 时仅返回快照。"""
-    params: dict[str, Any] = {"maxDepth": max_depth, "readXml": read_xml}
+def fgui_verify_document(max_depth: int = 12, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected: dict[str, Any] | None = None, read_xml: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """只读验证 target 的 expected 属性；默认比对磁盘 XML，不保存。无 expected 时仅返回快照。
+
+    external_reload=True 会关闭并重新打开当前文档再比对——这是只读操作仍能达到的最强持久化证明。本命令不会保存，因此文档存在未保存改动时会拒绝执行。
+    """
+    params: dict[str, Any] = {"maxDepth": max_depth, "readXml": read_xml, "externalReload": external_reload}
     if expected is not None:
         if not any((object_id, object_path, object_name)):
             raise ValueError("expected 必须提供 target")

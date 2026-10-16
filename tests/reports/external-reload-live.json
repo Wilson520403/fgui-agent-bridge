@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "suite": "external-reload-live",
+  "date": "2026-10-15",
+  "project": "sample/sample.fairy",
+  "editor": {
+    "version": "6.1.4",
+    "path": "/Users/wilson/Downloads/FairyGUI-Editor.app",
+    "engine": "2022.3.5f1c1",
+    "launchedFrom": "AppTranslocation (DMG, 未拷出)"
+  },
+  "evidence": "live-editor",
+  "liveEditorVerified": true,
+  "externalReloadVerified": true,
+  "target": {
+    "component": "BridgeFixture",
+    "url": "ui://qsezbqtwfix01",
+    "objectId": "n2_fix01",
+    "objectName": "txtLabel",
+    "objectType": "text"
+  },
+  "closeStrategyDiscovered": "CloseDocuments",
+  "closeStrategyNote": "运行时探测得出，未硬编码假设。单数 CloseDocument 在本构建中是否可用未探测到，因为复数重载先行成功即返回。",
+  "cases": [
+    {
+      "name": "写入+保存+关闭重开比对",
+      "command": "set-text-style --id n2_fix01 '{\"fontSize\":45,\"color\":\"#00FFBA\",\"lineGap\":11}' --save --external-reload",
+      "passed": true,
+      "observed": {
+        "strength": "reload",
+        "persisted": true,
+        "saved": true,
+        "externalReload": true,
+        "closeStrategy": "CloseDocuments",
+        "reloadPerformed": true,
+        "editorReadback": { "fontSize": 45, "color": "#00FFBA", "lineGap": 11 },
+        "xmlReadback": { "fontSize": 45, "color": "#00FFBA", "lineGap": 11 },
+        "reloadReadback": { "fontSize": 45, "color": "#00FFBA", "lineGap": 11 },
+        "savedVersionAfter": 3
+      }
+    },
+    {
+      "name": "只读 verify_document 重载（文档已保存）",
+      "command": "verify-document --id n2_fix01 --expected '{...}' --external-reload",
+      "passed": true,
+      "observed": {
+        "strength": "reload",
+        "persisted": true,
+        "externalReload": true,
+        "closeStrategy": "CloseDocuments"
+      }
+    },
+    {
+      "name": "对照组：同一验证不带重载",
+      "command": "verify-document --id n2_fix01 --expected '{...}'",
+      "passed": true,
+      "observed": {
+        "strength": "disk",
+        "persisted": true,
+        "externalReload": false
+      },
+      "note": "strength 字段能把两级验证区分开，这是旧接口做不到的。"
+    },
+    {
+      "name": "拒绝：externalReload 但未保存",
+      "command": "set-text-style --id n2_fix01 '{\"fontSize\":46}' --external-reload",
+      "passed": true,
+      "observed": {
+        "ok": false,
+        "errorCode": "invalid_argument",
+        "stage": "input",
+        "message": "external reload 需要 save:true：未保存时重载只会回到旧值，无法证明持久化"
+      }
+    },
+    {
+      "name": "阶梯短路：期望值错误时在 editor 阶段即失败",
+      "command": "verify-document --id n2_fix01 --expected '{\"fontSize\":999}' --external-reload",
+      "passed": true,
+      "observed": {
+        "errorCode": "editor_rejected",
+        "stage": "editor",
+        "differences": [{ "property": "fontSize", "expected": 999, "actual": 45 }]
+      },
+      "note": "内存对象本身就不符，因此不进入磁盘与重载阶段——阶梯在最便宜的失败点短路。"
+    }
+  ],
+  "notCoveredLive": [
+    {
+      "case": "reload 阶段比 xml 阶段更严格（磁盘 XML 正确但编辑器重载时丢值）",
+      "why": "该场景需要在真机上制造「属性不被当前版本支持」的写入，无法用受支持的属性自然复现。",
+      "coveredBy": "tests/p0_host_harness.cjs 的 'Reload catches a value the Editor drops on load even though disk XML matches' 与 'The dropped-on-load case passes disk readback, proving reload adds coverage' 两条模拟宿主用例。"
+    }
+  ],
+  "environmentNotes": [
+    "首次启动的编辑器实例 bridge initialized 后心跳冻结在 12:07:48Z，onUpdate 停止推进；干净重启后心跳恢复正常。真实验证在重启后的实例上完成。",
+    "全程未干扰桌面上其他应用的未完成工作（SourceTree 提交对话框、Unity 编辑器模态弹窗）。",
+    "验证结束后 sample/assets/Package1/BridgeFixture.xml 已从备份还原，git status 干净，编辑器文档 modified=false。"
+  ]
+}

@@ -220,6 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
     resource_parser.add_argument("--state")
     resource_parser.add_argument("--save", action="store_true")
     resource_parser.add_argument("--no-verify", action="store_true")
+    resource_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
 
     text_get_parser = subparsers.add_parser("get-text-style", help="读取文本样式")
     _add_target_arguments(text_get_parser)
@@ -227,6 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_target_arguments(text_set_parser)
     text_set_parser.add_argument("style", help="文本样式 JSON 对象")
     text_set_parser.add_argument("--save", action="store_true")
+    text_set_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
     verify_parser = subparsers.add_parser("verify-document", help="验证当前文档")
     verify_parser.add_argument("--max-depth", type=int, default=12)
     verify_parser.add_argument("--path")
@@ -234,6 +236,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--name")
     verify_parser.add_argument("--expected", help="预期属性 JSON 对象；必须指定目标")
     verify_parser.add_argument("--editor-only", action="store_true", help="只比对 Editor，不读取 XML")
+    verify_parser.add_argument("--external-reload", action="store_true", help="关闭并重新打开文档再比对；要求文档已保存，本命令不会保存")
 
     insert_parser = subparsers.add_parser("insert", help="插入已有 FairyGUI 资源")
     insert_parser.add_argument("url", help="资源 URL，例如 ui://packageIditemId")
@@ -499,17 +502,17 @@ def main() -> int:
             params = {"target": target_from_args(args)}
         elif args.command == "replace-object-resource":
             action = "replace_object_resource"
-            params = {"target": target_from_args(args), "resourceURL": args.resource_url, "expectedType": args.expected_type, "verify": not args.no_verify, "save": args.save}
+            params = {"target": target_from_args(args), "resourceURL": args.resource_url, "expectedType": args.expected_type, "verify": not args.no_verify, "save": args.save, "externalReload": args.external_reload}
             if args.state: params["state"] = args.state
         elif args.command == "get-text-style":
             action = "get_text_style"
             params = {"target": target_from_args(args)}
         elif args.command == "set-text-style":
             action = "set_text_style"
-            params = {"target": target_from_args(args), "style": load_json_value(args.style), "save": args.save, "verify": True}
+            params = {"target": target_from_args(args), "style": load_json_value(args.style), "save": args.save, "verify": True, "externalReload": args.external_reload}
         elif args.command == "verify-document":
             action = "verify_document"
-            params = {"maxDepth": args.max_depth, "readXml": not args.editor_only}
+            params = {"maxDepth": args.max_depth, "readXml": not args.editor_only, "externalReload": args.external_reload}
             if args.expected is not None:
                 if not any((args.path, args.id, args.name)):
                     raise ValueError("--expected 必须指定目标")
