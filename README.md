@@ -2,10 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-- **版本**：`0.8.5`
-- **队列协议**：`1.0`
-- **已验证 FairyGUI Editor**：`6.1.4`
-- **通信方式**：本地 JSON 队列 + MCP stdio
+`v0.8.5` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4` · 本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
 
@@ -30,7 +27,6 @@ graph LR
 - `帮我制作一个登录界面，包含账号输入框、密码输入框和登录按钮`
 - `根据蓝湖 MCP 导出的切图帮我拼出这个背包界面`
 - `帮我给 MainMenu 界面的 StartBtn 添加一个弹出的缩放动画效果`
-- `帮我检查当前界面的大图图集设置，保存并发布 Lobby 包`
 
 > 若安装了 Skill，也可以通过 `/fgui-agent-bridge 帮我制作一个登录界面` 精准触发。
 
@@ -154,9 +150,9 @@ uv run python scripts/sync_to_project.py \
 
 ---
 
-## 🔄 检查与拉取更新
+## 🔄 更新
 
-当 Bridge 源仓库有功能更新或 Bug 修复时，可通过一条命令自动从源仓库安全拉取最新代码（`git pull --ff-only`）、同步 Python 环境（`uv sync`），并将最新插件与 Skill 刷新到目标工程：
+一条命令即可从源仓库安全拉取最新代码（`git pull --ff-only`）、同步 Python 环境（`uv sync`），并将最新插件与 Skill 刷新到目标工程：
 
 ```bash
 # 从源仓库拉取最新代码并同步到 FairyGUI 工程与业务代码仓库
@@ -171,8 +167,9 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT update --pull --a
 ```
 
 > **提示**：
-> - `fgui_status` 会自动比对当前 Bridge 服务端与 FairyGUI 编辑器内运行的插件版本，若版本不一致会在状态中返回 `updateWarning` 提示。
-> - 若插件文件被更新，请在 **FairyGUI Editor 中重新打开工程**以加载新版插件。
+> - 也可以直接对 AI Agent 说 `“/fgui-agent-bridge 帮我更新”`。
+> - `fgui_status` 会自动比对 Bridge 服务端与编辑器内插件版本，不一致时返回 `updateWarning`。
+> - 若插件文件被更新，请重新打开 FairyGUI 工程加载新版插件；只有当 Bridge 仓库路径或启动命令变更时才需更新 MCP 配置。
 
 ---
 
@@ -186,34 +183,15 @@ uv run fgui-agent status
 uv run fgui-agent ping
 
 # 查看工程与资源结构
-uv run fgui-agent project
 uv run fgui-agent packages
-uv run fgui-agent items ViewHub
-uv run fgui-agent open ViewHub ViewHubBtnItem
-uv run fgui-agent active
 uv run fgui-agent tree
 
-# 历史与保存
+# 保存与发布
 uv run fgui-agent save
-uv run fgui-agent undo
-uv run fgui-agent redo
-
-# 发布资源
 uv run fgui-agent publish --scope active
 ```
 
-**创建与导入资源**：
-
-```bash
-uv run fgui-agent create-component ViewHub NewPanel --width 1920 --height 1080
-uv run fgui-agent import-image ViewHub /absolute/path/button.png
-uv run fgui-agent import-font ViewHub /absolute/path/font.ttf
-uv run fgui-agent import-sound ViewHub /absolute/path/click.mp3
-uv run fgui-agent create-movieclip ViewHub Loading --frame /path/01.png --frame /path/02.png --fps 12
-uv run fgui-agent create-button ViewHub NewButton --mode common
-uv run fgui-agent upsert-transition '{"name":"fadeIn","frameRate":60,"items":[{"type":"Alpha","frame":0,"tween":{"duration":12,"start":0,"end":1}}]}'
-uv run fgui-agent preview-transition play fadeIn
-```
+更多命令与参数见 `uv run fgui-agent --help`。
 
 ---
 
@@ -232,29 +210,12 @@ uv run fgui-agent preview-transition play fadeIn
 
 ---
 
-## ⚙️ 关键机制与规范
+## ⚙️ 关键机制
 
-### 1. Transition 动效规范
-- **全轨道支持**：覆盖 `XY`、`Size`、`Pivot`、`Scale`、`Skew`、`Alpha`、`Rotation`、`Color`、`Animation`、`Visible`、`Sound`、`Transition`、`Shake`、`ColorFilter`、`Text`、`Icon` 全部原生轨道。
-- **时间单位**：统一使用 FairyGUI frame 帧单位。
-- **事务性**：整段声明式更新或关键帧原子操作均进入事务栈，支持 `fgui_undo` / `fgui_redo`。
-
-### 2. MovieClip 序列帧机制
-- 接收有序本地图片列表，通过 FairyGUI `AniData.ImportImages` 嵌入 `.jta` 文件，不会在包内产生多余的散图 `ui://`。
-- FPS 范围 `1..255`，支持 Repeat Delay、每帧 Delay、Speed 与 Swing。
-- 已有 MovieClip 的更新支持文件快照回退；全新创建/删除属于磁盘级操作，删除时需显式提供 `force=true` 且无外部引用。
-
-### 3. 大图自动独立图集规则
-- **规则触发**：图片分辨率达到 `1920×1080`，或任意一边达到 `2048`（2K）时，会自动标记为 FairyGUI `alone` 单独纹理集。
-- **自动补齐**：通过 `fgui_import_image` 导入时即时生效；执行 `fgui_publish` 发布时还会自动扫描目标包并纠正历史大图配置，防止大图与小图碎图混排导致图集膨胀。
-
-### 4. 写操作持久化验证
-- `fgui_replace_object_resource`、`fgui_set_text_style`、`fgui_set_property`、`fgui_insert_object`、`fgui_remove_object` 和只读的 `fgui_verify_document` 统一返回 `{ok, target, before/after, documentModified, saved, persisted, strength, verification}`。
-- `save=true` 保存后默认比对磁盘 XML；`external_reload=true`（需 `save=true`，且与 `verify=false` 冲突）会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证。
-- `strength` 标明验证强度：`reload`（关闭重开比对通过）/ `disk`（仅保存成功且磁盘 XML 匹配）/ `none`（未验证）；读 `persisted` 时必须同时看 `strength`。
-- `fgui_remove_object` 按缺失性验证：保存后要求磁盘 XML 不再包含目标节点，重载后要求目标仍不可解析。
-- Transition 写操作（`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item`）走同一梯子：验证组件 XML 中 `<transition>` 节点的存在性与公开条目数；`external_reload` 为关闭重开文档后重新读取 Transition 集合。
-- 包资源写操作（`fgui_create_component`、`fgui_create_button`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound`、`fgui_create_movieclip`、`fgui_update_movieclip`、`fgui_remove_movieclip`）验证 `package.xml` 资源条目与资源文件：`save=true` 保存包与工程后做清单回读；`external_reload`（仅 image/sound/font/movieclip，需 `save=true`）卸载并重新加载 asset；组件创建与删除没有诚实的重载基元，`strength` 上限为 `disk`。
+- **Transition 动效**：覆盖全部原生轨道，时间单位为帧，支持声明式整段更新与关键帧原子修改，均可撤销/重做。
+- **MovieClip 序列帧**：从有序本地图片序列直接嵌入 `.jta`，不会在包内产生散图 `ui://` 资源。
+- **大图独立图集**：达到 `1920×1080` 或任一边达到 `2048` 的图片自动标记为 `alone` 纹理集，发布时自动纠正历史大图配置。
+- **写操作验证**：写操作支持保存后磁盘 XML 比对，以及「关闭重开再比对」的强持久化验证。
 
 ---
 
@@ -275,18 +236,6 @@ uv run fgui-agent preview-transition play fadeIn
 - **动画类型**：专注于 FairyGUI 原生 Transition 与 MovieClip，不支持 Spine、DragonBones、Loader3D、SWF 等第三方动画格式。
 - **资源管理边界**：暂不支持通用包内资源的任意重命名与跨包移动；MovieClip 删除需带引用校验与 `force=true`。
 - **平台环境**：macOS 已做完整端到端验证；Windows 建议在标准命令提示符/PowerShell 下验证路径格式。
-
----
-
-## 🔄 升级与同步
-
-```bash
-git pull
-uv sync --frozen
-uv run python scripts/sync_to_project.py --choose-project --apply
-```
-
-> **提示**：也可以直接对你的 Agent 说 `“/fgui-agent-bridge 帮我更新”`。更新插件后重新打开 FairyGUI 工程即可。只有当 Bridge 仓库路径或启动命令变更时才需更新 MCP 配置。
 
 ---
 
