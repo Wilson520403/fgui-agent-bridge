@@ -855,14 +855,42 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, 
       归属一律以磁盘为准。
       ③最可执行的指标不是 `disagreements` 而是 `summary.assignedAloneButFits`
       （磁盘已标 alone 但按真实约束装得下）。真机实测 1920x1080 即属此列。
-- [ ] `set_publish_settings`（按包设置图集、代码生成、分支排除）。**未实现**，也是
-      闭掉下面那条真机边界的关键：包级 `PackSettings` 路径目前只在模拟宿主跑过，
-      真机没有任何 `useGlobalAtlasSettings=false` 的实例。该对象是包级设置、
-      **无 `DocElement` 入口**，必然走对象模型，须显式声明 `writePath:object-model`
-      并接验证梯子，不得靠 `doc.SetModified(true)` 兜。**它还应当能纠正既有的错误
-      `folderAtlas=alone`**——按发现①，那些标记已经在真实工程的磁盘上了。
-- [ ] 评估用真实 `PackSettings` 判定替换 `applyLargeImageAtlasRule` 的旧常量判定，
-      并同时处理发现②暴露的「内存不读回」问题（否则换判定也只在当前会话有效）。
+- [x] `set_publish_settings`（按包设置图集、代码生成、分支排除）。**0.8.13 已实现**，
+      接完整验证梯子（editor 回读 → save → `package.xml` 的 `<publish>` 节点 → 可选
+      `externalReload`），写路径显式声明 `object-model`（包级设置无 `DocElement` 入口，
+      `FPackage.publishSettings` 还是只读 getter，只能改字段、换不了对象），
+      发布期间封锁。未知字段与 `sizeOption`（读侧投影，非可写字段）在**改动包之前**
+      `invalid_argument` 拒绝。`atlasList` 是全量替换语义。
+      模拟宿主 170 项、Python 38 项、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**
+      （证据 `tests/reports/p8-5-write-live.json`）。真机推翻三处假设：①`AtlasSettings.packSettings`
+      声明为 public 字段但运行时**只读**，只能就地改字段；②`atlasList` 置空保存会抛
+      `Index was out of range` 并使该包此后**每次保存都崩**，故空列表在 validate 阶段拒绝；
+      ③`<publish>` 只编码部分字段（`maxWidth` 与 `maxHeight` 共用 `maxAtlasSize`、
+      `rotation` 有编码、`padding` **无编码**），故新增 `persistenceProfile` 提前披露落盘前景。
+      **下面那条真机边界已闭合**：`useGlobalAtlasSettings=false` 的真机实例建成，包级
+      `PackSettings` 真正参与判定，padding 与 square 两条分支真机触发。
+      **它应当能纠正既有的错误 `folderAtlas=alone`**——按发现①，那些标记已经在真实工程的
+      磁盘上了（纠正本身仍待做）。
+- [x] 用真实 `PackSettings` 判定替换 `applyLargeImageAtlasRule` 的旧常量判定，并处理发现②的
+      「内存不读回」。**0.8.14 已落地**：`import_image`（含同名替换）与 `publish` 前的归属
+      施加改用 `decideAtlasAssignment`——与 `analyze_atlas_fit` 同一个判定函数，退役常量
+      （`1920`/`1080`/`2048`）只留作 `retiredRuleWouldAssignAlone` 诊断对照。幂等守卫改读
+      **磁盘 `package.xml`**，跨重启不再重复 `SetChanged`；判定时主动忽略 `alone` 标记本身，
+      包级约束模式下被标过的图因此也判得出来。响应契约同步换血：`largeImageAtlasApplied` →
+      `atlasAssignment`（含 `verdict` 五态）、`largeImageAtlasRule` → `atlasAssignment`
+      （分 `assigned` / `aloneNotNeeded` / `unknown` 三类计数与明细）。模拟宿主 176 项、
+      Python 41 项、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**（证据
+      `tests/reports/p8-5-judgement-live.json`）：1920x1080 不再落盘 alone（同包同尺寸的旧
+      夹具仍带 `atlas="alone"`，构成 A/B 对照）、4096x4096 正常标记、**完整重启编辑器后**
+      同名替换返回 `already-alone` 不再重复施加（0.8.13 缺陷闭合）、发布三类回报真实触发。
+      真机另查出一处模拟宿主查不到的谎报：曾把 `wouldAssignAlone` 定义成「本次是否写入」，
+      导致已正确标记的 4096 图误报 `disagrees=true`，已拆出独立的 `shouldBeAlone` 修正。
+      **未做**：磁盘上已存在的多余 `folderAtlas=alone` **只上报不自动清除**——
+      `folderAtlas = ""` 的落盘语义尚未真机验证，不拿真实工程赌它。
+- [ ] 纠正磁盘上已存在的错误 `folderAtlas=alone`（输入已就位：`analyze_atlas_fit` 与
+      `publish` 的 `aloneNotNeeded` 列表）。**前置**：先真机确认「把 alone 清空」在 6.1.4 上
+      是否真能落盘并跨重启存活——真机的 `folderAtlas` 写盘保留、不读回，清空语义不能用
+      「写 alone 能落盘」类推。
 - [ ] 暴露 `PublishHandler` 的分步导出能力，便于"只导描述/只导资源"。
 
 ### P8-6 分支（完全空白的能力域）
@@ -1032,7 +1060,7 @@ Bridge 改进应在独立仓库完成：
 | 2 | ~~用真实声明生成类型 stub，接入编译期校验~~ **0.8.9 已完成** | P8-1 | 成本极低，且是 1 和后续所有项的安全网 |
 | 3 | ~~引用图（只读 + 全工程替换语义）~~ **0.8.10 + 0.8.11 已完成** | P8-2 | 直接清偿 §1.1 这条挂了两轮的技术债；写侧 `replace_references` 默认只预览、立即落盘不可撤销、`fileName` 半状态显式上报 |
 | 4 | ~~离屏渲染截图~~ **2026-10-19 已放弃**（`CaptureCamera` 对工程组件只出全透明空图，根因是编辑器不把组件交给 FairyGUI 运行时 stage 渲染）。`preview_run` 从本项剥离，仍待实现 | P8-4 | 解锁 Phase 7 的前提不成立，继续投入没有回报；证据见 `tests/reports/p8-4-render-feasibility.json` |
-| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片已落地**；写侧 `set_publish_settings` 未做 | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：写侧 + `PublishHandler` 分步导出 |
+| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧均已真机复验，0.8.14 判定侧已落地** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：纠正磁盘上已存在的错误 `folderAtlas=alone`（输入已就位，先真机确认清空语义）+ `PublishHandler` 分步导出 |
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备 |
 | 7 | 分支能力 | P8-6 | 新增域，多端/多版本项目价值高 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影 |

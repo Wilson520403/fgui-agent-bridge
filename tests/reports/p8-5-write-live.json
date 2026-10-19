@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-set-publish-settings-live",
+  "capturedAt": "2026-10-19T15:52:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.13",
+  "project": "sample (Package1)",
+  "environment": {
+    "note": "初次尝试时编辑器无法冷启动并打开工程（SIGABRT，见 p8-5-write-live-blocked.json）；由用户在编辑器 GUI 内手动打开工程后一切正常。本报告的全部结论均来自 GUI 内打开的正常会话。",
+    "appleEventOpenCrash": "编辑器未运行时 `open -a FairyGUI-Editor.app <project.fairy>` 会 SIGABRT；编辑器已在运行时同样的命令不崩溃"
+  },
+  "summary": {
+    "action": "set_publish_settings",
+    "writePath": "object-model",
+    "result": "已真机验证并通过",
+    "mockHost": { "passed": 170, "total": 170 },
+    "python": { "passed": 38, "total": 38 },
+    "typescript": { "errors": 0 },
+    "liveFindings": 5,
+    "liveFailuresFoundAndFixed": 3
+  },
+  "liveFindings": [
+    {
+      "id": "packsettings-is-readonly-at-runtime",
+      "severity": "high",
+      "title": "AtlasSettings.packSettings 声明为 public 字段，运行时却是只读属性",
+      "detail": "声明 `public packSettings : FairyEditor.PackSettings` 暗示可赋值，真机赋值抛 `Cannot assign to read only property 'packSettings' of object '[object Object]'`（Puerts 错误，原文为 'This expression is not callable' 之外的运行时 TypeError）",
+      "impact": "整条替换 packSettings 的实现无法工作；必须取现有实例就地改字段",
+      "fix": "改为 `const pack = atlas.packSettings; applyPackSettings(pack, spec)`，并在实例为空时 editor_rejected",
+      "caughtByMockHost": false,
+      "why": "模拟宿主把 packSettings 建模成普通可写字段，替换写法一路绿灯",
+      "harnessFix": "makeAtlasSettings 改为 getter + 抛错 setter，并新增 'The pack settings are edited in place, never replaced wholesale' 用例钉住"
+    },
+    {
+      "id": "empty-atlaslist-corrupts-package",
+      "severity": "critical",
+      "title": "atlasList 置空后保存会抛 Index was out of range，且该包此后每次 Save 都崩溃",
+      "detail": "FPackage.SavePublishSettings(XML) 抛 `Index was out of range. Must be non-negative and less than the size of the collection`，调用链 FPackage.Save → SavePublishSettings → List.get_Item。写入本身不报错，崩在 Save 阶段",
+      "impact": "一次失败的清空就把工程留在坏状态：后续任何保存操作都抛同一异常",
+      "fix": "validate 阶段就拒绝空 atlasList（invalid_argument），并在错误信息里指明清空只能走编辑器设置界面",
+      "caughtByMockHost": false,
+      "recovery": "git checkout sample/assets/Package1/package.xml 后重开工程，save-all 恢复正常",
+      "verificationAfterFix": "空列表被拒绝；包保存恢复正常；analyze_atlas_fit 回到 global 路径，assignedAloneButFits 回到 1"
+    },
+    {
+      "id": "publish-node-codes-only-some-fields",
+      "severity": "high",
+      "title": "package.xml 的 <publish> 只编码一部分字段，padding 等写了也留不住",
+      "detail": "真实编码：`<publish name=\"\" maxAtlasSize=\"2048\" rotation=\"true\" multiPage=\"false\" maxAtlasIndex=\"0\"><atlas name=\"Main\" compression=\"true\" index=\"0\"/></publish>`",
+      "measured": [
+        "maxWidth → maxAtlasSize，持久化，但与 maxHeight 共用同一个值：写 maxWidth=2048/maxHeight=4096，Dispose+Open 后 maxHeight 回落成 2048",
+        "rotation → <publish rotation>，持久化（真机实测写盘 + 重开保留）",
+        "padding → 磁盘无任何对应属性：写 20，Dispose+Open 后回到默认值 2",
+        "minWidth/minHeight/square/pot/mof/fast/edgePadding/duplicatePadding → <publish> 无对应属性，非默认值是否保留未验证"
+      ],
+      "fix": "响应新增 persistenceProfile（fieldProfiles 全表 + 本次请求字段的落盘前景），note 显式点名留不住的字段，不让调用方只能靠 externalReload 失败才发现",
+      "caughtByMockHost": false,
+      "newPackSettingsDefaults": {
+        "note": "模拟宿主原先假定 maxWidth/maxHeight 可独立编码；真机实测的真实默认值为下列值，这是「只断言显式给过的键」这一设计决定的直接回报",
+        "minWidth": 16, "minHeight": 16, "padding": 2, "pot": true, "mof": true, "multiPage": false, "square": false, "rotation": false
+      }
+    },
+    {
+      "id": "package-level-constraints-now-live",
+      "severity": "info",
+      "title": "闭合 0.8.12 遗留空白：包级 PackSettings 在真机上真正参与判定",
+      "detail": "写入 useGlobalAtlasSettings=false + atlasList=[Main] 后，未指定图集的资源匹配到 Main 并按包级约束判定；资源级 atlas='alone'（编辑器内建名、不在 atlasList）正确报 unknown 而非猜测",
+      "closes": "0.8.12 unverified 第 ① 条",
+      "measured": [
+        "包级 maxWidth/maxHeight=1024：AtlasFixture_Small(256) fits；标 alone 的 HD/Huge 为 unknown（atlas-not-configured）"
+      ]
+    },
+    {
+      "id": "padding-and-square-branches-triggered-live",
+      "severity": "info",
+      "title": "padding 与 square 两条判定分支真机触发",
+      "measured": [
+        "基线 maxWidth=300：256+2*2=260 ≤ 300 → fits",
+        "padding=64：required 384 > 300 → exceeds / binding=maxWidth（padding 每边 2 份的换算得到验证）",
+        "padding=32 + maxWidth=400：320 ≤ 400 → fits",
+        "square=true maxWidth=200：正方形边长 260 > 200 → exceeds / binding=squareSide",
+        "rotation=true maxWidth=200：256x256 旋转后仍 260 → exceeds / binding=maxWidth（旋转对正方形无效，符合设计）"
+      ],
+      "stillUnverified": "rotation '救回非正方形长条图' 的场景：sample 夹具图（Red/Blue/Small/Probe）全为正方形，物理上无法体现旋转收益。真机只验证到「旋转对正方形无效」这一面"
+    }
+  ],
+  "verificationLadderBehaviours": [
+    "editor 回读 + save：writePath=object-model，strength=disk，persisted=true",
+    "externalReload 正确 fail-closed：写 maxHeight=4096/padding=20 后 Dispose+Open，读回 maxHeight=2048、padding=2，抛 persistence_failed(stage=reload) 并列出精确 differences——验证梯子没有把丢失当成功",
+    "externalReload 需要 save：save=false + externalReload=true 在写入前即 invalid_argument",
+    "未知字段与 sizeOption 在改动包之前拒绝，编辑器与包均未被触碰"
+  ],
+  "projectStateRestored": {
+    "packageXml": "已 git checkout 回备份，字节一致",
+    "editorHealth": "重开工程后 save-all 成功，analyze_atlas_fit 回到 global 路径，assignedAloneButFits=1、disagreements=1 与 0.8.12 原始读数一致",
+    "note": "包级 atlasList 恢复为空（即编辑器默认的 <publish name=\"\"/>），此后通过 Bridge 写空列表会被拒绝——这与编辑器的限制一致，不是残留脏数据"
+  },
+  "stillUnverified": [
+    "rotation 救回非正方形图（缺非正方形夹具；导入新夹具无法经 Bridge 删除，故未做）",
+    "minWidth/minHeight/square/pot/mof/fast/edgePadding/duplicatePadding 的非默认值是否跨重开保留（磁盘无对应属性，倾向不保留但未逐项验证）",
+    "跨编辑器进程（完整重启而非 Dispose+Open）的持久化：包重开后内存读回是否与磁盘一致——本轮以 Dispose+Open 覆盖，未做完整重启回读"
+  ],
+  "nextActions": [
+    "替换 applyLargeImageAtlasRule 的 LARGE_IMAGE_* 常量判定，改用真实约束（0.8.13 已提供写侧与画像，判定侧尚未切换）",
+    "纠正磁盘上已被 import_image 写入的错误 folderAtlas=alone"
+  ]
+}

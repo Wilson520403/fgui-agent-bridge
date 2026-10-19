@@ -1,0 +1,323 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-atlas-assignment-judgement-live",
+  "capturedAt": "2026-10-19T15:55:20+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.14",
+  "project": "sample (Package1)",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app (bundle com.fairygui.FairyGUIEditor)",
+    "runFromAppTranslocation": true,
+    "restartProcedure": "osascript quit → 等进程退出 → open -a ~/Downloads/FairyGUI-Editor.app sample/sample.fairy → osascript 置前台",
+    "correctionToBlockedReport": "p8-5-write-live-blocked.json 记录「编辑器未运行时 open -a <app> <project.fairy> 会 SIGABRT」。本轮用 **真实路径 ~/Downloads/FairyGUI-Editor.app**（而非按名/转译副本）冷启动两次均成功打开工程，未复现该崩溃。结论应修正为：冷启动是否崩溃取决于用哪个路径，原先的绝对化结论不成立。",
+    "bridgeHeartbeatNote": "每次命令前把编辑器置前台（osascript set frontmost）；否则后台节流会让 onUpdate 停摆、请求滞留。"
+  },
+  "summary": {
+    "action": "import_image / publish / analyze_atlas_fit 的图集归属判定",
+    "writePath": "object-model (FPackageItem.folderAtlas，非 DocElement)",
+    "result": "已真机验证并通过",
+    "mockHost": {
+      "passed": 176,
+      "total": 176
+    },
+    "python": {
+      "passed": 41,
+      "total": 41
+    },
+    "typescript": {
+      "errors": 0
+    },
+    "liveFindings": 3,
+    "liveFailuresFoundAndFixed": 1
+  },
+  "restoredStateAnalyze": {
+    "note": "清理后的工程状态（与 0.8.12 原始读数同源，assignedAloneButFits=1 未变）",
+    "summary": {
+      "images": 6,
+      "fits": 5,
+      "exceeds": 1,
+      "unknown": 0,
+      "disagreements": 1,
+      "assignedAloneButFits": 1,
+      "wouldAssignAlone": 1,
+      "ruleUnknown": 0
+    },
+    "images": [
+      {
+        "name": "Red",
+        "width": 64,
+        "height": 64,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "",
+        "fit": "fits",
+        "verdict": "leave-as-is",
+        "wouldAssignAlone": false,
+        "aloneNotNeeded": false,
+        "disagrees": false,
+        "retiredRuleWouldAssignAlone": false,
+        "binding": null
+      },
+      {
+        "name": "Blue",
+        "width": 64,
+        "height": 64,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "",
+        "fit": "fits",
+        "verdict": "leave-as-is",
+        "wouldAssignAlone": false,
+        "aloneNotNeeded": false,
+        "disagrees": false,
+        "retiredRuleWouldAssignAlone": false,
+        "binding": null
+      },
+      {
+        "name": "AtlasFixture_Small",
+        "width": 256,
+        "height": 256,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "",
+        "fit": "fits",
+        "verdict": "leave-as-is",
+        "wouldAssignAlone": false,
+        "aloneNotNeeded": false,
+        "disagrees": false,
+        "retiredRuleWouldAssignAlone": false,
+        "binding": null
+      },
+      {
+        "name": "AtlasFixture_HD",
+        "width": 1920,
+        "height": 1080,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "alone",
+        "fit": "fits",
+        "verdict": "alone-not-needed",
+        "wouldAssignAlone": false,
+        "aloneNotNeeded": true,
+        "disagrees": true,
+        "retiredRuleWouldAssignAlone": true,
+        "binding": null
+      },
+      {
+        "name": "AtlasFixture_Huge",
+        "width": 4096,
+        "height": 4096,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "alone",
+        "fit": "exceeds",
+        "verdict": "already-alone",
+        "wouldAssignAlone": true,
+        "aloneNotNeeded": false,
+        "disagrees": false,
+        "retiredRuleWouldAssignAlone": true,
+        "binding": "maxWidth"
+      },
+      {
+        "name": "AtlasFixture_Probe",
+        "width": 128,
+        "height": 128,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "",
+        "fit": "fits",
+        "verdict": "leave-as-is",
+        "wouldAssignAlone": false,
+        "aloneNotNeeded": false,
+        "disagrees": false,
+        "retiredRuleWouldAssignAlone": false,
+        "binding": null
+      }
+    ]
+  },
+  "liveVerification": [
+    {
+      "id": "hd-1920x1080-no-longer-marked-alone",
+      "title": "1920x1080 不再被标 alone —— 本次替换的核心回归",
+      "command": "import-image Package1 <AtlasFixture_HD.png> --name AtlasProbe_HD --save",
+      "atlasAssignment": {
+        "verdict": "leave-as-is",
+        "applied": false,
+        "shouldBeAlone": false,
+        "reason": "fits",
+        "fit": "fits",
+        "constraintsSource": "global",
+        "width": 1920,
+        "height": 1080,
+        "requiredWidth": 1920,
+        "requiredHeight": 1080,
+        "limitWidth": 2048,
+        "limitHeight": 2048,
+        "padding": 0,
+        "square": false,
+        "rotation": false,
+        "retiredRuleWouldAssignAlone": true,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": ""
+      },
+      "persisted": true,
+      "strength": "disk",
+      "packageXmlAfter": "<image id=\"pw9e9\" name=\"AtlasProbe_HD.png\" path=\"/\" exported=\"true\"/>",
+      "assertion": "磁盘上没有 atlas 属性。同一工程里尺寸完全相同的 AtlasFixture_HD(x5h76) 带着 atlas=\"alone\" —— 这是同包同约束下的 A/B 对照：旧常量判定会标，真实约束判定不标。"
+    },
+    {
+      "id": "huge-4096-still-marked-alone",
+      "title": "4096x4096 仍会被标 alone，且真落盘",
+      "command": "import-image Package1 <AtlasFixture_Huge.png> --name AtlasProbe_Huge --save",
+      "atlasAssignment": {
+        "verdict": "assign-alone",
+        "applied": true,
+        "binding": "maxWidth",
+        "requiredWidth": 4096,
+        "limitWidth": 2048,
+        "retiredRuleWouldAssignAlone": true,
+        "folderAtlasOnDisk": ""
+      },
+      "persisted": true,
+      "strength": "disk",
+      "packageXmlAfter": "<image id=\"pw9ea\" name=\"AtlasProbe_Huge.png\" path=\"/\" exported=\"true\" atlas=\"alone\"/>",
+      "assertion": "该标的一张没漏标，且带上了卡住它的约束（maxWidth，4096 > 2048）。"
+    },
+    {
+      "id": "restart-idempotence",
+      "title": "完整重启编辑器后不再重复施加 —— 闭合 0.8.13 的真实缺陷",
+      "procedure": "osascript quit → 等进程退出 → 重新 open 工程 → 置前台",
+      "afterRestartAnalyze": {
+        "AtlasProbe_Huge": {
+          "folderAtlasInMemory": "",
+          "folderAtlasOnDisk": "alone",
+          "verdict": "already-alone"
+        },
+        "AtlasFixture_Huge": {
+          "folderAtlasInMemory": "",
+          "folderAtlasOnDisk": "alone",
+          "verdict": "already-alone"
+        }
+      },
+      "command": "import-image Package1 <AtlasFixture_Huge.png> --name AtlasProbe_Huge --conflict replace --save",
+      "atlasAssignment": {
+        "verdict": "already-alone",
+        "applied": false,
+        "reason": "exceeds-and-already-alone",
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "alone"
+      },
+      "persisted": true,
+      "strength": "disk",
+      "assertion": "重启后内存 folderAtlas 确实回到空串（真机事实再次复现），但幂等守卫读磁盘 → already-alone/applied=false。0.8.13 的守卫读内存，重启后每次 publish 都会重复 SetChanged 并重写同一个标记。"
+    },
+    {
+      "id": "publish-three-way-report",
+      "title": "publish 前的归属施加按三类回报，且 alone-not-needed 只报不改",
+      "command": "set-publish-settings Package1 {\"path\":\"/tmp/fgui-p85-publish\"} → publish --scope packages --package Package1",
+      "publishResult": {
+        "success": true,
+        "durationMs": 406,
+        "atlasAssignment": {
+          "rule": "packer-constraints",
+          "folderAtlasSource": "package.xml",
+          "assignedCount": 0,
+          "aloneNotNeededCount": 1,
+          "unknownCount": 0,
+          "skippedNotAtlasable": 0,
+          "aloneNotNeeded": [
+            {
+              "package": "Package1",
+              "id": "x5h76",
+              "name": "AtlasFixture_HD",
+              "width": 1920,
+              "height": 1080,
+              "verdict": "alone-not-needed",
+              "applied": false,
+              "reason": "alone-but-fits",
+              "fit": "fits",
+              "constraintsSource": "global",
+              "requiredWidth": 1920,
+              "limitWidth": 2048,
+              "folderAtlasOnDisk": "alone",
+              "folderAtlasInMemory": "",
+              "url": "ui://qsezbqtwx5h76"
+            }
+          ]
+        }
+      },
+      "publishedAtlases": [
+        {
+          "file": "Package1_atlas0.png",
+          "size": "2048x2048",
+          "KB": 57.2,
+          "holds": "共享图集（含 AtlasProbe_HD）"
+        },
+        {
+          "file": "Package1_atlas_pw9ea.png",
+          "size": "4096x4096",
+          "KB": 57.3,
+          "holds": "AtlasProbe_Huge（alone）"
+        },
+        {
+          "file": "Package1_atlas_x5h76.png",
+          "size": "2048x2048",
+          "KB": 53.5,
+          "holds": "AtlasFixture_HD（磁盘仍是 alone，本步不纠正）"
+        },
+        {
+          "file": "Package1_atlas_x5h77.png",
+          "size": "4096x4096",
+          "KB": 57.3,
+          "holds": "AtlasFixture_Huge（alone）"
+        }
+      ],
+      "assertion": "alone 的图各占一张 `Package1_atlas_<id>.png`。产物里**没有** Package1_atlas_pw9e9.png —— 未标 alone 的那张 1920x1080 进了共享图集，这是行为改变最直接的证据；旧的常量规则会给它单独开一张。"
+    }
+  ],
+  "liveFindings": [
+    {
+      "id": "disagrees-field-lies-on-already-alone",
+      "severity": "medium",
+      "title": "诊断字段 disagrees 会把「已正确标记」误报成不一致",
+      "detail": "首版把 wouldAssignAlone 定义为 verdict==='assign-alone'。真机一跑，AtlasFixture_Huge（4096，磁盘已 alone，真实约束也确实判它超限）报 disagrees=true —— 因为它本次没写盘。这是把「规则要 alone」和「规则这次写了 alone」合成一个字段的典型后果。",
+      "caughtByLive": true,
+      "caughtByMockHost": false,
+      "why": "模拟宿主里没有任何用例断言「磁盘已标记且判定一致」的组合，全是新图场景。",
+      "fix": "拆出独立的 shouldBeAlone 字段（assign-alone 与 already-alone 都为 true），wouldAssignAlone 取它；并补模拟宿主用例「重启后不重复施加」覆盖 already-alone。",
+      "verifiedAfterFix": "restoredStateAnalyze：AtlasFixture_Huge disagreements=false、wouldAssignAlone=true；仅 AtlasFixture_HD disagreements=true。summary.disagreements 2 → 1。"
+    },
+    {
+      "id": "memory-guard-confirmed-as-defect",
+      "severity": "high",
+      "title": "幂等守卫读内存值，跨重启必然重复施加",
+      "detail": "0.8.13 的 applyLargeImageAtlasRule 用 `String(item.folderAtlas)==='alone'` 做幂等守卫。真机完整重启后该字段恒为空串（本次再次复现），于是每次 publish 都会重写同一个标记并重复 SetChanged。",
+      "caughtByLive": true,
+      "fix": "守卫改读磁盘 package.xml（persistedAtlasByItemId）；决策对象同时回报 folderAtlasInMemory 与 folderAtlasOnDisk，让分歧可观测。",
+      "verifiedAfterFix": "liveVerification[restart-idempotence]"
+    },
+    {
+      "id": "alone-marker-blocks-its-own-constraint-resolution",
+      "severity": "high",
+      "title": "拿 alone 标记去解析约束，会让被标过的图永远判不出来",
+      "detail": "包级约束模式下 atlasList 里没有 alone 这一项。沿用「按 folderAtlas 匹配约束」的解析，被标过的图只会得到 atlas-not-configured → unknown，于是永远看不到「该不该留这个标记」，也永远无法纠正。",
+      "caughtByLive": false,
+      "why": "0.8.12 的 live 证据里 sample 走的是全局 AtlasSetting 路径；全局只有一条约束，matchAtlasConstraints 会短路返回，掩盖了这个洞。",
+      "fix": "判定时主动忽略 alone 标记（decideAtlasAssignment 的 ignoreAloneMarker），按 GetAtlasIndex 落回用户配置的图集；as-is 口径的 fit/reason 保持原样不混淆。",
+      "verifiedAfterFix": "模拟宿主用例 'An alone marker that the real constraints say is unnecessary is reported'；真机上 sample 是全局模式（短路同样成立），包级模式的判定由 set_publish_settings 真机实例（0.8.13 报告）覆盖。"
+    }
+  ],
+  "projectStateRestored": {
+    "packageXml": "git checkout 复原，字节一致；git status 对 sample/ 无输出",
+    "probeImages": "AtlasProbe_HD.png / AtlasProbe_Huge.png 已删除（可恢复删除，移入废纸篓）",
+    "publishPathSetting": "临时改的 <publish path=\"/tmp/fgui-p85-publish\"> 随 package.xml 复原一并撤销",
+    "publishOutput": "/tmp/fgui-p85-publish（工程外，未进版本库）",
+    "editorHealth": "重开工程后 pluginVersion=0.8.14、versionMatch=true；uv run python scripts/phase0_fixture.py verify --live 全项 pass（21 项，含 snapshot.resources.match count=10）"
+  },
+  "stillUnverified": [
+    "纠正磁盘上已存在的错误 alone 标记（folderAtlas='' 的落盘语义）——本步刻意只报不改，真机的「写 alone 能落盘」不能类推到「清空 alone 能落盘」，需单独验证",
+    "publish 路径的归属施加没有模拟宿主覆盖（宿主未建模 PublishHandler），只由本轮真机证据支撑",
+    "rotation 救回非正方形长条图、minWidth/square/pot 等字段的跨重启保留（沿用 0.8.13 报告的未验证清单）"
+  ],
+  "nextActions": [
+    "P8-5 剩余①：纠正磁盘上已存在的错误 folderAtlas=alone。前置是真机确认清空语义；输入已就位（analyze_atlas_fit 的 aloneNotNeeded 与 publish 的 aloneNotNeeded 列表）",
+    "P8-5 剩余②：暴露 PublishHandler 的分步导出能力（ExportBinaryDesc / ExportDescZip / ExportResZip / ExportResFiles / ClearOldResFiles）",
+    "P8-3 关键帧与 verify_transition、P8-6 分支、P8-7 批量"
+  ]
+}

@@ -360,6 +360,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     atlas_fit_parser = subparsers.add_parser("analyze-atlas-fit", help="按真实图集约束分析每张图能否入图集（只读）")
     atlas_fit_parser.add_argument("package_name", nargs="?")
+
+    set_publish_parser = subparsers.add_parser(
+        "set-publish-settings",
+        help="按包写入发布与图集设置（对象模型写路径，不进组件撤销栈）",
+    )
+    set_publish_parser.add_argument("package_name", help="包名")
+    set_publish_parser.add_argument(
+        "settings",
+        help="JSON 对象，可含 path/genCode/codePath/branchPath/useGlobalAtlasSettings/atlasList/excludedList",
+    )
+    set_publish_parser.add_argument("--no-save", action="store_true", help="只改内存，不保存到 package.xml")
+    set_publish_parser.add_argument("--no-verify", action="store_true", help="保存后跳过 package.xml 回读")
+    set_publish_parser.add_argument(
+        "--external-reload",
+        action="store_true",
+        help="保存并关闭重开包后回读（同进程重开，不等于跨重启持久化）",
+    )
+
     publish_parser = subparsers.add_parser("publish", help="按 FairyGUI 工程发布设置导出资源")
     publish_parser.add_argument(
         "--scope",
@@ -712,6 +730,15 @@ def main() -> int:
             action = "analyze_atlas_fit"
             if args.package_name:
                 params["packageName"] = args.package_name
+        elif args.command == "set-publish-settings":
+            action = "set_publish_settings"
+            params = {
+                "packageName": args.package_name,
+                "settings": load_json_value(args.settings),
+                "save": not args.no_save,
+                "verify": not args.no_verify,
+                "externalReload": args.external_reload,
+            }
         elif args.command == "publish":
             action = "publish"
             params = {

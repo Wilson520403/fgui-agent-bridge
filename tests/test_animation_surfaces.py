@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fairygui_agent import mcp_server
-from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
+from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, PUBLISH_SETTINGS_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
 from fairygui_agent.cli import build_parser
 
 
@@ -94,16 +94,46 @@ class McpAnimationSurfaceTests(unittest.TestCase):
 
 
 class LargeImageAtlasSurfaceTests(unittest.TestCase):
-    def test_large_image_atlas_rule_is_compiled_into_plugin(self) -> None:
+    def test_atlas_assignment_judges_by_pack_settings_not_by_retired_constants(self) -> None:
         root = Path(__file__).resolve().parents[1]
         source = (root / "plugin/main.ts").read_text(encoding="utf-8")
         generated = (root / "plugin/main.js").read_text(encoding="utf-8")
         for text in (source, generated):
-            self.assertIn("LARGE_IMAGE_LONG_SIDE_MIN = 1920", text)
-            self.assertIn("LARGE_IMAGE_2K_SIDE_MIN = 2048", text)
-            self.assertIn('LARGE_IMAGE_ATLAS = "alone"', text)
-            self.assertIn("function enforceLargeImageAtlasRule", text)
-            self.assertIn("largeImageAtlasRule", text)
+            # 退役常量仍在，但只作诊断对照；判定入口换成真实约束。
+            self.assertIn("RETIRED_LARGE_IMAGE_LONG_SIDE_MIN = 1920", text)
+            self.assertIn('ALONE_ATLAS = "alone"', text)
+            self.assertIn("function decideAtlasAssignment", text)
+            self.assertIn("function applyAtlasAssignmentRule", text)
+            self.assertIn("function enforceAtlasAssignmentRule", text)
+            # 旧的尺寸常量判定函数必须真的消失，而不是换个名字继续用。
+            self.assertNotIn("isLargeImageDimensions", text)
+            self.assertNotIn("function applyLargeImageAtlasRule", text)
+
+    def test_the_write_path_reads_the_atlas_marker_from_disk(self) -> None:
+        # 真机 6.1.4：folderAtlas 写盘保留、重启后内存回到空串。幂等守卫读内存值的话，
+        # 重启后每次 publish 都会重复施加。这里钉住磁盘口径是唯一判据。
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        self.assertIn("persistedAtlasByItemId(pkg)", source)
+        self.assertIn("folderAtlasSource: \"package.xml\"", source)
+        self.assertIn("usedByWritePath: true", source)
+
+    def test_the_report_discloses_that_the_retired_rule_is_gone(self) -> None:
+        # 文档/响应若还说「publish 时生效」，使用者会以为旧规则仍在改真实工程。
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        self.assertIn('retiredIn: "0.8.14"', source)
+        self.assertIn("stillAppliedOnPublish: false", source)
+        self.assertIn("alsoAppliedOnImport: false", source)
+
+    def test_publish_reports_unnecessary_and_unknown_markers_instead_of_hiding_them(self) -> None:
+        # aloneNotNeeded / unknown 是「看了但没动手」。只回 assigned 的话，
+        # 「磁盘上有 3 个多余标记、2 个判不出来」这类事实会被静默吞掉。
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        self.assertIn("aloneNotNeededCount: atlasAssignment.aloneNotNeeded.length", source)
+        self.assertIn("unknownCount: atlasAssignment.unknown.length", source)
+        self.assertIn('rule: "packer-constraints"', source)
 
 
 class CliAnimationSurfaceTests(unittest.TestCase):
@@ -150,8 +180,8 @@ class CapabilityConsistencyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")
         tool_names = [name for name in vars(mcp_server) if name.startswith("fgui_")]
-        self.assertEqual(len(tool_names), 52)
-        self.assertIn("MCP 工具数：52", documented)
+        self.assertEqual(len(tool_names), 53)
+        self.assertIn("MCP 工具数：53", documented)
 
     def test_reference_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -170,6 +200,32 @@ class CapabilityConsistencyTests(unittest.TestCase):
             self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
         # 写侧能力集不能混进只读集合：否则缺失提示会沿用 0.8.10 的说法。
         self.assertEqual(REFERENCE_REPLACE_CAPABILITIES & REFERENCE_CAPABILITIES, frozenset())
+
+    def test_publish_settings_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        for action in PUBLISH_SETTINGS_CAPABILITIES:
+            self.assertIn(f'"{action}"', plugin)
+            self.assertIn(f'case "{action}"', plugin)
+            self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+
+    def test_publish_settings_write_is_blocked_during_publish(self) -> None:
+        """发布期间改图集约束会让本次导出用一半旧一半新的设置，必须封锁。"""
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        blocked = plugin.split("actionsBlockedDuringPublish:")[1].split("};")[0]
+        self.assertIn("set_publish_settings: true", blocked)
+
+    def test_publish_settings_write_declares_object_model_and_rejects_sizeoption(self) -> None:
+        """包级设置没有 DocElement 入口：写路径必须自称 object-model，且 sizeOption
+        是读侧投影，写回它会静默丢失，必须在任何改动之前拒绝。"""
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        body = plugin.split("function setPublishSettings(")[1]
+        self.assertIn("WRITE_PATH_MODEL", body)
+        self.assertIn("sizeOption", plugin)
+        harness = (root / "tests/p0_host_harness.cjs").read_text(encoding="utf-8")
+        self.assertIn("sizeOption is a read-side projection", harness)
 
     def test_reference_replace_is_preview_first_and_blocked_during_publish(self) -> None:
         """原生替换立即落盘、不可撤销：默认必须只预览，发布期间必须封锁。"""

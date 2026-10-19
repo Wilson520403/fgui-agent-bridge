@@ -334,14 +334,14 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles,
 
 计划 Phase 5 有一条：
 
-> `[ ]` 对大图和大帧集给出 atlas/alone 建议（部分完成：已有发布前大图 alone 处理）
+> `[x]` 对大图和大帧集给出 atlas/alone 建议（**0.8.14 已落地**：0.8.12 只读分析 `analyze_atlas_fit`，0.8.14 把 `import_image` / `publish` 的归属施加也换成同一套真实约束判定）
 
 `AtlasSettings.packSettings.minWidth/minHeight/pot/rotation` 就是图集打包器的
-**真实约束**。Bridge 现在的 `LARGE_IMAGE_LONG_SIDE_MIN = 1920` 等常量是硬编码猜测；
-改成"读 `PackSettings` 实际约束 → 给出精确建议"是直接可做的，而且比现在准。
+**真实约束**。Bridge 原来的 `1920×1080` / `2048` 硬编码常量是猜测（它把 1920x1080
+判成 alone，而 2048 的页装得下）；**0.8.14 已按真实约束判定**，常量只留作诊断对照。
 
-**建议新增 action：** `set_publish_settings`（按包设图集/代码生成/分支排除）、
-`analyze_atlas_fit`（按真实 PackSettings 判断每张大图能否入图集）。
+**已实现**：`set_publish_settings`（按包设图集/代码生成/分支排除）、
+`analyze_atlas_fit`（按真实 PackSettings 判断每张图能否入图集，与写入路径同源）。
 
 ### P1-D｜分支（Branch）：完全空白的能力域
 

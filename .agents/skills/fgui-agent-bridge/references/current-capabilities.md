@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.12`
+- Bridge 版本：`0.8.14`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：52，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换与图集约束分析工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：53，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析与包级发布设置写入工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -383,3 +383,163 @@ python3 scripts/extract_editor_api.py --emit-stub plugin/main.ts --out plugin/ty
 让基线随会话漂移。`AtlasFixture_Probe` 仅为验证 `folderAtlas` 往返而建，本可删除，
 但 `FPackage.DeleteItem` 只接在 `remove_movieclip` 上、没有通用包资源删除 Action，
 而手改 `package.xml` 被工程规范 §5.3 禁止，故保留。
+
+## 0.8.13：包级发布设置写入（P8-5 写侧）
+
+### 行为
+
+- `fgui_set_publish_settings`（`set_publish_settings`）：按包写入发布与图集设置——
+  标量 `path` / `genCode` / `codePath` / `branchPath` / `useGlobalAtlasSettings`，
+  外加 `atlasList`（每条含 `name` / `compression` / `extractAlpha` / `packSettings`）
+  与 `excludedList`。**只写显式提供的字段**，未提供的保持编辑器当前值。
+- `atlasList` 是**全量替换**语义：传进来的数组就是落盘的最终列表，不做增量合并。
+  理由是增量合并会留下「调用方以为删掉了、实际还挂在 List 里」的条目。
+  省略该字段则完全不碰图集设置。
+- `packSettings` 可写 `padding` / `minWidth` / `minHeight` / `maxWidth` / `maxHeight`
+  （数值）与 `pot` / `mof` / `rotation` / `square` / `fast` / `edgePadding` /
+  `duplicatePadding` / `multiPage`（布尔）。
+- **`sizeOption` 被显式拒绝**：它是 `readPackSettings` 的读侧投影（把 `pot` 归一化成
+  的输出别名），不是 `PackSettings` 的可写字段，写回它会静默丢失。未知字段同理——
+  任何未列入白名单的键都在**改动包之前** `invalid_argument` 拒绝。
+
+### 三条必须知道的写路径事实（6.1.4 声明 + 真机）
+
+- `FPackage.publishSettings` 是**只读 getter**（`public get publishSettings()`），
+  换不了对象，只能改它暴露的字段；`atlasList` / `excludedList` 是 public `List<T>`
+  字段，就地 `Clear` + `Add` 重建。
+- 包级设置**没有 `DocElement` 入口**，天然走对象模型。响应显式声明
+  `writePath: object-model`，**不进组件文档的撤销栈**。这不是缺陷披露而是路径声明——
+  与 0.8.8 修的「绕过文档模型导致文档卡在 modified 且 save 静默失败」是同一件事的
+  正确做法：明说走哪条路。
+- `externalReload` 的实现是 `pkg.Dispose()` + `Open()`，属于**同进程重开包**。
+  它证明「内存设置经过一次重建后仍与磁盘一致」，**不等于跨编辑器重启的持久化**。
+  考虑到 `folderAtlas` 已经实测过「内存写盘但重启不读回」，响应 `note` 明写这条边界。
+
+### 验证梯子
+
+editor 内存回读 → `pkg.Save()` + `App.project.Save()` → `package.xml` 的 `<publish>`
+节点回读 → 可选 `externalReload`。**只断言调用方显式给过的字段**：新建的
+`AtlasSettings` / `PackSettings` 其余字段取什么默认值真机未确认，替调用方补默认值
+再去断言，就是断言一批没人知道真值的数字——真机上必炸，模拟宿主上反而假通过。
+列表类字段（`atlasList` / `excludedList`）逐项比对：通用 `compareVerification` 走
+`===`，数组按引用比，放进去必然不等。
+
+`<publish>` 节点的属性编码**尚未在真机上钉死**（6.1.4 的 `package.xml` 里它默认是空的
+`<publish name=""/>`），所以磁盘层**只回报原始结构与全部属性键值，不做等值断言**，
+把事实原样交出来；真机确认真实编码后再收紧成断言。
+
+### 与 0.8.12 的关系
+
+这是 `analyze_atlas_fit` 的写侧配套。把 `useGlobalAtlasSettings` 置 `false` 并配好
+`atlasList`，包级 `PackSettings` 才真正生效——0.8.12 之所以「包级路径真机无实例」，
+就是因为隔离工程只有一个包且用的是全局设置。另外它是纠正既有错误归属的前提：
+0.8.12 实测发现旧的大图常量在 `import_image` 时就把 `folderAtlas=alone` 写进了真实
+工程的磁盘，只读分析能指出「谁该改」，改却要靠这个 Action。
+
+### 验证边界
+
+模拟宿主 170 项、Python 38 项、tsc 0 error 全过。**已在 FairyGUI Editor 6.1.4 真机复验**
+（证据 `tests/reports/p8-5-write-live.json`），真机推翻了三处「看起来对」的实现假设：
+
+1. **`AtlasSettings.packSettings` 是只读属性。** 声明写的是 `public packSettings : PackSettings`，
+   运行时赋值抛 `Cannot assign to read only property`。只能取现有实例**就地改字段**，
+   换不了整个对象。模拟宿主把它建模成普通可写字段，整条替换写法一路绿灯。
+2. **`atlasList` 置空会让包此后每次保存都崩溃。** `FPackage.SavePublishSettings` 抛
+   `Index was out of range`；写入阶段不报错，崩在 Save，所以**空列表在 validate 阶段就被
+   拒绝**。清空图集设置只能用编辑器设置界面。
+3. **`package.xml` 的 `<publish>` 只编码一部分字段。** 真实编码：
+   `<publish name="" maxAtlasSize="2048" rotation="true" multiPage="false" maxAtlasIndex="0">
+   <atlas name="Main" compression="true" index="0"/></publish>`。`maxWidth` 有编码但与
+   `maxHeight` **共用同一个值**（写 2048/4096，重开后 maxHeight 回落成 2048）；`rotation`
+   有编码；**`padding` 没有任何编码**——写 20，`Dispose`+`Open` 后回到默认值 2。
+   为此响应新增 `persistenceProfile`（全表 `fieldProfiles` + 本次请求字段的落盘前景），
+   `note` 直接点名留不住的字段，不让调用方只能靠 externalReload 失败才发现。
+
+`new PackSettings()` 的真实默认值（真机读数，模拟宿主原先是假定的）：
+`minWidth=16`、`minHeight=16`、`padding=2`、`pot=true`、`mof=true`、`multiPage=false`。
+这正是「验证只断言调用方显式给过的键」这个设计决定的直接回报——当初若替用户补齐默认值
+去断言，真机上必炸。
+
+**0.8.12 的遗留空白已闭合**：写入 `useGlobalAtlasSettings=false` + `atlasList` 后，包级
+`PackSettings` 在真机上真正参与判定（资源级 `atlas="alone"` 这类编辑器内建名正确报
+`unknown` 而非猜测）。padding 与 square 两条分支真机触发，required 足迹精确体现
+padding 每边 2 份的换算。
+
+**仍未验证**：rotation「救回非正方形长条图」——sample 夹具图全为正方形，物理上无法体现
+旋转收益（真机只验证到「旋转对正方形无效」这一面）；`minWidth`/`square`/`pot` 等字段非默认值
+是否跨重开保留；跨编辑器**完整重启**的持久化（本轮以 `Dispose`+`Open` 覆盖）。
+
+### 落盘前景（真机实测）
+
+| 字段 | 状态 | 编码 |
+| --- | --- | --- |
+| `maxWidth` | persisted | `publish@maxAtlasSize`（与 maxHeight 共用） |
+| `rotation` | persisted | `publish@rotation` |
+| `multiPage` | persisted | `publish@multiPage` |
+| `maxHeight` | losesValue | 无独立编码，重开回落到 maxWidth |
+| `padding` | losesValue | 磁盘无对应属性，重开回默认 2 |
+| `minWidth`/`minHeight`/`square`/`pot`/`mof`/`fast`/`edgePadding`/`duplicatePadding` | unverified | `<publish>` 无对应属性 |
+
+要跨重启保留这些字段，只能在编辑器设置界面里改；Bridge 写了留不住。
+
+## 0.8.14：图集归属改判（P8-5 判定侧）
+
+### 行为
+
+0.8.12 只把图集判定做成了只读分析，**写入路径仍在用硬编码尺寸常量**。本版本把
+`import_image`（含同名替换）与 `publish` 前的归属施加换成与 `analyze_atlas_fit`
+**同一个判定函数** `decideAtlasAssignment`，退役常量只留作诊断对照。
+
+- 退役常量 `1920` / `1080` / `2048` 不再参与任何判定。响应里保留
+  `retiredRuleWouldAssignAlone`，只为解释「磁盘上这个 alone 标记当初是怎么来的」。
+- `import_image` 响应字段 `largeImageAtlasApplied`（布尔）改为 `atlasAssignment`
+  （对象）：`verdict` / `applied` / `reason` / `fit` / `binding` / `constraintsSource` /
+  `requiredWidth` / `requiredHeight` / `limitWidth` / `limitHeight` / `padding` /
+  `square` / `rotation` / `folderAtlasOnDisk` / `folderAtlasInMemory`。
+  **消费方需要同步改**：旧字段不会保留，免得两套字段各说各话。
+- `publish` 响应字段 `largeImageAtlasRule` 改为 `atlasAssignment`，分三类回报：
+  `assigned`（本次写入 alone 的）/ `aloneNotNeeded`（磁盘上已有 alone 但真实约束装得下，
+  **只报不改**）/ `unknown`（约束不足以判定，不写盘），各带 `*Count`。
+
+### 五条判定结论（`verdict`）
+
+| verdict | 含义 | 是否写盘 |
+| --- | --- | --- |
+| `assign-alone` | 装不下，需要单独成图集 | 是 |
+| `already-alone` | 装不下且磁盘上已是 alone | 否（幂等） |
+| `alone-not-needed` | 装得下但磁盘上已标 alone | 否（**上报，待显式纠正**） |
+| `leave-as-is` | 装得下且无标记，或不参与图集 | 否 |
+| `unknown` | 无尺寸 / 无约束 / 上限未指定 / 图集未配置 | 否（拒绝下结论） |
+
+### 三条必须知道的判定事实
+
+- **归属一律以磁盘 `package.xml` 为准**。真机 6.1.4 实测：`folderAtlas` 写盘保留、
+  重启后内存回到空串。旧实现的幂等守卫读内存值，所以重启后每次 `publish` 都会重复
+  `SetChanged`；本版本改读磁盘，跨重启幂等。
+- **判定时主动忽略 `alone` 标记本身**。`alone` 是编辑器内建名，不在用户配置的
+  `atlasList` 里；拿它去解析约束只会得到「图集未配置」→ `unknown`，于是被标过的图
+  在包级约束模式下永远判不出来，也就永远看不到可纠正的候选。
+- **历史的多余标记不会被自动清除**。`folderAtlas = ""` 的落盘语义尚未在真机验证，
+  拿它当顺带产物等于用真实工程赌一个未验证假设。纠正留给后续显式动作。
+
+### 验证状态
+
+模拟宿主 176 项、Python 41 项、tsc 0 error。**已在 FairyGUI Editor 6.1.4 真机复验**
+（证据 `tests/reports/p8-5-judgement-live.json`）：
+
+- 导入 1920x1080 → `verdict=leave-as-is` / `applied=false`，磁盘**没有** `atlas` 属性；
+  同一工程里同尺寸的 `AtlasFixture_HD` 却带着 `atlas="alone"` —— 同包同约束下的 A/B 对照。
+- 导入 4096x4096 → `verdict=assign-alone` / `applied=true` / `binding=maxWidth`，
+  磁盘真落 `atlas="alone"`。
+- **完整重启编辑器**后同名替换 → `already-alone` / `applied=false`。重启后内存
+  `folderAtlas` 确实回到空串（真机事实再次复现），幂等守卫生效，0.8.13 的重复施加缺陷闭合。
+- publish → `assigned=0` / `aloneNotNeeded=1`（就是那张 1920x1080）/ `unknown=0`；
+  产物里**没有** `Package1_atlas_pw9e9.png`，即未标 alone 的 1920x1080 进了共享图集。
+
+真机还查出一处模拟宿主查不到的谎报：首版把 `wouldAssignAlone` 定义成
+「本次是否写入」，导致**已正确标记**的 4096 图报 `disagrees=true`。已拆出独立的
+`shouldBeAlone` 字段修正（`assign-alone` 与 `already-alone` 都为真）。
+
+**未验证**：纠正磁盘上已存在的多余 `alone` 标记（`folderAtlas=''` 的落盘语义，
+本轮刻意只报不改）；publish 路径的归属施加无模拟宿主覆盖（宿主未建模
+`PublishHandler`），仅由真机证据支撑。

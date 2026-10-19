@@ -79,6 +79,14 @@ declare namespace CS {
             static ChangeColorSapce($p0: any): any;
             constructor(): any;
         }
+        class AtlasSettings extends System.Object {
+            name: string;
+            compression: boolean;
+            extractAlpha: boolean;
+            packSettings: any;
+            CopyFrom($p0: any): any;
+            constructor(): any;
+        }
         class ComponentTemplates extends System.Object {
             CreateLabelItem($p0: any, $p1: any, $p2: any, $p3: any): any;
             CreateButtonItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any, $p6: any, $p7: any, $p8: any, $p9: any, $p10: any, $p11: any): any;
@@ -544,6 +552,23 @@ declare namespace CS {
             include3x: any;
             include4x: any;
             constructor($p0?: any): any;
+        }
+        class PackSettings extends System.Object {
+            pot: boolean;
+            mof: boolean;
+            padding: number;
+            rotation: boolean;
+            minWidth: number;
+            minHeight: number;
+            maxWidth: number;
+            maxHeight: number;
+            square: boolean;
+            fast: boolean;
+            edgePadding: boolean;
+            duplicatePadding: boolean;
+            multiPage: boolean;
+            CopyFrom($p0: any): any;
+            constructor(): any;
         }
         namespace PluginManager {
             class PluginInfo extends System.Object {

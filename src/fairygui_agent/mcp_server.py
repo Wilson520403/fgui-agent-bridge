@@ -936,6 +936,35 @@ def fgui_analyze_atlas_fit(package_name: str | None = None) -> dict[str, Any]:
 
 
 @mcp.tool()
+def fgui_set_publish_settings(
+    package_name: str,
+    settings: dict[str, Any],
+    save: bool = True,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """按包写入发布与图集设置：输出路径、代码生成、图集约束（PackSettings）与排除列表。
+
+    走**对象模型**（包级设置没有 DocElement 入口），响应里 writePath 会显式声明
+    object-model：它不进组件文档的撤销栈，也不走组件的持久化验证梯子。
+
+    只写你确实要改的字段——未提供的字段保持编辑器当前值，不会被重置。
+    atlasList 是**全量替换**语义：传进来的数组就是落盘的最终列表，不做增量合并；
+    省略该字段则完全不碰图集设置。packSettings 里未提供的键取编辑器新建对象的默认值。
+
+    external_reload 是保存后关闭重开包的回读，属于**同进程**重开，不等于跨重启持久化。
+    """
+    params: dict[str, Any] = {
+        "packageName": package_name,
+        "settings": settings,
+        "save": save,
+        "verify": verify,
+        "externalReload": external_reload,
+    }
+    return _client.call("set_publish_settings", params)
+
+
+@mcp.tool()
 def fgui_publish(
     scope: Literal["active", "packages", "all"] = "active",
     package_names: list[str] | None = None,

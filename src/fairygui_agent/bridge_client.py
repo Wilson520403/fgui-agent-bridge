@@ -94,6 +94,15 @@ REFERENCE_REPLACE_CAPABILITIES = frozenset(
     }
 )
 
+# Phase 8 / P8-5 写侧 (0.8.13)：包级发布设置与图集约束。单独登记——它走对象模型、
+# 不进组件撤销栈，且 externalReload 只是同进程重开包，缺失提示不能说成"没这个能力"
+# 就像只读查询那样。
+PUBLISH_SETTINGS_CAPABILITIES = frozenset(
+    {
+        "set_publish_settings",
+    }
+)
+
 
 class BridgeError(RuntimeError):
     """桥接器连接、协议或命令错误。"""
@@ -242,6 +251,7 @@ class BridgeClient:
             LAYOUT_CAPABILITIES: ("布局/控制器", "0.8.8"),
             REFERENCE_CAPABILITIES: ("资源引用图", "0.8.10"),
             REFERENCE_REPLACE_CAPABILITIES: ("全工程引用替换", "0.8.11"),
+            PUBLISH_SETTINGS_CAPABILITIES: ("包级发布设置写入", "0.8.13"),
         }
         for capability_set, (label, minimum) in optional.items():
             if action in capability_set:

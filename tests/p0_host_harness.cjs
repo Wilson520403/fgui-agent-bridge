@@ -16,7 +16,14 @@ print(json.dumps(node(r)))`], {input:text, encoding:'utf8'});
   return JSON.parse(r.stdout);
 }
 class XML {
-  constructor(text) { this.data = typeof text === 'string' ? parseXML(text) : text; this.name=this.data.name; }
+  constructor(text) { this.data = typeof text === 'string' ? parseXML(text) : text; this.name=this.data.name;
+  // 真机上 XML.attributes 是 C# Dictionary：JSON.stringify 得 {}，只能靠
+  // GetEnumerator/MoveNext/Current 取。夹具不建这个面，xmlAttributes() 会按设计
+  // 返回空字典，磁盘层断言就会「以零字段通过」——那比失败更糟。
+  const self=this; const keys=Object.keys(this.data.attrs||{});
+  this.attributes={get Count(){return keys.length;},
+   GetEnumerator(){let i=0;return {MoveNext(){if(i>=keys.length)return false;i++;return true;},get Current(){return {key:keys[i-1],value:self.data.attrs[keys[i-1]]};}};}};
+  }
   GetAttribute(k) { return this.data.attrs[k] ?? null; }
   GetNode(k) { const n=this.data.children.find(n=>n.name===k);return n ? new XML(n):null; }
   get elements() { const a=this.data.children;return {Count:a.length,get_Item:i=>new XML(a[i])}; }
@@ -138,12 +145,84 @@ function rebuildTransitionFromXml(node){
  }
  return t;
 }
+function flushFolderAtlasToDisk(){
+ // 真机 6.1.4：folderAtlas 写进内存后随保存落进 package.xml，但**不读回内存**。
+ // 夹具把这条链补齐——保存时把内存值并入磁盘镜像 _persistedAtlas，再把内存值清空。
+ // 不建模这一步的话，「磁盘口径的幂等守卫」会在测试里通过一个真机不存在的假象：
+ // 只要磁盘镜像永远是空，任何写盘动作都像是在重复施加。
+ for(const it of packageItems){
+  if(it.type!=='image')continue;
+  const v=String(it.folderAtlas||'');
+  if(v){it._persistedAtlas=v;it.folderAtlas='';}
+ }
+}
 function serializePackageXml(){
  // 真机实测：<image atlas="alone"> 会写进 package.xml 并在后续保存中保留，
  // 但 FPackageItem.folderAtlas 重启后不读回。夹具照这个形态建模——atlas 属性
  // 从一个独立的 _persistedAtlas 读，不从内存 folderAtlas 读，否则
  // analyze_atlas_fit 的磁盘口径会在测试里通过一个真机不存在的假象。
- return `<packageDescription id="${pkg.id}"><resources>${packageItems.map(i=>`<${i.type} id="${i.id}" name="${i.name}" path="/" exported="${i.exported}"${i._persistedAtlas?` atlas="${i._persistedAtlas}"`:''}/>`).join('')}</resources><publish name=""/></packageDescription>`;
+ //
+ // <publish> 的属性编码**尚未在真机上钉死**（6.1.4 的 package.xml 里它是空的
+ // `<publish name=""/>`）。这里用一种平铺的占位编码，测试只断言「内存写入 →
+ // 磁盘 → 重开回读」这条往返链自洽，不断言任何具体属性名——真机确认真实编码后
+ // 再把 encodePublishXml 换成真实格式，那时才有资格加属性级断言。
+ const ps=pkg.publishSettings;
+ const attrs=encodePublishXml(ps);
+ return `<packageDescription id="${pkg.id}"><resources>${packageItems.map(i=>`<${i.type} id="${i.id}" name="${i.name}" path="/" exported="${i.exported}"${i._persistedAtlas?` atlas="${i._persistedAtlas}"`:''}/>`).join('')}</resources><publish ${attrs}/></packageDescription>`;
+}
+function encodePublishXml(ps){
+ const pairs=[];
+ if(ps.path)pairs.push(`path="${ps.path}"`);
+ if(ps.genCode)pairs.push('genCode="true"');
+ if(ps.codePath)pairs.push(`codePath="${ps.codePath}"`);
+ if(ps.branchPath)pairs.push(`branchPath="${ps.branchPath}"`);
+ if(ps.useGlobalAtlasSettings===false)pairs.push('useGlobalAtlasSettings="false"');
+ if(ps.excludedList.Count)pairs.push(`excluded="${listValues(ps.excludedList).join(',')}"`);
+ const atlasValues=[];
+ for(let i=0;i<ps.atlasList.Count;i++){
+  const a=ps.atlasList.get_Item(i);
+  atlasValues.push(`${a.name}:${a.packSettings.maxWidth}x${a.packSettings.maxHeight}:pad${a.packSettings.padding}${a.packSettings.rotation?':rot':''}${a.packSettings.square?':sq':''}`);
+ }
+ // 多个图集编码进**同一个**属性值：XML 属性名唯一，重复写 atlas= 会被后一个覆盖，
+ // 那样 reload 用例就会拿着半个 atlasList 通过。
+ if(atlasValues.length)pairs.push(`atlas="${atlasValues.join('|')}"`);
+ return pairs.join(' ');
+}
+function listValues(list){const out=[];for(let i=0;i<list.Count;i++)out.push(String(list.get_Item(i)));return out;}
+// 模拟「重开包 = 从 package.xml 重建内存设置」。这正是 folderAtlas 不读回的
+// 同一个机制在包设置上的对应物：磁盘是唯一真相，内存必须重新解析。
+function decodePublishXml(attrs){
+ const ps=makePackagePublishSettings();
+ if(attrs.path)ps.path=attrs.path;
+ if(attrs.genCode==='true')ps.genCode=true;
+ if(attrs.codePath)ps.codePath=attrs.codePath;
+ if(attrs.branchPath)ps.branchPath=attrs.branchPath;
+ if(attrs.useGlobalAtlasSettings==='false')ps.useGlobalAtlasSettings=false;
+ if(attrs.excluded)ps.excludedList=makeCSharpList(attrs.excluded.split(','));
+ for(const raw of (attrs.atlas?String(attrs.atlas).split('|'):[])){
+  if(!raw)continue;
+  const [name,size,flags]=raw.split(':');
+  const [w,h]=String(size).split('x');
+  // flags 自身也可能带 ':'（pad10:rot），所以按整段 raw 判别，别只看 flags——
+  // 否则 rotation/square 会静默丢掉，reload 用例拿着半个配置通过。
+  ps.atlasList.Add(makeAtlasSettings(name,{maxWidth:Number(w)||0,maxHeight:Number(h)||0,
+   padding:Number(String(flags).replace(/[^0-9]/g,''))||0,
+   rotation:raw.indexOf(':rot')>=0,square:raw.indexOf(':sq')>=0}));
+ }
+ return ps;
+}
+function reopenPackageFromDisk(){
+ const xml=new XML(String(files['/pkg/package.xml']));
+ const node=xml.GetNode('publish');
+ const attrs={};
+ if(node){
+  const pairs=[['path'],['genCode'],['codePath'],['branchPath'],['useGlobalAtlasSettings'],['excluded'],['atlas']];
+  for(const [k] of pairs){const v=node.GetAttribute(k);if(v!==null)attrs[k]=v;}
+ }
+ const reopened=makePackage();
+ reopened.publishSettings=decodePublishXml(attrs);
+ reopened.isReopened=true;
+ return reopened;
 }
 function makePackageItem(name,type,ext){
  const id='it'+(packageItems.length+1);
@@ -170,11 +249,26 @@ function makePackSettings(over){
  return Object.assign(base,over||{});
 }
 function makeAtlasSettings(name,over){
- return {name:name||'Main',compression:true,extractAlpha:true,packSettings:makePackSettings(over)};
+ // 真机实测（Editor 6.1.4）：AtlasSettings.packSettings 在声明里是 public 字段，
+ // 运行时却是**只读属性**，赋值抛 "Cannot assign to read only property"。
+ // 夹具必须照这个形态建模，否则「替换整个 packSettings 对象」这种写法在测试里
+ // 会一路绿灯，直到真机才炸。
+ const pack=makePackSettings(over);
+ return {name:name||'Main',compression:true,extractAlpha:true,
+  get packSettings(){return pack;},
+  set packSettings(v){throw new TypeError("Cannot assign to read only property 'packSettings' of object '[object Object]'");}};
+}
+// C# List<T> 的可用面：读用 Count/get_Item，写侧用 Clear/Add。真机上包级设置的
+// atlasList / excludedList 就是这种可写 List（FPackage.publishSettings 是只读
+// getter，字段本身可写），夹具不建成真数组，否则写路径会在测试里通过一个
+// 真实环境不存在的假象。
+function makeCSharpList(initial){
+ const items=[];if(initial)initial.forEach(v=>items.push(v));
+ return {get Count(){return items.length;},get_Item:i=>items[i],Clear(){items.length=0;},Add(v){items.push(v);return items.length-1;},_items:items};
 }
 function makePackagePublishSettings(over){
  return Object.assign({path:'',fileName:'',packageCount:2,genCode:false,codePath:'',branchPath:'',
-  useGlobalAtlasSettings:true,atlasList:[],excludedList:{Count:0,get_Item:()=>null}},over||{});
+  useGlobalAtlasSettings:true,atlasList:makeCSharpList(),excludedList:makeCSharpList()},over||{});
 }
 function makeGlobalPublishSettings(){
  return {path:'',branchPath:'',fileExtension:'bytes',packageCount:2,compressDesc:true,binaryFormat:true,
@@ -196,7 +290,8 @@ function makePackage(){
   get items(){const own=packageItems.filter(i=>!i.owner||i.owner===this);return {Count:own.length,get_Item:i=>own[i]};},
   rootItem:{type:'folder',path:'/'},
   EnsureOpen(){this.opened=true;},SetChanged(){this.changed=true;},
-  Save(){if(pkgSaveMode==='throw')throw Error('disk full');if(pkgSaveMode==='stale')return;files['/pkg/package.xml']=serializePackageXml();this.changed=false;},
+  Dispose(){this.disposed=true;},
+  Save(){if(pkgSaveMode==='throw')throw Error('disk full');if(pkgSaveMode==='stale')return;flushFolderAtlasToDisk();files['/pkg/package.xml']=serializePackageXml();this.changed=false;},
   GetItemByPath(p){return p==='/'?this.rootItem:null;},
   EnsurePathExists(p){return this.rootItem;},
   GetItemByName(folder,name){return packageItems.find(i=>(i.name===name||i.name===`${name}.png`||i.name===`${name}.xml`||i.name===`${name}.jta`)&&i.path===folder.path)||null;},
@@ -315,8 +410,15 @@ function setup() {
   OpenDocument(url){ if(openMode==='throw')throw Error('open failed'); if(openMode==='null')return null; doc=makeDoc(); return doc; }
  };
  const app={activeDoc:null,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
-  GetItemByURL:url=>resources[url] || null,GetPackage:()=>pkg,GetPackageByName:name=>name===pkg.name?pkg:null,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,GetSettings:name=>name==='Publish'?globalSettings:null,SetChanged(){},Save(){}},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
+  // get_publish_settings / publish 都要读这两个；缺失时前者会在 stringListToArray
+  // 上抛 TypeError，于是「设置读取」这条路径在夹具里根本没被跑过。
+  activeBranch:'',allBranches:{get Count(){return 0},get_Item:()=>''},
+  GetItemByURL:url=>resources[url] || null,
+  // Dispose 之后再取包返回「从磁盘重建」的实例：这是 reload 语义的真实形态，
+  // 内存对象不重建就等于假装 reload 什么都没发生。
+  GetPackage:id=>{if(pkg.disposed){pkg.disposed=false;const r=reopenPackageFromDisk();pkg=r;return r;}return pkg;},
+  GetPackageByName:name=>name===pkg.name?pkg:null,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,GetSettings:name=>name==='Publish'?globalSettings:null,SetChanged(){},Save(){}},docView};
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},AtlasSettings:function(){return makeAtlasSettings('');},PackSettings:function(){return makePackSettings();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  ctx.getActiveDocument=()=>doc;
@@ -835,13 +937,20 @@ test('Atlas fit is judged by the real packer limits, not by pixel-size guessing'
  const r=atlasFit();
  assert.equal(imgOf(r,'small').fit,'fits');
  assert.equal(imgOf(r,'huge').fit,'exceeds');
- // 全局 maxSize=2048：1920x1080 装得下，但旧规则会把它标 alone——这正是分歧点
+ // 全局 maxSize=2048：1920x1080 装得下，退役常量却会把它标 alone——这正是替换掉的那一刀
  assert.equal(imgOf(r,'hd').fit,'fits');
- assert.equal(imgOf(r,'hd').legacyAlone,true);
- assert.equal(imgOf(r,'hd').disagrees,true);
+ assert.equal(imgOf(r,'hd').retiredRuleWouldAssignAlone,true);   // 退役规则会标
+ assert.equal(imgOf(r,'hd').wouldAssignAlone,false);             // 真实约束不标
+ assert.equal(imgOf(r,'hd').verdict,'leave-as-is');
+ assert.equal(imgOf(r,'huge').retiredRuleWouldAssignAlone,true);
+ assert.equal(imgOf(r,'huge').wouldAssignAlone,true);            // 4096 确实装不下，alone 是对的
+ assert.equal(imgOf(r,'huge').verdict,'assign-alone');
+ assert.equal(r.summary.wouldAssignAlone,1);
+ // 分歧 = 磁盘标记与判定不一致。huge 磁盘上没标记、真实约束却要标记 → 分歧；
+ // hd 磁盘没标记、判定也不要求 → 一致（退役常量说要标，是它自己的事，不构成分歧）。
+ assert.equal(imgOf(r,'huge').disagrees,true);
+ assert.equal(imgOf(r,'hd').disagrees,false);
  assert.equal(r.summary.disagreements,1);
- assert.equal(imgOf(r,'huge').legacyAlone,true);
- assert.equal(imgOf(r,'huge').disagrees,false);   // 两者都判它超限，算一致
 });
 test('An image that exceeds the page reports which constraint bound it and by how much',()=>{
  addImage('wide',3000,1000);
@@ -859,8 +968,9 @@ test('Padding counts twice per side, which the old rule could never see',()=>{
  assert.equal(e.fit,'exceeds');          // 2040+2*10=2060 > 2048
  assert.equal(e.requiredWidth,2060);
  assert.equal(e.padding,10);
- assert.equal(e.legacyAlone,false);       // 旧规则完全看不到 padding
- assert.equal(e.disagrees,true);
+ assert.equal(e.retiredRuleWouldAssignAlone,false);   // 退役常量完全看不到 padding
+ assert.equal(e.wouldAssignAlone,true);              // 真实约束看得见，所以该标 alone
+ assert.equal(e.disagrees,true);                     // 磁盘没标记而规则要标记
 });
 test('Rotation rescues a portrait page but is powerless under square packing',()=>{
  pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
@@ -895,6 +1005,10 @@ test('Unknown limits are reported as unknown, never as a confident fits',()=>{
  assert.equal(e.fit,'unknown');
  assert.equal(e.reason,'limits-unspecified');
  assert.equal(atlasFit().summary.unknown,1);
+ // 判不出来不等于「不用标」：写路径据此拒绝下结论，不写盘。
+ assert.equal(e.verdict,'unknown');
+ assert.equal(e.wouldAssignAlone,false);
+ assert.equal(atlasFit().summary.ruleUnknown,1);
 });
 test('A resource pinned to an unconfigured atlas is unknown, not silently judged',()=>{
  pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Main')}});
@@ -903,6 +1017,12 @@ test('A resource pinned to an unconfigured atlas is unknown, not silently judged
  const e=imgOf(atlasFit(),'pinned');
  assert.equal(e.fit,'unknown');
  assert.equal(e.reason,'atlas-not-configured');
+ // 但「这个 alone 标记该不该留」仍然判得出来：alone 不是 atlasList 里的图集名，
+ // 忽略该标记后按 GetAtlasIndex 落到 Main。少了这一条，被标过的图在包级约束
+ // 模式下永远 unknown，也就永远看不到可纠正的候选。
+ assert.equal(e.effectiveFit,'fits');
+ assert.equal(e.verdict,'alone-not-needed');
+ assert.equal(e.aloneNotNeeded,true);
 });
 test('The atlas assignment is read from disk, not from the in-memory folderAtlas',()=>{
  // 真机 6.1.4：磁盘写了 atlas="alone"，重启后内存 folderAtlas 却回到空串。
@@ -950,24 +1070,22 @@ test('Analyzing atlas fit is read-only: no atlas assignment and no dirty package
  assert.equal(it.folderAtlas,'');         // 只读动作不得顺手标 alone
  assert.ok(!pkg.changed);
 });
-test('The report states that publish still applies the legacy rule',()=>{
+test('The report states that the retired constant rule is no longer applied',()=>{
  addImage('hd',1920,1080);
  const r=atlasFit();
- assert.equal(r.legacyRule.stillAppliedOnPublish,true);
- assert.equal(r.legacyRule.longSideMin,1920);
+ assert.equal(r.legacyRule.retiredIn,'0.8.14');
+ assert.equal(r.legacyRule.stillAppliedOnPublish,false);
+ assert.equal(r.legacyRule.alsoAppliedOnImport,false);
+ assert.equal(r.legacyRule.longSideMin,1920);   // 常量留着只为解释历史标记的来历
 });
-test('The report also says the legacy rule fires on import, not only on publish',()=>{
- // 真机实测：1920x1080 导入后 package.xml 就写上 atlas="alone"，全程没调用过 publish。
- // 文档若只写「publish 时生效」，读者会以为导入后归属未变——这条用例钉住事实。
+test('The report says which constraint source the write path now judges by',()=>{
+ // 导入与发布写的是同一条规则，报告必须能让读者确认它们不会各判各的。
  addImage('hd',1920,1080);
- const r=atlasFit();
- assert.equal(r.legacyRule.alsoAppliedOnImport,true);
- // 跨 realm 数组不能 deepEqual（同本文件既有告诫），逐项断言
- const at=r.legacyRule.appliedAt;
- assert.equal(at.length,3);
- assert.equal(at[0],'import_image');
- assert.equal(at[1],'import_image(replace)');
- assert.equal(at[2],'publish');
+ assert.equal(atlasFit().folderAtlasRoundTrip.usedByWritePath,true);
+ const pub=ctx.handleCommand({action:'get_publish_settings',params:{}});
+ assert.equal(pub.atlasAssignmentRule.rule,'packer-constraints');
+ assert.equal(pub.atlasAssignmentRule.aloneAtlas,'alone');
+ assert.equal(pub.atlasAssignmentRule.folderAtlasSource,'package.xml');
 });
 test('A missing package is rejected',()=>{
  // 与相邻的 get_publish_settings 保持一致：对不存在的包抛普通 Error，不新造错误码
@@ -975,9 +1093,241 @@ test('A missing package is rejected',()=>{
 });
 
 
+// ------------------------------------------------ atlas assignment on the write path
+// 0.8.14：import_image / publish 不再用硬编码尺寸常量，改与 analyze_atlas_fit 共用
+// decideAtlasAssignment。这一组钉的是**契约**：谁写盘、什么时候拒绝写、
+// 以及跨重启后不重复施加。真机（6.1.4）证据见 tests/reports/p8-5-judgement-live.json。
+function stubImportedDimensions(){
+ // 真机上导入的图片带真实尺寸；夹具的 makePackageItem 恒为 64x64，
+ // 那样所有导入用例都只跑「装得下」这一条分支，判定逻辑等于没被测到。
+ const base=pkg.ImportResource;
+ pkg.ImportResource=function(sourcePath,folderPath,fileName){
+  const it=base.call(pkg,sourcePath,folderPath,fileName);
+  const dims=/(\d+)x(\d+)\.png$/.exec(String(sourcePath));
+  if(dims){it.width=Number(dims[1]);it.height=Number(dims[2]);}
+  return it;
+ };
+}
+const importSized=(w,h,extra={})=>{
+ const src=`/src/img_${w}x${h}.png`;files[src]='PNGDATA';
+ return ctx.importImage({packageName:'Fixture',sourcePath:src,save:true,...extra});
+};
+
+test('import_image assigns alone when the image really exceeds the pack limits',async()=>{
+ stubImportedDimensions();
+ const r=await importSized(4096,4096);
+ assert.equal(r.atlasAssignment.verdict,'assign-alone');
+ assert.equal(r.atlasAssignment.applied,true);
+ assert.equal(r.atlasAssignment.binding,'maxWidth');
+ assert.equal(r.atlasAssignment.limitWidth,2048);
+ assert.equal(r.atlasAssignment.requiredWidth,4096);
+ // 光断言内存字段不够：这条规则的真机副作用是 package.xml 里的 atlas 属性
+ assert.ok(files['/pkg/package.xml'].includes('atlas="alone"'),'alone 必须真落进 package.xml');
+});
+test('import_image no longer marks 1920x1080 alone, which the retired constant rule did',async()=>{
+ // 本次替换的核心回归：2048 的页装得下 1920x1080，退役常量的 1920/1080/2048
+ // 三条硬阈值却会标 alone，且导入当场就落盘（真机已验，见 p8-5-atlas-fit-live.json）。
+ stubImportedDimensions();
+ const r=await importSized(1920,1080);
+ assert.equal(r.atlasAssignment.verdict,'leave-as-is');
+ assert.equal(r.atlasAssignment.applied,false);
+ assert.equal(r.atlasAssignment.reason,'fits');
+ assert.equal(r.atlasAssignment.retiredRuleWouldAssignAlone,true);   // 退役规则会标
+ assert.ok(!files['/pkg/package.xml'].includes('atlas="alone"'),'装得下的图不该被标 alone');
+});
+test('Unsolvable constraints stop the rule from writing instead of guessing',async()=>{
+ // fail-closed：上限都没告诉 packer 多大，就不能说「装得下」，更不能顺手写 alone。
+ stubImportedDimensions();
+ globalSettings.atlasSetting.maxSize=0;
+ const r=await importSized(4096,4096);
+ assert.equal(r.atlasAssignment.verdict,'unknown');
+ assert.equal(r.atlasAssignment.applied,false);
+ assert.equal(r.atlasAssignment.reason,'limits-unspecified');
+ assert.ok(!files['/pkg/package.xml'].includes('atlas="alone"'));
+});
+test('A restart does not make the rule re-apply an alone marker that is already on disk',async()=>{
+ // 真机 6.1.4：folderAtlas 写盘保留、重启后内存回到空串。幂等守卫若读内存值，
+ // 重启后每次 publish 都会重复施加并重复 SetChanged（0.8.13 的真实缺陷）。
+ stubImportedDimensions();
+ const first=await importSized(4096,4096);
+ assert.equal(first.atlasAssignment.applied,true);
+ const it=packageItems[packageItems.length-1];
+ assert.equal(it.folderAtlas,'');              // 真机形态：重启后内存为空
+ assert.equal(it._persistedAtlas,'alone');     // 磁盘上仍然是 alone
+ const r=await ctx.importImage({packageName:'Fixture',sourcePath:'/src/img_4096x4096.png',save:false,conflictPolicy:'replace'});
+ assert.equal(r.atlasAssignment.verdict,'already-alone');
+ assert.equal(r.atlasAssignment.applied,false);
+});
+test('An alone marker that the real constraints say is unnecessary is reported, not silently cleared',async()=>{
+ // 包级约束模式下 alone 不在 atlasList 里，按现状解析只会得到 atlas-not-configured →
+ // unknown，被标过的图永远看不到「该不该留」。忽略该标记后判得出来，但**不改**：
+ // 清除标记的落盘语义还没在真机上验证过，不能拿它当顺带产物。
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
+  atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Main',{maxWidth:4096,maxHeight:4096})}});
+ const it=addImage('marked',1920,1080); it._persistedAtlas='alone'; it.folderAtlas='';
+ files['/pkg/package.xml']=serializePackageXml();
+ const e=imgOf(atlasFit(),'marked');
+ assert.equal(e.fit,'unknown');                 // as-is 口径：alone 不是配置的图集
+ assert.equal(e.reason,'atlas-not-configured');
+ assert.equal(e.verdict,'alone-not-needed');   // 有效口径：忽略标记后装得下
+ assert.equal(e.aloneNotNeeded,true);
+ assert.equal(e.disagrees,true);
+});
+test('The write path and the analysis agree on the same verdict',async()=>{
+ // 两套口径必然打脸：分析说装得下、导入却标 alone。这一条钉住它们是同一个函数。
+ stubImportedDimensions();
+ await importSized(4096,4096);
+ await importSized(1920,1080);
+ const r=atlasFit();
+ const huge=imgOf(r,'img_4096x4096');
+ const hd=imgOf(r,'img_1920x1080');
+ assert.equal(huge.assignedAloneOnDisk,true);
+ assert.equal(huge.verdict,'already-alone');     // 磁盘已是 alone，且确实超限
+ assert.equal(hd.assignedAloneOnDisk,false);
+ assert.equal(hd.verdict,'leave-as-is');          // 磁盘无标记，真实约束也不要求
+ assert.equal(hd.folderAtlasOnDisk,'');
+ assert.equal(r.summary.wouldAssignAlone,1);   // Huge：该单独成图集（磁盘上已经是对的）
+ assert.equal(r.summary.assignedAloneButFits,0);
+ assert.equal(r.summary.disagreements,0);      // 两张图的磁盘标记都与判定一致
+});
+
+
+// -------------------------------------------------------------- set_publish_settings
+// 包级发布设置走对象模型（FPackage.publishSettings 是只读 getter，且没有
+// DocElement 入口）。这一组用例钉的是**契约**：写路径声明、fail-closed 顺序、
+// 全量替换语义、以及 reload 必须是「从磁盘重建」而不是复用内存对象。
+const setPub=(settings,extra)=>ctx.handleCommand({action:'set_publish_settings',
+  params:Object.assign({packageName:pkg.name,settings:settings},extra||{})});
+
+test('Package publish settings are written through the object model and say so',()=>{
+ const r=setPub({genCode:true,codePath:'/gen'});
+ assert.equal(r.writePath,'object-model');
+ assert.equal(r.after.genCode,true);
+ assert.equal(r.after.codePath,'/gen');
+ assert.equal(r.before.genCode,false);       // before/after 都回报，调用方才看得出改了什么
+ assert.equal(r.verification.editorReadback,true);
+});
+test('An unknown field is rejected before the package is touched',()=>{
+ // 顺序很重要：校验必须发生在写入之前，否则「拒绝」时包已经被改了一半。
+ assert.throws(()=>setPub({nope:1}),/未知的settings字段：nope/);
+ assert.equal(pkg.publishSettings.genCode,false);
+ assert.equal(pkg.changed,undefined);
+});
+test('A wrong-typed scalar is rejected before the package is touched',()=>{
+ assert.throws(()=>setPub({genCode:'yes'}),/settings\.genCode 需要布尔值/);
+ assert.equal(pkg.publishSettings.genCode,false);
+ assert.throws(()=>setPub({path:123}),/settings\.path 需要字符串/);
+});
+test('sizeOption is a read-side projection and cannot be written back',()=>{
+ // readPackSettings 把 pot 归一化成 sizeOption 输出；写回它不会落盘，纯静默丢失。
+ assert.throws(()=>setPub({atlasList:[{name:'Main',packSettings:{sizeOption:'pot'}}]}),/sizeOption/);
+ assert.equal(pkg.publishSettings.atlasList.Count,0);
+});
+test('The pack settings are edited in place, never replaced wholesale',()=>{
+ // 真机实测：packSettings 是只读属性。整条替换的实现会在真机上抛
+ // "Cannot assign to read only property"，而在旧夹具里一路绿灯。
+ pkg.publishSettings.atlasList.Clear();
+ pkg.publishSettings.atlasList.Add(makeAtlasSettings('Old'));
+ const r=setPub({atlasList:[{name:'Main',packSettings:{maxWidth:1024,maxHeight:1024,padding:10}}]});
+ assert.equal(r.after.atlasList.length,1);
+ assert.equal(r.after.atlasList[0].packSettings.maxWidth,1024);
+ // 包级 PackSettings 的其余字段保持编辑器新建对象的默认值，不由 Bridge 决定。
+ assert.equal(r.after.atlasList[0].packSettings.square,false);
+ assert.equal(r.after.atlasList[0].packSettings.multiPage,true);
+});
+test('An empty atlas list is refused before it can corrupt the package',()=>{
+ // 真机实测（Editor 6.1.4）：atlasList 清空后保存，FPackage.SavePublishSettings 抛
+ // "Index was out of range"，且该包此后每次 Save 都崩——是一次失败就把工程留在
+ // 坏状态里，所以必须写入前就拒绝。
+ assert.throws(()=>setPub({atlasList:[]}),/atlasList 不能是空列表/);
+ assert.ok(pkg.publishSettings.atlasList.Count>=0);   // 没有发生 Clear
+});
+test('Fields with no disk encoding are disclosed before the caller asks for a reload',()=>{
+ // 真机实测：package.xml 的 <publish> 只编码 maxAtlasSize / multiPage / extractAlpha，
+ // padding 根本没有对应属性，写了也留不住。调用方必须在写之前就能看到这件事，
+ // 而不是等 externalReload 把它变成一次失败才发现。
+ const r=setPub({atlasList:[{name:'Main',packSettings:{maxWidth:2048,padding:20}}]},{save:true});
+ const byField={};r.persistenceProfile.requested.forEach(e=>byField[e.field]=e.status);
+ assert.equal(byField.maxWidth,'persisted');
+ assert.equal(byField.padding,'losesValue');
+ assert.equal(r.persistenceProfile.diskNode,'package.xml <publish>');
+ assert.ok(r.note.indexOf('padding(Main)')>=0,'note 必须点出留不住的字段');
+});
+test('The atlas list is replaced wholesale, not merged into',()=>{
+ pkg.publishSettings.atlasList.Clear();
+ pkg.publishSettings.atlasList.Add(makeAtlasSettings('Old'));
+ pkg.publishSettings.atlasList.Add(makeAtlasSettings('Older'));
+ const r=setPub({atlasList:[{name:'Main',compression:true,packSettings:{maxWidth:1024,maxHeight:1024,padding:10}}]});
+ assert.equal(r.after.atlasList.length,1);          // 旧的两条不残留
+ assert.equal(r.after.atlasList[0].name,'Main');
+ assert.equal(r.after.atlasList[0].packSettings.maxWidth,1024);
+ assert.equal(r.after.atlasList[0].packSettings.padding,10);
+});
+test('Duplicate atlas names are rejected',()=>{
+ // 重名会让资源上的 folderAtlas 指向哪一条变得不确定。
+ assert.throws(()=>setPub({atlasList:[{name:'A'},{name:'A'}]}),/重复图集名/);
+ assert.equal(pkg.publishSettings.atlasList.Count,0);
+});
+test('An empty atlas name is rejected',()=>{
+ assert.throws(()=>setPub({atlasList:[{name:''}]}),/不能为空/);
+});
+test('A negative pack size is rejected before anything is written',()=>{
+ assert.throws(()=>setPub({atlasList:[{name:'Main',packSettings:{padding:-1}}]}),/padding 需要非负有限数值/);
+ assert.equal(pkg.publishSettings.atlasList.Count,0);
+});
+test('The excluded list is rebuilt from the request',()=>{
+ const r=setPub({excludedList:['a','b']});
+ assert.equal(r.after.excludedList.length,2);
+ assert.equal(r.after.excludedList[0],'a');
+ assert.equal(r.after.excludedList[1],'b');
+});
+test('External reload without a save is rejected up front',()=>{
+ assert.throws(()=>setPub({genCode:true},{save:false,externalReload:true}),/需要先保存/);
+});
+test('Saving writes a publish node into package.xml',()=>{
+ const r=setPub({useGlobalAtlasSettings:false},{save:true});
+ assert.equal(r.saved,true);
+ assert.ok(String(files['/pkg/package.xml']).indexOf('<publish')>=0);
+ assert.equal(r.verification.xmlReadback,true);
+ assert.equal(r.verification.xml.present,true);
+ assert.equal(r.verification.xml.attributes.useGlobalAtlasSettings,'false');
+});
+test('Package-level pack settings survive a dispose and reopen',()=>{
+ const r=setPub({useGlobalAtlasSettings:false,atlasList:[
+  {name:'Main',packSettings:{maxWidth:1024,maxHeight:2048,padding:10,rotation:true}}]},{save:true,externalReload:true});
+ assert.equal(r.verification.externalReload,true);
+ assert.equal(r.strength,'reload');
+ assert.equal(r.verification.reload.strategy,'package-dispose-open');
+ // reload 后的内存必须是从磁盘重建的：重建出来的包对象不是原来那个。
+ assert.equal(pkg.isReopened,true);
+ assert.equal(pkg.publishSettings.useGlobalAtlasSettings,false);
+ assert.equal(pkg.publishSettings.atlasList.Count,1);
+ assert.equal(pkg.publishSettings.atlasList.get_Item(0).name,'Main');
+});
+test('A failed save is a persistence failure, not a silent success',()=>{
+ pkgSaveMode='throw';
+ assert.throws(()=>setPub({genCode:true},{save:true}),/保存包或工程失败/);
+});
+test('Package-level settings are not judged by the global atlas setting once opted out',()=>{
+ // set_publish_settings 的核心用途：造一个 useGlobalAtlasSettings=false 的包，
+ // 让包级 PackSettings 真正生效。没有它，包级约束路径只存在于模拟宿主。
+ const it=addImage('hd',1920,1080);
+ setPub({useGlobalAtlasSettings:false,atlasList:[
+  {name:'Main',packSettings:{maxWidth:1024,maxHeight:1024,padding:10}}]},{save:true});
+ files['/pkg/package.xml']=serializePackageXml();
+ const e=imgOf(atlasFit(),'hd');
+ assert.equal(e.constraintsSource,'package');
+ assert.equal(e.fit,'exceeds');          // 包级上限 1024，比全局 2048 严
+ assert.equal(e.requiredWidth,1940);     // 1920 + 2*10
+ assert.equal(e.retiredRuleWouldAssignAlone,true);
+ assert.equal(e.wouldAssignAlone,true);  // 包级约束同样判它装不下 → 要标 alone
+ assert.equal(e.disagrees,true);         // 磁盘上还没有这个标记，正是待施加的那一张
+});
+
+
 // verification *logic* against a mocked host, never Editor acceptance.
 (async()=>{
-for(const {name,run} of tests){try{setup();await run();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:e.stack});}}
+for(const {name,run} of tests){try{setup();await run();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:e.stack,details:e.details||null});}}
 const report={schemaVersion:1,suite:'p0-persistence-host',evidence:'mocked-editor-host',liveEditorVerified:false,mockedExternalReloadCovered:true,externalReloadVerified:false,passed:results.filter(r=>r.passed).length,total:results.length,cases:results};
 const output=JSON.stringify(report,null,2)+'\n';
 if(process.argv[2]==='--report'&&process.argv[3])fs.writeFileSync(process.argv[3],output);

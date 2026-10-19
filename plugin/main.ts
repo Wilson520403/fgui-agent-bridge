@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.12";
+const BRIDGE_VERSION = "0.8.14";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -205,6 +205,7 @@ function writeStatus(): void {
             "save_document",
             "save_all",
             "get_publish_settings",
+            "set_publish_settings",
             "analyze_atlas_fit",
             "publish",
             "get_history",
@@ -248,12 +249,18 @@ function describePackage(pkg: FairyEditor.FPackage): any {
     };
 }
 
-const LARGE_IMAGE_LONG_SIDE_MIN = 1920;
-const LARGE_IMAGE_SHORT_SIDE_MIN = 1080;
-const LARGE_IMAGE_2K_SIDE_MIN = 2048;
-const LARGE_IMAGE_ATLAS = "alone";
+// alone 是 FairyGUI 的内建图集名：每张图单独生成一张图集，不与小图混排。
+const ALONE_ATLAS = "alone";
 
-function isLargeImageDimensions(width: any, height: any): boolean {
+// 0.8.14 起退役：这三个常量只保留在 analyze_atlas_fit 的 retiredRule 诊断块里，
+// 用于解释「磁盘上为什么已经存在这些 alone 标记」，不再参与任何判定。
+// 真机证据（Editor 6.1.4）：1920x1080 在 maxSize=2048 的页里装得下，旧常量却给它
+// alone；4096x4096 确实装不下，那时 alone 才是对的。见 tests/reports/p8-5-atlas-fit-live.json。
+const RETIRED_LARGE_IMAGE_LONG_SIDE_MIN = 1920;
+const RETIRED_LARGE_IMAGE_SHORT_SIDE_MIN = 1080;
+const RETIRED_LARGE_IMAGE_2K_SIDE_MIN = 2048;
+
+function retiredLargeImageRuleWouldAssign(width: any, height: any): boolean {
     const normalizedWidth = Number(width);
     const normalizedHeight = Number(height);
     if (!isFinite(normalizedWidth) || !isFinite(normalizedHeight) || normalizedWidth <= 0 || normalizedHeight <= 0)
@@ -261,22 +268,8 @@ function isLargeImageDimensions(width: any, height: any): boolean {
 
     const longSide = Math.max(normalizedWidth, normalizedHeight);
     const shortSide = Math.min(normalizedWidth, normalizedHeight);
-    // 覆盖 1920x1080 及以上屏幕大图，或任一边达到 2K（2048）的纹理。
-    return (longSide >= LARGE_IMAGE_LONG_SIDE_MIN && shortSide >= LARGE_IMAGE_SHORT_SIDE_MIN)
-        || longSide >= LARGE_IMAGE_2K_SIDE_MIN;
-}
-
-function applyLargeImageAtlasRule(item: any): boolean {
-    if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE || !isLargeImageDimensions(item.width, item.height))
-        return false;
-
-    if (String(item.folderAtlas || "") === LARGE_IMAGE_ATLAS)
-        return false;
-
-    // FairyGUI 的 alone 纹理集会为每张图片单独生成图集，不会与小图混排。
-    item.folderAtlas = LARGE_IMAGE_ATLAS;
-    item.SetChanged();
-    return true;
+    return (longSide >= RETIRED_LARGE_IMAGE_LONG_SIDE_MIN && shortSide >= RETIRED_LARGE_IMAGE_SHORT_SIDE_MIN)
+        || longSide >= RETIRED_LARGE_IMAGE_2K_SIDE_MIN;
 }
 
 function describeItem(item: FairyEditor.FPackageItem): any {
@@ -627,7 +620,7 @@ async function importImage(params: any): Promise<any> {
         await puerts.$promise(pkg.UpdateResource(existing, sourcePath));
         existing.exported = params.exported !== false;
         existing.SetChanged();
-        const largeImageAtlasApplied = applyLargeImageAtlasRule(existing);
+        const atlasAssignment = applyAtlasAssignmentForItem(pkg, existing);
         markPackageChanged(pkg);
         return packageWriteResult({
             operation: "replaced",
@@ -636,7 +629,7 @@ async function importImage(params: any): Promise<any> {
             autoRenamed: false,
             sourcePath,
             folderPath,
-            largeImageAtlasApplied,
+            atlasAssignment,
             item: describeItem(existing),
             packageModified: true,
             requiresSave: true,
@@ -652,7 +645,7 @@ async function importImage(params: any): Promise<any> {
         throw new Error(`导入结果不是图片资源：${item.name}`);
     item.exported = params.exported !== false;
     item.SetChanged();
-    const largeImageAtlasApplied = applyLargeImageAtlasRule(item);
+    const atlasAssignment = applyAtlasAssignmentForItem(pkg, item);
 
     markPackageChanged(pkg);
     return packageWriteResult({
@@ -662,7 +655,7 @@ async function importImage(params: any): Promise<any> {
         autoRenamed: item.name !== requestedName,
         sourcePath,
         folderPath,
-        largeImageAtlasApplied,
+        atlasAssignment,
         item: describeItem(item),
         packageModified: true,
         requiresSave: true,
@@ -4644,11 +4637,15 @@ function describePublishSettings(params: any): any {
     }
 
     return {
-        largeImageAtlasRule: {
-            longSideMin: LARGE_IMAGE_LONG_SIDE_MIN,
-            shortSideMin: LARGE_IMAGE_SHORT_SIDE_MIN,
-            side2kMin: LARGE_IMAGE_2K_SIDE_MIN,
-            atlas: LARGE_IMAGE_ATLAS
+        atlasAssignmentRule: {
+            rule: "packer-constraints",
+            aloneAtlas: ALONE_ATLAS,
+            folderAtlasSource: "package.xml",
+            appliedAt: ["import_image", "import_image(replace)", "publish"],
+            constraintSource: packages.length > 0 && packages[0].useGlobalAtlasSettings === false
+                ? "package:PackSettings"
+                : "global:AtlasSetting",
+            note: "0.8.14 起图集归属由打包器真实约束判定，不再使用硬编码尺寸常量；约束不足时判为 unknown 且不写盘。判据见 analyze_atlas_fit。"
         },
         activeBranch: App.project.activeBranch,
         branches: stringListToArray(App.project.allBranches),
@@ -4686,6 +4683,441 @@ function describePublishSettings(params: any): any {
             }
         },
         packages
+    };
+}
+
+// ------------------------------------------------------------------
+// 包级发布设置写入（set_publish_settings）
+//
+// 6.1.4 实测约束，三条都决定了写法：
+//   ① FPackage.publishSettings 是**只读 getter**（`public get publishSettings()`），
+//      换不了对象，只能改它暴露的字段；
+//   ② atlasList / excludedList 是 public List 字段，就地 Clear + Add 重建；
+//   ③ 包级设置**没有 DocElement 入口**，天然走对象模型，所以响应必须显式声明
+//      writePath: object-model，不参与组件文档的撤销栈——这是 0.8.8 踩过的
+//      「FRelations.Reset()+AddItem 绕过文档模型 → 文档卡在 modified 且 save 静默失败」
+//      同一类风险的正确姿势：明说走哪条路，而不是假装在文档模型里。
+// ------------------------------------------------------------------
+
+const PUBLISH_SCALAR_WRITABLE: { [key: string]: string } = {
+    path: "string",
+    genCode: "boolean",
+    codePath: "string",
+    branchPath: "string",
+    useGlobalAtlasSettings: "boolean"
+};
+
+// PackSettings 里这些是数值字段（padding 是 int，其余是尺寸）。
+const PACK_NUMBER_WRITABLE = ["padding", "minWidth", "minHeight", "maxWidth", "maxHeight"];
+const PACK_BOOL_WRITABLE = ["pot", "mof", "rotation", "square", "fast", "edgePadding", "duplicatePadding", "multiPage"];
+const ATLAS_BOOL_WRITABLE = ["compression", "extractAlpha"];
+
+function atlasSettingsToPlain(atlas: any): any {
+    return {
+        name: String((atlas && atlas.name) || ""),
+        compression: !!(atlas && atlas.compression),
+        extractAlpha: !!(atlas && atlas.extractAlpha),
+        packSettings: readPackSettings(atlas ? atlas.packSettings : null)
+    };
+}
+
+function readAtlasSettingsList(list: any): any[] {
+    const result: any[] = [];
+    if (!isHostObject(list))
+        return result;
+    for (let i = 0; i < list.Count; i++) {
+        const atlas = list.get_Item(i);
+        if (atlas)
+            result.push(atlasSettingsToPlain(atlas));
+    }
+    return result;
+}
+
+// 包级设置的内存快照。字段与 describePublishSettings 对齐，验证梯子两阶段共用同一形状。
+function readPublishSettingsMemory(pkg: any): any {
+    const ps: any = pkg.publishSettings;
+    if (!ps)
+        return null;
+    return {
+        path: String(ps.path || ""),
+        fileName: String(ps.fileName || ""),
+        packageCount: Number(ps.packageCount) || 0,
+        genCode: !!ps.genCode,
+        codePath: String(ps.codePath || ""),
+        branchPath: String(ps.branchPath || ""),
+        useGlobalAtlasSettings: !!ps.useGlobalAtlasSettings,
+        atlasList: readAtlasSettingsList(ps.atlasList),
+        excludedList: stringListToArray(ps.excludedList)
+    };
+}
+
+// package.xml 的 <publish> 节点是包级设置的持久化位置。属性名**不做假设**：
+// 原样透出全部键值，未识别的键同样是证据。照名字猜一套「看起来合理」的
+// 属性名去断言，会在真机上安静地验证错对象（0.8.10 的 ReferenceInfo 就是这么骗人的）。
+function persistedPublishSettings(pkg: any): any {
+    const file = IOPath.Combine(String(pkg.basePath || ""), "package.xml");
+    if (!IOFile.Exists(file))
+        verificationError("persistence_failed", "无法读取 package.xml", { stage: "xml", file });
+
+    const XmlType = (CS as any).FairyGUI.Utils.XML;
+    let xml: any = null;
+    try {
+        xml = new XmlType(String(IOFile.ReadAllText(file)));
+    } catch (error) {
+        verificationError("persistence_failed", "package.xml 解析失败", { stage: "xml", file, reason: String(error) });
+    }
+
+    const node = xml.GetNode("publish");
+    if (!node)
+        return { present: false, file, attributes: {}, childElements: [] };
+
+    const childElements: any[] = [];
+    if (isHostObject(node.elements)) {
+        for (let i = 0; i < node.elements.Count; i++) {
+            const child = node.elements.get_Item(i);
+            childElements.push({ element: String(child.name), attributes: xmlAttributes(child) });
+        }
+    }
+    return { present: true, file, attributes: xmlAttributes(node), childElements };
+}
+
+function rejectUnknownFields(spec: any, allowed: string[], label: string): void {
+    if (!isHostObject(spec))
+        return;
+    for (const key of Object.keys(spec)) {
+        if (allowed.indexOf(key) < 0)
+            verificationError("invalid_argument", `未知的${label}字段：${key}`, { field: key, allowed });
+    }
+}
+
+function applyPackSettings(pack: any, spec: any): void {
+    for (const key of PACK_NUMBER_WRITABLE) {
+        if (spec[key] === undefined)
+            continue;
+        const value = Number(spec[key]);
+        if (!isFinite(value) || value < 0)
+            verificationError("invalid_argument", `packSettings.${key} 需要非负有限数值`, { field: key, value: spec[key] });
+        pack[key] = value;
+    }
+    for (const key of PACK_BOOL_WRITABLE) {
+        if (spec[key] === undefined)
+            continue;
+        if (typeof spec[key] !== "boolean")
+            verificationError("invalid_argument", `packSettings.${key} 需要布尔值`, { field: key, value: spec[key] });
+        pack[key] = spec[key];
+    }
+}
+
+// 全量校验先行：任何一条不合法都在**改动包之前**拒绝，避免半写入后无法回滚。
+function validatePublishSettingsSpec(spec: any): any {
+    if (!isHostObject(spec))
+        verificationError("invalid_argument", "settings 必须是对象", {});
+
+    rejectUnknownFields(spec, Object.keys(PUBLISH_SCALAR_WRITABLE).concat(["atlasList", "excludedList"]), "settings");
+
+    const plan: any = { scalars: {}, atlasList: null, excludedList: null };
+    for (const key of Object.keys(PUBLISH_SCALAR_WRITABLE)) {
+        if (spec[key] === undefined)
+            continue;
+        const kind = PUBLISH_SCALAR_WRITABLE[key];
+        if (kind === "string") {
+            if (typeof spec[key] !== "string")
+                verificationError("invalid_argument", `settings.${key} 需要字符串`, { field: key, value: spec[key] });
+        } else if (typeof spec[key] !== "boolean") {
+            verificationError("invalid_argument", `settings.${key} 需要布尔值`, { field: key, value: spec[key] });
+        }
+        plan.scalars[key] = spec[key];
+    }
+
+    if (spec.excludedList !== undefined) {
+        if (!Array.isArray(spec.excludedList))
+            verificationError("invalid_argument", "settings.excludedList 需要字符串数组", { field: "excludedList" });
+        plan.excludedList = spec.excludedList.map((value: any) => String(value));
+    }
+
+    if (spec.atlasList !== undefined) {
+        if (!Array.isArray(spec.atlasList))
+            verificationError("invalid_argument", "settings.atlasList 需要数组", { field: "atlasList" });
+        // 真机实测（Editor 6.1.4）：atlasList 为空时不能保存——FPackage.SavePublishSettings
+        // 会抛 "Index was out of range"，此后该包**每次 Save 都崩**。这不是一次失败的
+        // 保存，是把工程留在坏状态里，所以空列表必须在写入前就拒绝：清空图集设置只能
+        // 在编辑器设置界面里做。
+        if (spec.atlasList.length === 0)
+            verificationError("invalid_argument", "atlasList 不能是空列表：FairyGUI 6.1.4 保存空图集列表会抛 Index was out of range 并使该包此后保存持续崩溃。要清空图集设置请在编辑器设置界面里操作。", { field: "atlasList" });
+        // 全量替换语义：数组就是要落盘的最终列表，不做增量合并，避免留下
+        // 调用方以为已经删掉、实际还留在 List 里的条目。
+        plan.atlasList = spec.atlasList.map((entry: any, index: number) => {
+            const label = `settings.atlasList[${index}]`;
+            if (!isHostObject(entry))
+                verificationError("invalid_argument", `${label} 需要对象`, { index });
+            rejectUnknownFields(entry, ["name", "compression", "extractAlpha", "packSettings"], label);
+
+            const name = entry.name === undefined ? "" : String(entry.name);
+            if (!name)
+                verificationError("invalid_argument", `${label}.name 不能为空：图集名要和资源上的 folderAtlas 对应`, { index });
+
+            // 只保留调用方**显式给过**的键。new AtlasSettings() 的 compression /
+            // extractAlpha 取什么默认值真机未确认，替调用方填个默认值再拿去断言，
+            // 就是在断言一批没人知道真值的值——真机上必炸，模拟宿主上反而假通过。
+            const atlas: any = { name };
+            for (const key of ATLAS_BOOL_WRITABLE) {
+                if (entry[key] === undefined)
+                    continue;
+                if (typeof entry[key] !== "boolean")
+                    verificationError("invalid_argument", `${label}.${key} 需要布尔值`, { index, field: key });
+                atlas[key] = entry[key];
+            }
+
+            const packSpec = entry.packSettings === undefined ? {} : entry.packSettings;
+            if (!isHostObject(packSpec))
+                verificationError("invalid_argument", `${label}.packSettings 需要对象`, { index });
+            // sizeOption 是 readPackSettings 的输出字段（归一化后的 pot 别名），
+            // 不是 PackSettings 的可写字段，写回它会静默丢失。
+            rejectUnknownFields(packSpec, PACK_NUMBER_WRITABLE.concat(PACK_BOOL_WRITABLE), `${label}.packSettings`);
+            atlas.packSettings = packSpec;
+            atlas.requestedPackFields = Object.keys(packSpec);
+            return atlas;
+        });
+        const names = plan.atlasList.map((entry: any) => entry.name);
+        const duplicates = names.filter((name: string, index: number) => names.indexOf(name) !== index);
+        if (duplicates.length)
+            verificationError("invalid_argument", `atlasList 存在重复图集名：${duplicates.join(", ")}`, { duplicates });
+    }
+
+    return plan;
+}
+
+// compareVerification 走 diffExpectedValues，而它是 `===` 比较：对象和数组按引用
+// 比，atlasList / excludedList 放进去必然不等，只能被判失败。所以列表类字段必须
+// 逐项比。
+//
+// packSettings 还有一个更隐蔽的陷阱：expected 只能包含**调用方显式给过的键**。
+// new PackSettings() 的其余字段取什么默认值真机未确认，照 readPackSettings 的形状
+// 把整份填满去断言，等于断言了一批没人知道真值的数字——它要么假通过，要么在真机上
+// 用真实默认值炸掉，两种都是噪声。
+// 真机实测（Editor 6.1.4）：package.xml 的包级发布设置编码**只覆盖一部分字段**。
+// 观察到的真实形状：
+//   <publish name="" maxAtlasSize="2048" rotation="true" multiPage="false" maxAtlasIndex="0">
+//     <atlas name="Main" compression="true" index="0"/>
+//   </publish>
+// 能下结论与不能下结论的分开列，不能下结论的一律标 unverified 而不是猜：
+//   * maxWidth 有编码（maxAtlasSize），但它同时充当 maxHeight 的上限——写
+//     maxWidth=2048 / maxHeight=4096，Dispose+Open 后 maxHeight 回落成 2048。
+//   * padding 没有任何编码：写 20，Dispose+Open 后回到编辑器默认值 2。
+//   * rotation 有编码（<publish rotation>）。
+// 这些字段要跨重启保留，只能在编辑器设置界面里改；Bridge 写了留不住。
+// 与其瞒到 externalReload 才 fail-closed 出来，不如写之前就说清楚。
+const PACK_PERSISTENCE: { [key: string]: { status: string; code: string; note: string } } = {
+    maxWidth: { status: "persisted", code: "publish@maxAtlasSize", note: "与 maxHeight 共用同一个值" },
+    maxHeight: { status: "losesValue", code: "publish@maxAtlasSize", note: "没有独立编码；写与 maxWidth 不同的值，重开后回落到 maxWidth" },
+    padding: { status: "losesValue", code: "", note: "真机实测：写 20，Dispose+Open 后回到默认值 2" },
+    multiPage: { status: "persisted", code: "publish@multiPage", note: "" },
+    minWidth: { status: "unverified", code: "", note: "<publish> 无对应属性，真机未单独验证非默认值" },
+    minHeight: { status: "unverified", code: "", note: "<publish> 无对应属性，真机未单独验证非默认值" },
+    rotation: { status: "persisted", code: "publish@rotation", note: "真机实测会写成 <publish rotation=\"true\">" },
+    square: { status: "unverified", code: "", note: "<publish> 无对应属性，真机未单独验证非默认值" },
+    pot: { status: "unverified", code: "", note: "真机读到 pot=true，但 <publish> 无对应属性" },
+    mof: { status: "unverified", code: "", note: "<publish> 无对应属性" },
+    fast: { status: "unverified", code: "", note: "<publish> 无对应属性" },
+    edgePadding: { status: "unverified", code: "", note: "<publish> 无对应属性" },
+    duplicatePadding: { status: "unverified", code: "", note: "<publish> 无对应属性" }
+};
+
+// 把本次请求涉及的字段的落盘前景摆到响应里。调用方在传 save/externalReload
+// 之前就能看到「这几个字段留不住」，而不是等验证梯子把它变成一次失败。
+function publishPersistenceProfile(plan: any): any {
+    const requested: any[] = [];
+    if (plan && plan.atlasList) {
+        for (const spec of plan.atlasList) {
+            for (const key of spec.requestedPackFields || []) {
+                const entry = PACK_PERSISTENCE[key];
+                requested.push({
+                    atlas: spec.name,
+                    field: key,
+                    status: entry ? entry.status : "unverified",
+                    code: entry ? entry.code : "",
+                    note: entry ? entry.note : ""
+                });
+            }
+        }
+    }
+    return { editorVersion: "6.1.4", diskNode: "package.xml <publish>", requested, fieldProfiles: PACK_PERSISTENCE };
+}
+
+function comparePublishSettings(expected: any, actual: any, stage: string, target: any): void {
+    const differences: any[] = [];
+    if (!actual) {
+        verificationError(stage === "editor" ? "editor_rejected" : "persistence_failed", `验证失败：${stage}`, { stage, target, expected, actual: null, differences: [{ property: "present", expected: true, actual: false }], mutationMayHaveOccurred: true });
+    }
+
+    for (const key of Object.keys(expected.scalars)) {
+        const e = expected.scalars[key];
+        const a = actual[key];
+        if (typeof e === "boolean" ? a !== e : String(a === undefined || a === null ? "" : a) !== String(e))
+            differences.push({ property: key, expected: e, actual: a === undefined ? null : a });
+    }
+
+    if (expected.excludedList !== null) {
+        const e = expected.excludedList;
+        const a = actual.excludedList || [];
+        if (e.length !== a.length)
+            differences.push({ property: "excludedList.length", expected: e.length, actual: a.length });
+        else
+            for (let i = 0; i < e.length; i++)
+                if (e[i] !== a[i])
+                    differences.push({ property: `excludedList[${i}]`, expected: e[i], actual: a[i] });
+    }
+
+    if (expected.atlasList !== null) {
+        const e = expected.atlasList;
+        const a = actual.atlasList || [];
+        if (e.length !== a.length)
+            differences.push({ property: "atlasList.length", expected: e.length, actual: a.length });
+        else
+            for (let i = 0; i < e.length; i++) {
+                const ea = e[i];
+                const aa = a[i];
+                if (ea.name !== aa.name)
+                    differences.push({ property: `atlasList[${i}].name`, expected: ea.name, actual: aa.name });
+                for (const key of ATLAS_BOOL_WRITABLE) {
+                    if (!(key in ea))
+                        continue;
+                    if (Boolean(ea[key]) !== Boolean(aa[key]))
+                        differences.push({ property: `atlasList[${i}].${key}`, expected: ea[key], actual: aa[key] });
+                }
+                const pack = ea.packSettings || {};
+                for (const key of Object.keys(pack)) {
+                    const av = aa.packSettings ? aa.packSettings[key] : undefined;
+                    const mismatch = typeof pack[key] === "number"
+                        ? Math.abs(pack[key] - (Number(av) || 0)) > 0.00001
+                        : Boolean(pack[key]) !== Boolean(av);
+                    if (mismatch)
+                        differences.push({ property: `atlasList[${i}].packSettings.${key}`, expected: pack[key], actual: av === undefined ? null : av });
+                }
+            }
+    }
+
+    if (differences.length)
+        verificationError(stage === "editor" ? "editor_rejected" : "persistence_failed", `验证失败：${stage}`, { stage, target, expected, actual, differences, mutationMayHaveOccurred: true });
+}
+
+// 包级 external reload：包级设置没有 DocElement 入口，只能 Dispose + Open 重开包。
+// 这是**同进程**重开，跨重启持久化不在本 Action 的证明范围内——
+// folderAtlas 已经实测过「内存写盘但重启不读回」，所以这里同样不把同进程回读
+// 当成跨重启证据，caveat 明确写出来。
+function reloadPackageForSettings(pkg: any): any {
+    const packageId = String(pkg.id);
+    const basePath = String(pkg.basePath || "");
+    pkg.Dispose();
+    const reopened = App.project.GetPackage(packageId);
+    if (!reopened)
+        verificationError("persistence_failed", "包重开失败：工程内找不到该包", { stage: "reload", packageId });
+    reopened.EnsureOpen();
+    return { reopened, packageId, basePath, strategy: "package-dispose-open" };
+}
+
+function setPublishSettings(params: any): any {
+    const pkg = resolvePackage(params);
+    const publishSettings: any = pkg.publishSettings;
+    if (!publishSettings)
+        verificationError("invalid_argument", "该包没有发布设置，无法写入", { packageName: pkg.name });
+
+    if (params && params.externalReload && params.save === false)
+        verificationError("invalid_argument", "externalReload 需要先保存（不要同时传 save:false）", {});
+
+    const plan = validatePublishSettingsSpec(params ? params.settings : null);
+    const target = { packageId: String(pkg.id), packageName: String(pkg.name), basePath: String(pkg.basePath || "") };
+    const before = readPublishSettingsMemory(pkg);
+
+    // 写标量
+    for (const key of Object.keys(plan.scalars)) {
+        if (PUBLISH_SCALAR_WRITABLE[key] === "boolean")
+            publishSettings[key] = Boolean(plan.scalars[key]);
+        else
+            publishSettings[key] = String(plan.scalars[key]);
+    }
+
+    // excludedList：就地重建
+    if (plan.excludedList !== null) {
+        publishSettings.excludedList.Clear();
+        for (const value of plan.excludedList)
+            publishSettings.excludedList.Add(value);
+    }
+
+    // atlasList：就地重建，PackSettings 是嵌套对象，整条替换
+    if (plan.atlasList !== null) {
+        publishSettings.atlasList.Clear();
+        for (const spec of plan.atlasList) {
+            const atlas = new FairyEditor.AtlasSettings();
+            atlas.name = spec.name;
+            for (const key of ATLAS_BOOL_WRITABLE) {
+                if (spec[key] !== undefined)
+                    atlas[key] = spec[key];
+            }
+            // 真机实测（Editor 6.1.4）：AtlasSettings.packSettings 虽然在声明里是
+            // `public packSettings` 字段，运行时却是**只读属性**——赋值抛
+            // "Cannot assign to read only property 'packSettings'"。只能取现有实例
+            // 就地改字段，换不了整个对象。声明的 public 与运行时的可写性不是一回事。
+            const pack = atlas.packSettings;
+            if (!pack)
+                verificationError("editor_rejected", "新建 AtlasSettings 没有可写的 packSettings 实例，无法设置包级打包约束", { field: "packSettings", atlas: spec.name });
+            applyPackSettings(pack, spec.packSettings);
+            publishSettings.atlasList.Add(atlas);
+        }
+    }
+
+    markPackageChanged(pkg);
+
+    // 只验证本次实际请求过的字段：未请求的字段不在 expected 里，否则「我没碰
+    // codePath 却因为 codePath 变了而失败」。
+    const expected = plan;
+    comparePublishSettings(expected, readPublishSettingsMemory(pkg), "editor", target);
+
+    let saved = false;
+    if (params.save) {
+        try {
+            if (typeof pkg.EnsureOpen === "function") pkg.EnsureOpen();
+            pkg.Save();
+            App.project.Save();
+        } catch (error) {
+            verificationError("persistence_failed", "保存包或工程失败", { stage: "save", target, reason: String(error), expected });
+        }
+        saved = true;
+    }
+
+    let xmlReadback = false;
+    let xmlValues: any = null;
+    if (saved && params.verify !== false) {
+        // 磁盘层只回报原始结构，不做等值断言：<publish> 的属性编码尚未在真机上钉死，
+        // 先把事实拿出来（见 persistedPublishSettings 注释），下一轮再收紧成断言。
+        xmlValues = persistedPublishSettings(pkg);
+        xmlReadback = true;
+    }
+
+    let reloaded: any = null;
+    if (xmlReadback && params.externalReload) {
+        const reload = reloadPackageForSettings(pkg);
+        const reloadedMemory = readPublishSettingsMemory(reload.reopened);
+        comparePublishSettings(expected, reloadedMemory, "reload", target);
+        reloaded = { performed: true, strategy: reload.strategy, values: reloadedMemory };
+    }
+
+    const verification = { editorReadback: true, xmlReadback, externalReload: Boolean(reloaded), expected, editor: readPublishSettingsMemory(pkg), xml: xmlValues, reload: reloaded };
+    const strength = verificationStrength(verification, saved);
+    const profile = publishPersistenceProfile(plan);
+    const lossy = profile.requested.filter((entry: any) => entry.status === "losesValue");
+    return {
+        ok: true, target, saved,
+        persisted: strength !== NONE_STRENGTH,
+        strength,
+        writePath: WRITE_PATH_MODEL,
+        verification,
+        persistenceProfile: profile,
+        before,
+        after: readPublishSettingsMemory(pkg),
+        requiresSave: !saved,
+        note: `${strengthNote(verification, saved, "包级发布设置验证覆盖编辑器内存回读与 package.xml 的 <publish> 节点；")}包级设置无 DocElement 入口，走对象模型、不进组件撤销栈；externalReload 是同进程重开包，不等于跨重启持久化。`
+            + (lossy.length ? `本次请求中有 ${lossy.length} 个 packSettings 字段在 package.xml 里没有编码，保存后重开不会保留（见 persistenceProfile.requested）：${lossy.map((entry: any) => `${entry.field}(${entry.atlas})`).join(", ")}。` : "")
     };
 }
 
@@ -4875,9 +5307,152 @@ function persistedAtlasByItemId(pkg: FairyEditor.FPackage): { [itemId: string]: 
     return result;
 }
 
+// 图集归属判定的唯一入口：这张图要不要单独成图集（alone）。
+//
+// 0.8.14 起用打包器真实约束判定，取代 0.8.13 之前的硬编码尺寸常量。三条不可退让的前提：
+// 1. 归属一律以**磁盘 package.xml** 为准。真机实测 FPackageItem.folderAtlas 写盘保留、
+//    重启后内存不读回，拿内存值判幂等会让同一条规则每次 publish 都重新施加。
+// 2. ignoreAloneMarker=true 时**主动忽略 alone 标记**去解析约束。alone 是本规则
+//    自己管理的标记、不是用户配置的图集名，用它去匹配 atlasList 只会得到
+//    「图集未配置」→ unknown，于是被标过的图永远判不出来，也就永远无法纠正。
+// 3. 约束缺失/上限未指定时返回 verdict=unknown，**不下结论也不写盘**。
+//    「猜它装得下」和「确认它装得下」不能混同，这跟 analyze_atlas_fit 的口径一致。
+//
+// verdict 取值：
+//   assign-alone     装不下，需要单独成图集（本函数之外的 applyAtlasAssignmentRule 会写盘）
+//   already-alone    装不下且磁盘上已经是 alone，幂等，不重复写
+//   alone-not-needed 装得下但磁盘上已标 alone——本步只上报不改，纠正留给显式动作
+//   leave-as-is      装得下且没有标记，或该资源不参与图集
+//   unknown          判不出来（无尺寸/无约束/上限未指定/图集未配置），拒绝下结论
+function decideAtlasAssignment(pkg: FairyEditor.FPackage, settings: FairyEditor.GlobalPublishSettings, item: any, persistedAtlas: { [itemId: string]: string }, ignoreAloneMarker?: boolean): any {
+    const aloneOnDisk = String((persistedAtlas && persistedAtlas[String(item.id)]) || "");
+    const itemWidth = Number(item && item.width) || 0;
+    const itemHeight = Number(item && item.height) || 0;
+    const decision: any = {
+        verdict: "unknown",
+        applied: false,
+        // shouldBeAlone = 「按真实约束，这张图就该单独成图集」。
+        // 它与 verdict 分开：verdict=already-alone 时本次没写盘，但结论仍是「该 alone」。
+        // 把两者合成一个字段，已正确标记的图会被误报成与判定不一致。
+        shouldBeAlone: false,
+        reason: "",
+        fit: "unknown",
+        binding: "",
+        constraintsSource: "unknown",
+        atlas: "",
+        width: itemWidth,
+        height: itemHeight,
+        folderAtlasInMemory: String((item && item.folderAtlas) || ""),
+        folderAtlasOnDisk: aloneOnDisk,
+        // 退役常量的预测，只作对照：它解释「磁盘上这个标记当初是怎么来的」，
+        // 不参与 verdict 的任何一步。
+        retiredRuleWouldAssignAlone: retiredLargeImageRuleWouldAssign(itemWidth, itemHeight)
+    };
+
+    if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE) {
+        decision.verdict = "leave-as-is";
+        decision.reason = "not-an-image";
+        return decision;
+    }
+    if (item.supportAtlas === false) {
+        decision.verdict = "leave-as-is";
+        decision.reason = "not-atlasable";
+        return decision;
+    }
+    if (!decision.width || !decision.height) {
+        decision.reason = "no-dimensions";
+        return decision;
+    }
+    if (!settings) {
+        decision.reason = "no-publish-settings";
+        return decision;
+    }
+
+    const constraints = resolveAtlasConstraints(pkg, settings);
+    const matchKey = (ignoreAloneMarker && aloneOnDisk === ALONE_ATLAS) ? "" : aloneOnDisk;
+    const matched = matchAtlasConstraints(constraints, item, matchKey);
+    if (!matched) {
+        decision.reason = (constraints && constraints.length > 0) ? "atlas-not-configured" : "no-constraints";
+        return decision;
+    }
+    decision.constraintsSource = matched.source;
+    decision.atlas = matched.atlas;
+    if (!constraintsUsable(matched)) {
+        decision.reason = "limits-unspecified";
+        return decision;
+    }
+
+    const verdict = judgeAtlasFit(decision.width, decision.height, matched);
+    decision.fit = verdict.fits ? "fits" : "exceeds";
+    decision.binding = verdict.binding;
+    decision.requiredWidth = verdict.requiredWidth;
+    decision.requiredHeight = verdict.requiredHeight;
+    decision.limitWidth = matched.maxWidth;
+    decision.limitHeight = matched.maxHeight;
+    decision.padding = matched.padding;
+    decision.square = matched.square;
+    decision.rotation = matched.rotation;
+
+    if (!verdict.fits) {
+        decision.verdict = aloneOnDisk === ALONE_ATLAS ? "already-alone" : "assign-alone";
+        decision.reason = aloneOnDisk === ALONE_ATLAS ? "exceeds-and-already-alone" : "exceeds-pack-limits";
+        decision.shouldBeAlone = true;
+    }
+    else {
+        decision.verdict = aloneOnDisk === ALONE_ATLAS ? "alone-not-needed" : "leave-as-is";
+        decision.reason = aloneOnDisk === ALONE_ATLAS ? "alone-but-fits" : "fits";
+    }
+    return decision;
+}
+
+// 唯一会写 folderAtlas 的地方：只有 assign-alone 才写。
+// 幂等守卫用磁盘值（见 decideAtlasAssignment 前提 1），所以重启后不会重复施加。
+function applyAtlasAssignmentRule(pkg: FairyEditor.FPackage, settings: FairyEditor.GlobalPublishSettings, item: any, persistedAtlas: { [itemId: string]: string }): any {
+    const decision = decideAtlasAssignment(pkg, settings, item, persistedAtlas, true);
+    if (decision.verdict !== "assign-alone")
+        return decision;
+
+    item.folderAtlas = ALONE_ATLAS;
+    item.SetChanged();
+    decision.applied = true;
+    return decision;
+}
+
+// 导入路径的单张封装：全局设置与磁盘口径在这里各取一次。
+function applyAtlasAssignmentForItem(pkg: FairyEditor.FPackage, item: any): any {
+    const settings = App.project.GetSettings("Publish") as FairyEditor.GlobalPublishSettings;
+    return applyAtlasAssignmentRule(pkg, settings, item, persistedAtlasByItemId(pkg));
+}
+
+function describeAtlasAssignment(item: any, decision: any): any {
+    return {
+        id: item.id,
+        name: item.name,
+        width: decision.width,
+        height: decision.height,
+        verdict: decision.verdict,
+        applied: !!decision.applied,
+        reason: decision.reason,
+        fit: decision.fit,
+        binding: decision.binding,
+        constraintsSource: decision.constraintsSource,
+        requiredWidth: decision.requiredWidth || 0,
+        requiredHeight: decision.requiredHeight || 0,
+        limitWidth: decision.limitWidth || 0,
+        limitHeight: decision.limitHeight || 0,
+        padding: decision.padding === undefined ? null : decision.padding,
+        square: decision.square === undefined ? null : decision.square,
+        rotation: decision.rotation === undefined ? null : decision.rotation,
+        folderAtlasOnDisk: decision.folderAtlasOnDisk,
+        folderAtlasInMemory: decision.folderAtlasInMemory,
+        url: item.GetURL()
+    };
+}
+
 // analyze_atlas_fit：按打包器真实约束判断每张图能否入图集。纯只读。
-// 刻意不改成发布行为——先让新旧两种判断的差异可见（disagreements），再决定
-// 是不是让 runPublish 按真实约束走。旧规则仍在 publish 里生效，见 LARGE_IMAGE_*。
+// 0.8.14 起，import_image / publish 用的也是同一套约束判定（见
+// decideAtlasAssignment），本 Action 与写入路径共用判据，避免「分析说装得下、
+// 导入却标 alone」这种两套口径互相打脸。
 function analyzeAtlasFit(params: any): any {
     const settings = App.project.GetSettings("Publish") as FairyEditor.GlobalPublishSettings;
     if (!settings)
@@ -4903,6 +5478,8 @@ function analyzeAtlasFit(params: any): any {
     let totalUnknown = 0;
     let totalDisagreements = 0;
     let totalAloneButFits = 0;
+    let totalWouldAssignAlone = 0;
+    let totalRuleUnknown = 0;
 
     for (let i = 0; i < sourcePackages.length; i++) {
         const pkg = sourcePackages[i];
@@ -4915,6 +5492,8 @@ function analyzeAtlasFit(params: any): any {
         let unknown = 0;
         let disagreements = 0;
         let aloneButFits = 0;
+        let wouldAssignAlone = 0;
+        let ruleUnknown = 0;
 
         for (let j = 0; j < pkg.items.Count; j++) {
             const item = pkg.items.get_Item(j);
@@ -4933,7 +5512,12 @@ function analyzeAtlasFit(params: any): any {
             const memoryAtlas = String(item.folderAtlas || "");
             const folderAtlas = String(persistedAtlas[String(item.id)] || "");
             const matched = matchAtlasConstraints(constraints, item, folderAtlas);
-            const legacyAlone = isLargeImageDimensions(width, height);
+
+            // 与写入路径（import_image / publish）完全同一套判据，ignoreAloneMarker=true。
+            // 这是本 Action 能回答「磁盘上这个 alone 标记该不该留」的唯一口径：
+            // 包级约束模式下 atlasList 里根本没有 alone 这一项，按现状解析会得到
+            // atlas-not-configured → unknown，被标过的图就永远判不出来。
+            const effective = decideAtlasAssignment(pkg, settings, item, persistedAtlas, true);
 
             const entry: any = {
                 id: item.id,
@@ -4947,7 +5531,34 @@ function analyzeAtlasFit(params: any): any {
                 constraintsSource: matched ? matched.source : "unknown",
                 atlas: matched ? matched.atlas : ""
             };
-            entry.assignedAloneOnDisk = entry.folderAtlasOnDisk === LARGE_IMAGE_ATLAS;
+            entry.assignedAloneOnDisk = entry.folderAtlasOnDisk === ALONE_ATLAS;
+
+            // 当前规则结论（与 import_image / publish 写盘用的是同一个函数）。
+            // 先落定再走下面的 as-is 分支：包级约束模式下 alone 图的 fit 会落到
+            // unknown，但「该不该留这个 alone 标记」仍然判得出来，两件事不能互相绑架。
+            entry.verdict = effective.verdict;
+            entry.effectiveFit = effective.fit;
+            entry.effectiveBinding = effective.binding;
+            entry.effectiveConstraintsSource = effective.constraintsSource;
+            entry.wouldAssignAlone = !!effective.shouldBeAlone;
+            entry.aloneNotNeeded = effective.verdict === "alone-not-needed";
+            // 分歧 ⟺ 磁盘上的 alone 标记与真实约束判定不一致（两种方向都算）。
+            // 判不出来时（verdict=unknown）不计入：那不是「一致」，是没结论。
+            entry.disagrees = effective.verdict === "unknown"
+                ? false
+                : (entry.assignedAloneOnDisk !== entry.wouldAssignAlone);
+            if (entry.disagrees)
+                disagreements++;
+            if (entry.wouldAssignAlone)
+                wouldAssignAlone++;
+            if (effective.verdict === "unknown")
+                ruleUnknown++;
+            // 最可执行的一个数：磁盘上已经标成 alone，但按真实约束其实装得下。
+            // aloneButFits 改由 effective 判定（包级约束模式下也成立），
+            // 退役常量只留 retiredRuleWouldAssignAlone 做对照。
+            if (entry.aloneNotNeeded)
+                aloneButFits++;
+            entry.retiredRuleWouldAssignAlone = effective.retiredRuleWouldAssignAlone;
 
             if (!width || !height) {
                 entry.fit = "unknown";
@@ -4988,19 +5599,6 @@ function analyzeAtlasFit(params: any): any {
                 exceeds++;
                 entry.binding = verdict.binding;
             }
-
-            // 旧规则与真实约束不一致，是这一刀真正的产出：它直接说明发布时
-            // 会被标成 alone 的那张图，其实按打包器约束根本装得下（或反之）。
-            // 分歧 ⟺ 旧规则要 alone，而真实约束说装得下；两者都 alone / 都装得下都算一致。
-            // 显式给 true/false 而不是「不一致时才加字段」：缺字段的布尔无法和
-            // false 区分，消费方只能靠 === undefined 兜，这正是诊断字段谎报的老路。
-            entry.legacyAlone = legacyAlone;
-            entry.disagrees = legacyAlone !== !verdict.fits;
-            if (entry.disagrees)
-                disagreements++;
-            // 最可执行的一个数：磁盘上已经标成 alone，但按真实约束其实装得下。
-            if (entry.assignedAloneOnDisk && verdict.fits)
-                aloneButFits++;
             images.push(entry);
         }
 
@@ -5009,6 +5607,8 @@ function analyzeAtlasFit(params: any): any {
         totalUnknown += unknown;
         totalDisagreements += disagreements;
         totalAloneButFits += aloneButFits;
+        totalWouldAssignAlone += wouldAssignAlone;
+        totalRuleUnknown += ruleUnknown;
 
         packages.push({
             package: describePackage(pkg),
@@ -5022,7 +5622,9 @@ function analyzeAtlasFit(params: any): any {
                 exceeds: exceeds,
                 unknown: unknown,
                 disagreements: disagreements,
-                assignedAloneButFits: aloneButFits
+                assignedAloneButFits: aloneButFits,
+                wouldAssignAlone: wouldAssignAlone,
+                ruleUnknown: ruleUnknown
             }
         });
     }
@@ -5035,21 +5637,25 @@ function analyzeAtlasFit(params: any): any {
             exceeds: totalExceeds,
             unknown: totalUnknown,
             disagreements: totalDisagreements,
-            assignedAloneButFits: totalAloneButFits
+            assignedAloneButFits: totalAloneButFits,
+            wouldAssignAlone: totalWouldAssignAlone,
+            ruleUnknown: totalRuleUnknown
         },
         folderAtlasRoundTrip: {
             memoryMatchesDisk: false,
-            note: "真机实测（Editor 6.1.4）：<image atlas=\"alone\"> 写入 package.xml 且保存时保留，但 FPackageItem.folderAtlas 重启后不读回。因此每张图分列 folderAtlasInMemory 与 folderAtlasOnDisk，图集归属解析与 assignedAloneOnDisk 一律以磁盘为准。"
+            note: "真机实测（Editor 6.1.4）：<image atlas=\"alone\"> 写入 package.xml 且保存时保留，但 FPackageItem.folderAtlas 重启后不读回。因此每张图分列 folderAtlasInMemory 与 folderAtlasOnDisk，图集归属解析、assignedAloneOnDisk 与写入路径的幂等守卫一律以磁盘为准。",
+            usedByWritePath: true
         },
         legacyRule: {
-            longSideMin: LARGE_IMAGE_LONG_SIDE_MIN,
-            shortSideMin: LARGE_IMAGE_SHORT_SIDE_MIN,
-            side2kMin: LARGE_IMAGE_2K_SIDE_MIN,
-            atlas: LARGE_IMAGE_ATLAS,
-            stillAppliedOnPublish: true,
-            alsoAppliedOnImport: true,
-            appliedAt: ["import_image", "import_image(replace)", "publish"],
-            note: "旧规则不只在 publish 生效：import_image（含同名替换）在导入成功后就直接写 folderAtlas=alone 并落盘（真机已验，见 tests/reports/p8-5-atlas-fit-live.json）。因此 disagreements 统计的是**已经写进工程的**图集归属，不只是下次发布会发生什么。本 Action 自身只读不改。"
+            longSideMin: RETIRED_LARGE_IMAGE_LONG_SIDE_MIN,
+            shortSideMin: RETIRED_LARGE_IMAGE_SHORT_SIDE_MIN,
+            side2kMin: RETIRED_LARGE_IMAGE_2K_SIDE_MIN,
+            atlas: ALONE_ATLAS,
+            retiredIn: "0.8.14",
+            stillAppliedOnPublish: false,
+            alsoAppliedOnImport: false,
+            appliedAt: [],
+            note: "这三个常量 0.8.14 起不再参与任何判定，只保留为诊断对照：per-image 的 retiredRuleWouldAssignAlone 解释「磁盘上这个 alone 标记当初是怎么来的」。替代它的是 decideAtlasAssignment 的打包器真实约束判定，import_image 与 publish 共用同一套判据。历史标记不会被本 Action 清除——本 Action 自身只读。"
         }
     };
 }
@@ -5177,23 +5783,40 @@ function forEachPackageItem(items: any, visit: (item: any) => void): void {
     }
 }
 
-function enforceLargeImageAtlasRule(pkg: FairyEditor.FPackage): any[] {
-    const changed: any[] = [];
+// publish 前的全包归属施加。与导入路径共用 decideAtlasAssignment，
+// 幂等守卫同样以磁盘 package.xml 为准，所以跨重启后不会重复 SetChanged。
+// aloneNotNeeded 与 unknown **只上报不改**：前者需要显式纠正动作（清除标记的
+// 落盘语义尚未真机验证），后者是判不出来——两者都不该被静默当成「已处理」。
+function enforceAtlasAssignmentRule(pkg: FairyEditor.FPackage, settings: FairyEditor.GlobalPublishSettings): any {
+    const persistedAtlas = persistedAtlasByItemId(pkg);
+    const assigned: any[] = [];
+    const aloneNotNeeded: any[] = [];
+    const unknown: any[] = [];
+    let skipped = 0;
+
     forEachPackageItem(pkg.items, (item) => {
-        if (!applyLargeImageAtlasRule(item))
+        if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE)
             return;
-        changed.push({
-            id: item.id,
-            name: item.name,
-            width: item.width,
-            height: item.height,
-            folderAtlas: LARGE_IMAGE_ATLAS,
-            url: item.GetURL()
-        });
+
+        const decision = applyAtlasAssignmentRule(pkg, settings, item, persistedAtlas);
+        if (decision.verdict === "assign-alone")
+            assigned.push(describeAtlasAssignment(item, decision));
+        else if (decision.verdict === "alone-not-needed")
+            aloneNotNeeded.push(describeAtlasAssignment(item, decision));
+        else if (decision.verdict === "unknown")
+            unknown.push(describeAtlasAssignment(item, decision));
+        else if (decision.reason === "not-atlasable")
+            skipped++;
     });
-    if (changed.length > 0)
+
+    if (assigned.length > 0)
         pkg.SetChanged();
-    return changed;
+    return {
+        assigned: assigned,
+        aloneNotNeeded: aloneNotNeeded,
+        unknown: unknown,
+        skippedNotAtlasable: skipped
+    };
 }
 
 async function publishPackages(params: any): Promise<any> {
@@ -5206,17 +5829,27 @@ async function publishPackages(params: any): Promise<any> {
     const publishDescOnly = params.publishDescOnly === true;
     validatePublishBranch(branch);
 
-    const largeImageAtlasChanges: any[] = [];
+    const publishSettings = App.project.GetSettings("Publish") as FairyEditor.GlobalPublishSettings;
+    const atlasAssignment = {
+        rule: "packer-constraints",
+        aloneAtlas: ALONE_ATLAS,
+        folderAtlasSource: "package.xml",
+        assigned: [] as any[],
+        aloneNotNeeded: [] as any[],
+        unknown: [] as any[],
+        skippedNotAtlasable: 0
+    };
     for (let i = 0; i < packages.length; i++) {
-        const changes = enforceLargeImageAtlasRule(packages[i]);
-        for (let j = 0; j < changes.length; j++) {
-            largeImageAtlasChanges.push({
-                package: packages[i].name,
-                ...changes[j]
-            });
-        }
+        const result = enforceAtlasAssignmentRule(packages[i], publishSettings);
+        for (let j = 0; j < result.assigned.length; j++)
+            atlasAssignment.assigned.push({ package: packages[i].name, ...result.assigned[j] });
+        for (let j = 0; j < result.aloneNotNeeded.length; j++)
+            atlasAssignment.aloneNotNeeded.push({ package: packages[i].name, ...result.aloneNotNeeded[j] });
+        for (let j = 0; j < result.unknown.length; j++)
+            atlasAssignment.unknown.push({ package: packages[i].name, ...result.unknown[j] });
+        atlasAssignment.skippedNotAtlasable += result.skippedNotAtlasable;
     }
-    if (largeImageAtlasChanges.length > 0)
+    if (atlasAssignment.assigned.length > 0)
         App.project.SetChanged();
 
     publishInProgress = true;
@@ -5277,13 +5910,14 @@ async function publishPackages(params: any): Promise<any> {
             finishedAt: nowIso(),
             durationMs: Date.now() - startedMs,
             packages: published,
-            largeImageAtlasRule: {
-                longSideMin: LARGE_IMAGE_LONG_SIDE_MIN,
-                shortSideMin: LARGE_IMAGE_SHORT_SIDE_MIN,
-                side2kMin: LARGE_IMAGE_2K_SIDE_MIN,
-                atlas: LARGE_IMAGE_ATLAS,
-                changedCount: largeImageAtlasChanges.length,
-                changes: largeImageAtlasChanges
+            atlasAssignment: {
+                ...atlasAssignment,
+                // 计数显式给出：aloneNotNeeded / unknown 是「看了但没动手」，
+                // 让消费方去数组长度里数等于把判定责任推给读报告的人。
+                assignedCount: atlasAssignment.assigned.length,
+                aloneNotNeededCount: atlasAssignment.aloneNotNeeded.length,
+                unknownCount: atlasAssignment.unknown.length,
+                note: "按打包器真实约束判定（decideAtlasAssignment），不再用硬编码尺寸常量。aloneNotNeeded 表示磁盘上已有 alone 标记但按真实约束装得下，本次只上报不纠正；unknown 表示约束不足以判定（无尺寸/无约束/上限未指定/图集未配置），不写盘。"
             },
             fileChanges: diffSnapshots(before, after)
         };
@@ -5315,6 +5949,7 @@ function handleCommand(request: AgentRequest): any {
         update_movieclip: true,
         remove_movieclip: true,
         upsert_transition: true,
+        set_publish_settings: true,
         remove_transition: true,
         add_transition_item: true,
         update_transition_item: true,
@@ -5660,6 +6295,9 @@ function handleCommand(request: AgentRequest): any {
 
         case "get_publish_settings":
             return describePublishSettings(params);
+
+        case "set_publish_settings":
+            return setPublishSettings(params);
 
         case "analyze_atlas_fit":
             return analyzeAtlasFit(params);

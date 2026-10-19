@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-set-publish-settings-live",
+  "capturedAt": "2026-10-19T15:10:00+08:00",
+  "bridgeVersion": "0.8.13",
+  "editorVersion": "6.1.4",
+  "liveEditorVerified": false,
+  "evidence": "blocked-by-editor-crash",
+  "summary": {
+    "outcome": "真机验证被环境阻塞，未取得任何真机证据",
+    "notVerified": true,
+    "offlineOnly": true,
+    "rootCause": "FairyGUI Editor 6.1.4 打开任何工程都 SIGABRT，与本次改动无关（已用旧插件对照实验排除）"
+  },
+  "delivered": {
+    "action": "set_publish_settings",
+    "writePath": "object-model",
+    "mockHost": {
+      "passed": 167,
+      "total": 167
+    },
+    "python": {
+      "passed": 38,
+      "total": 38
+    },
+    "typescript": {
+      "errors": 0,
+      "compiler": "typescript@5.4.5",
+      "config": "plugin/tsconfig.json"
+    },
+    "wiring": [
+      "plugin/main.ts dispatch + capabilities",
+      "bridge_client PUBLISH_SETTINGS_CAPABILITIES",
+      "cli set-publish-settings",
+      "mcp fgui_set_publish_settings",
+      "skill docs",
+      "README"
+    ]
+  },
+  "blockingFinding": {
+    "title": "FairyGUI Editor 打开工程必崩，且与插件版本无关",
+    "symptom": "单独启动编辑器可稳定存活 120 秒以上；一旦打开任何 .fairy 工程，进程在 5 秒内 SIGABRT 退出",
+    "crashSignal": "SIGABRT (Abort trap: 6)",
+    "crashPath": [
+      "aeProcessAppleEvent",
+      "-[NSAppleEventManager dispatchRawAppleEvent:withRawReply:handlerRefCon:]",
+      "objc_exception_rethrow",
+      "std::__terminate(void (*)())",
+      "__cxa_rethrow",
+      "abort"
+    ],
+    "playerLogTerminator": "libc++abi: terminating due to uncaught exception of type Il2CppExceptionWrapper",
+    "suspectedOrigin": {
+      "exception": "System.Text.Encoding.GetEncoding(862) -> 'Encoding 862 data could not be found'",
+      "stack": "FairyEditor.FontUtil.ReadTTF -> GetFontName -> GetFontList -> Task",
+      "note": "862 是 Big5 繁体中文码页；宿主 macOS 区域为 zh_CN，不带该编码",
+      "confidence": "suspected-not-confirmed",
+      "whySuspectedOnly": "崩溃栈只到 abort，没有 lastExceptionBacktrace，编码异常与 abort 之间的因果链未被报告证实"
+    },
+    "crashReports": [
+      "~/Library/Logs/DiagnosticReports/FairyGUI-Editor-2026-10-19-150015.ips",
+      "~/Library/Logs/DiagnosticReports/FairyGUI-Editor-2026-10-19-150547.ips",
+      "~/Library/Logs/DiagnosticReports/FairyGUI-Editor-2026-10-19-150655.ips"
+    ]
+  },
+  "controlExperiments": [
+    {
+      "hypothesis": "本次改动（0.8.13 插件）导致编辑器崩溃",
+      "procedure": "把工程内插件回滚到 HEAD 的 0.8.12（git show HEAD:plugin/*），冷启动后用相同方式打开 sample 工程",
+      "result": "仍然崩溃（15:05 新增 .ips，进程数归零）",
+      "conclusion": "排除。与本次改动无关。"
+    },
+    {
+      "hypothesis": "崩溃由 sample 工程内容触发",
+      "procedure": "用相同方式打开另一个完全无关的工程 /Volumes/HardM2App/many_tradition/FairyGUI/FairyGUI.fairy",
+      "result": "同样崩溃（15:06 新增 .ips）",
+      "conclusion": "排除。全局性问题，与工程内容无关。"
+    },
+    {
+      "hypothesis": "编辑器进程自身不稳定",
+      "procedure": "只启动不打开工程，连续观察 120 秒（12 次 × 10s 采样）",
+      "result": "进程全程存活，无新增崩溃报告",
+      "conclusion": "排除。崩溃只在打开工程时触发。"
+    },
+    {
+      "hypothesis": "工程文件被损坏",
+      "procedure": "检查 sample/sample.fairy 内容与 git 状态",
+      "result": "内容为合法 projectDescription，git 干净无改动",
+      "conclusion": "排除。"
+    }
+  ],
+  "regressionContext": {
+    "note": "同一台机器上 2026-10-16 的 0.8.8 真机验证正常通过，DiagnosticReports/Retired 为空、无历史 FairyGUI 崩溃记录，说明该故障是近期出现的环境变化，而非长期存在的已知限制",
+    "unresolved": "未定位到具体诱因（macOS 更新 / 编码状态变化 / 编辑器字体缓存均未逐项排查）"
+  },
+  "notVerified": [
+    "包级 PublishSettings 字段在 6.1.4 上的真实可写性（声明存在≠运行时可用，GetGear 返回空接口 IGear 即反例）",
+    "new AtlasSettings() / new PackSettings() 的真实字段默认值——0.8.13 的验证梯子刻意只断言调用方显式给过的键，正因为这些默认值未确认",
+    "package.xml 的 <publish> 节点真实属性编码（磁盘层当前只回报原始结构，不做等值断言）",
+    "useGlobalAtlasSettings=false 后包级 PackSettings 是否真正参与图集判定——这正是 0.8.12 遗留空白的闭合条件",
+    "padding / rotation / square 三条分支的真机触发",
+    "externalReload（Dispose+Open 同进程重开包）在真实编辑器上的行为",
+    "已落盘的错误 folderAtlas=alone 的纠正"
+  ],
+  "nextActions": [
+    "恢复 FairyGUI Editor 可打开工程的环境（编码异常根因或编辑器版本），然后按 tests/reports/p8-5-atlas-fit-live.json 的既有格式补真机报告",
+    "真机通过前，set_publish_settings 不得当作已验收能力使用"
+  ],
+  "resolvedBy": {
+    "at": "2026-10-19T15:45:00+08:00",
+    "how": "用户在 FairyGUI Editor GUI 内手动打开工程后，一切正常",
+    "refinedFinding": "崩溃只发生在**冷启动**且由 `open -a FairyGUI-Editor.app <project.fairy>` 触发 Apple Event 时；编辑器已在运行时执行同一命令不崩溃。本报告先前「打开任何工程都崩」的表述过宽——它指的是冷启动路径。",
+    "consequence": "本报告保留作为取证存档；实际真机结论见 tests/reports/p8-5-write-live.json"
+  }
+}
