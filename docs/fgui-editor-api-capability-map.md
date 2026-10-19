@@ -176,6 +176,23 @@ ReferenceInfo { ownerPkg, pkgId, itemId, content, propKey, arrayIndex, valueType
 注意 `replace_object_resource` 当前是单对象覆盖；`replace_references` 是全工程语义，
 两者应并存且参数区分清楚。
 
+**0.8.11 已落地，实测修正了这份 API 清单的隐含假设：**
+
+- `ReplaceReferences` 的签名 `(newItem)` 没有 old 参数——"old" 来自**同一个
+  `DependencyQuery` 实例**上 `QueryReferences` 已经查出来的那批引用。跨请求活不过
+  实例，所以执行时必须重新查询，不能拿预览时的列表去改全工程。
+- 它**立即改包 XML**：文档既不会被标记 `isModified`，`HasUnsavedDocuments` 也仍为
+  false。所有文档关闭时照样能改；打开着的文档内存状态会同步更新，之后普通保存不会
+  把替换覆盖回去。因此 `save` 对它没有意义，验证只能是引用图口径
+  （源残留必须为 0），不能宣称属性级一致。
+- 它更新 `src`/`url`，但**不更新 image 元素的 `fileName`**，落盘即一处半状态。
+  对照单对象路径 `Document.ReplaceSelection`（两者都更新），且该方法对"src 已等于目标"
+  也会重写节点——所以这些节点下一次经文档模型保存时自动补齐。写 Action 以
+  `staleFileNameSlots` / `warnings` 显式上报该事实，而不是宣称干净。
+- 真机另有两处与声明给人的直觉相反：`ReferenceInfo` 的 `ownerPkg`/`itemId` 指的是
+  **被引用方**（引用方在 `content` 里）；`valueType` 上 `image.src` 是 `id`、
+  `loader.url` 才是 `url`。
+
 ### P0-B｜用真实 `editor.d.ts` 做编译期校验（工程性，零运行时成本）
 
 `plugin/types/editor.d.ts` 目前是 **1476 字节的手写 stub**，文件头明确写着：
@@ -260,9 +277,9 @@ AniSprite.SetPlaySettings / StepNext / StepPrev
 `FTransitions.TakeSnapshot/ReadSnapshot` 尤其有价值：**这就是编辑器自己用的
 "关键帧自动跟随属性变化"机制**，Bridge 现在是自己造 before 快照。
 
-### P1-B｜预览与截图：Phase 7 有原生基础设施
+### P1-B｜预览与截图：离屏渲染路线已被真机证伪（2026-10-19）
 
-计划 Phase 7「组件截图、视觉差分」标为未完成。编辑器已有：
+计划 Phase 7「组件截图、视觉差分」标为未完成。编辑器声明里有：
 
 ```csharp
 TestView   { Start, Reload, Stop, PlayTransition, ShowTooltips, ShowPopup }
@@ -272,16 +289,31 @@ FairyGUI.CaptureCamera {
                    contentHeight: number, offset: Vector2)   // 离屏渲染指定对象
     static CreateRenderTexture(width, height, stencilSupport)
 }
-App.groot, App.docView, App.timelineView, App.consoleView
+App.testView
 ```
 
-`CaptureCamera.Capture` 是**离屏渲染**，可以只渲染目标 display object，
-不必截整个应用窗口——比计划里设想的 Computer Use 截图可靠得多。
-注意 `UnityEngine.ScreenCapture` **未**在 `editor.d.ts` 中暴露，
-但 `CaptureCamera` 已暴露，这是正确入口。
+> **本节原判断「`CaptureCamera` 是正确入口，`render_component` 可直接实现」经
+> FairyGUI Editor 6.1.4 真机验证不成立，已作废。** 完整证据见
+> `tests/reports/p8-4-render-feasibility.json`。
 
-**建议新增 action：** `render_component`（指定 target/尺寸 → 输出 PNG）、
-`preview_run`（`TestView.Start/Stop/PlayTransition`）。
+结论要点：
+
+- **编辑器不把工程组件交给 FairyGUI 运行时 stage 渲染。** `FObject.displayObject`
+  （`FairyEditor.FDisplayObject`）的 `stage` 与 `bounds` 均为 null，`layer=0`（捕获相机在
+  layer 30），`CheckMain()` 后 `cachedCamera` 仍为 null。它继承 `Container` 而非 `GObject`，
+  `AddChild` 到 `GRoot` 抛 `GComponent.AddChildAt` 的 NRE。
+- **`Capture` 会静默产出全透明空图。** 对工程组件调用不报错、PNG 正常写出，但 57600 个
+  像素全为 (0,0,0,0)；baseline / 设 layer / 抓 content / 新建 GRoot / forceUpdate 五种策略
+  结果字节数完全一致。这是**假成功**：调用成功、文件存在、图像是空的。
+- **编辑器自己的 `TestView` 同样不可用。** `Start()` 能建出真实 `GComponent`（14 个子节点），
+  但连续 115 帧 `stage` 始终为 null；强行挂进 `GRoot.inst` 也一样（`GRoot.inst` 本身仅 400x372）。
+- **仍然可用的部分：** `UnityEngine.ImageConversion.EncodeToPNG` 运行时存在（**声明里没有**），
+  `File.WriteAllBytes` 落盘链路完整；`Camera.main` 设 `targetTexture` → `Render()` →
+  `ReadPixels` 机制通畅（只是拍不到目标）；插件支持跨帧异步 Action。
+- `StageCamera.camera` 与 `StageCamera.cachedMainCamera` 运行时均为 null。
+
+因此 `render_component`（离屏组件截图）**已放弃**，Phase 7 的截图诉求改由「发布后在
+Unity 侧渲染」承担。`preview_run`（驱动 `TestView` 做交互预览）不受此证伪影响，仍可实现。
 
 ### P1-C｜发布与图集配置：从"只读设置"到"可控发布"
 
@@ -377,7 +409,7 @@ Bridge 自己维护了 `agentUndoStack` / `agentRedoStack`。编辑器有原生�
 | --- | --- | --- |
 | 1 | P0-C（Document 层写操作）+ P0-B（真实类型校验） | 先把写入路径纠正到文档模型层，再加新能力；否则新 action 会复制现有坑 |
 | 2 | P0-A（引用图/替换语义） | 直接解决计划 §1.1，是计划里最明确的技术债 |
-| 3 | P1-B（截图/预览）+ P1-C（发布图集） | 分别解锁 Phase 7 和 Phase 5 的硬骨头 |
+| 3 | ~~P1-B（截图/预览）~~ **2026-10-19 拆分**：离屏截图路线证伪后放弃，`preview_run` 保留；P1-C（发布图集）照做 | P1-C 单独解锁 Phase 5 的硬骨头；P1-B 只剩交互预览，Phase 7 截图改走 Unity 侧 |
 | 4 | P1-A（关键帧）+ P1-D（分支） | 动画深入与新能力域 |
 | 5 | P2 批量（i18n / 审计 / 原生撤销栈） | 单个实现成本低，收益立竿见影 |
 

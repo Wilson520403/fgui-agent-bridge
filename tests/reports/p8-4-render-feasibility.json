@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-4-render-feasibility",
+  "bridgeVersion": "0.8.11 (含未提交探针)",
+  "editorVersion": "6.1.4",
+  "platform": "macOS (AppTranslocation 运行)",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600）",
+  "verifiedAt": "2026-10-19",
+  "liveEditorVerified": true,
+  "question": "P8-4 计划的 render_component 能否用 FairyGUI.CaptureCamera 离屏渲染出组件图像？",
+  "verdict": "不能。编辑器不把设计画布/预览交给 FairyGUI 运行时 stage 渲染，CaptureCamera 对工程组件只会静默产出全透明空图。",
+  "findings": [
+    {
+      "id": "F1",
+      "claim": "UnityEngine.ImageConversion.EncodeToPNG 运行时存在，但声明文件里没有",
+      "evidence": "d.ts 全文 grep PNG 只命中 PNGCompressionToolPath / ImportImages / jpegQuality / compressPNG / Quantize，没有 ImageConversion；真机 Object.keys(ImageConversion) = [EncodeToPNG, LoadImage]，typeof EncodeToPNG = function",
+      "impact": "PNG 编码可用，声明不完整——再次印证『声明≠运行时』，PNG 这条不用再找替代实现"
+    },
+    {
+      "id": "F2",
+      "claim": "EncodeToPNG 的返回值可直接交给 System.IO.File.WriteAllBytes 落盘",
+      "evidence": "写出 320x180 PNG 到系统临时目录，外部解码确认 IHDR 合法、通道为 RGBA；另单独验证 ReadAllBytes→WriteAllBytes 往返 10 字节一致",
+      "impact": "落盘链路无缺口，render_component 的写出部分不是风险点"
+    },
+    {
+      "id": "F3",
+      "claim": "C# long 在 Puerts 里返回 BigInt，会让整条响应崩溃",
+      "evidence": "FileInfo.Length 未转换时 JSON.stringify 抛 TypeError: Do not know how to serialize a BigInt，整个 request 以 editor_rejected 返回",
+      "impact": "任何取 C# 整数（文件大小、句柄计数等）都必须 Number() 强转，否则不是取不到值而是整条响应挂掉"
+    },
+    {
+      "id": "F4",
+      "claim": "C# 数组在 JS 侧不可下标访问，插件内无法做像素统计",
+      "evidence": "Texture2D.GetRawTextureData() 的 length 字段可读（230400）但 raw[0] === undefined",
+      "impact": "第一版探针据此算出 opaquePixels=0 / alphaMean=null，其实是 NaN 序列化，不是空图。像素判读必须在编辑器之外做（落 PNG 再解码）——这类『统计自己不可信』的坑与真机现象极易混淆"
+    },
+    {
+      "id": "F5",
+      "claim": "Capture 对工程组件静默产出全透明空图（假成功）",
+      "evidence": "320x180 共 57600 像素，全部 (0,0,0,0)，PNG 恒为 1086 字节。五种策略结果完全一致：baseline / setLayer(30) / captureContent / new GRoot / forceUpdate；contentHeight 取 0 与 180、带不带 CheckMain 均无差别",
+      "impact": "最危险的一类失败：调用成功、无异常、文件正常写出，只有图像是空的。照声明直接实现 render_component 会交付一个『看起来成功』的空图功能"
+    },
+    {
+      "id": "F6",
+      "claim": "根因：编辑器 FDisplayObject 不在 FairyGUI 运行时渲染树里",
+      "evidence": "stage=null、bounds=null、layer=0（捕获相机 layer=30）、CheckMain 后 cachedCamera 仍为 null；FDisplayObject 继承 FairyGUI.Container 而非 GObject，AddChild 到 GRoot 抛 GComponent.AddChildAt 的 NullReferenceException",
+      "impact": "不是参数没调对，是类型层面根本不可接入运行时 stage"
+    },
+    {
+      "id": "F7",
+      "claim": "TestView 预览能建出真实 GObject，但永远拿不到 stage",
+      "evidence": "testView.Start() 后 GetChildAt(0) 是 GComponent、14 个子节点，但连续 115 帧（约 7 秒）onStage 始终为 false；对它 Capture 会在 CaptureCamera.Capture 内部抛 NullReferenceException",
+      "impact": "编辑器自己的交互预览运行时同样不在 stage 上，离屏渲染这条路被堵死"
+    },
+    {
+      "id": "F8",
+      "claim": "强行挂进 GRoot.inst 也拿不到 stage，且 GRoot.inst 本身不是编辑器窗口",
+      "evidence": "root.AddChild(preview) 后仍 stage=null、bounds=null；GRoot.inst 尺寸仅 400x372，而 BridgeFixture 是 800x600",
+      "impact": "排除『只是没挂上』这一解释"
+    },
+    {
+      "id": "F9",
+      "claim": "直接用 Unity 相机渲染到 RenderTexture 机制本身可用",
+      "evidence": "Camera.main 设置 targetTexture → Render() → ReadPixels → EncodeToPNG，产出真实 PNG 且 57600 像素全部不透明，但整屏同色 (56,56,56)，即编辑器背景色",
+      "impact": "GPU 渲染链路通畅；缺的是『把目标组件框进相机视野』这一步，而目标不在该相机能拍到的渲染路径上"
+    },
+    {
+      "id": "F10",
+      "claim": "FairyGUI 舞台相机在运行时为空",
+      "evidence": "StageCamera.camera 与 StageCamera.cachedMainCamera 均为 null，只有 UnityEngine.Camera.main 可用",
+      "impact": "没有现成的 FairyGUI 专用相机可复用，取景要自己从零搭"
+    },
+    {
+      "id": "F11",
+      "claim": "插件支持跨帧异步 Action",
+      "evidence": "processRequestFile 对 Promise 结果走 .then/.catch；探针中 setTimeout 可用，await 循环正常跨帧执行",
+      "impact": "若继续做渲染，跨帧等待不是架构障碍；本轮结论不依赖这一点"
+    }
+  ],
+  "conclusion": "P8-4 的前提『CaptureCamera 已有原生实现，不必再依赖 Computer Use 截屏』经真机验证不成立。编辑器 6.1.4 用自己的渲染管线绘制设计画布与预览，FairyGUI 运行时的 stage 上没有工程组件的显示对象，CaptureCamera 无从渲染。",
+  "whatStillWorks": [
+    "PNG 编码与落盘链路完整（F1/F2）",
+    "Unity 相机渲染到 RenderTexture 的机制可用（F9）",
+    "插件跨帧异步能力可用（F11）",
+    "TestView 能驱动真实交互预览（F7）——preview_run 的价值仍然成立，只是它无法同时产出离屏图像"
+  ],
+  "notTested": [
+    "把组件按设计尺寸摆到某个自定义相机视野内再截屏（需要自建正交相机 + 自算世界坐标，API 无 worldBounds）",
+    "从编辑器窗口屏幕像素做程序化裁剪截图（仍属屏幕捕获，只是不经 Computer Use）",
+    "Windows 编辑器上的行为（本轮全部证据来自 macOS）",
+    "发布后在 Unity 侧渲染截图（Phase 7 的 Play Mode 路径）"
+  ],
+  "boundary": "本报告只回答『CaptureCamera 离屏渲染工程组件是否可行』。API 形态结论基于 Editor 6.1.4 的 editor.d.ts 声明 + 本轮实测；升级编辑器后必须重跑探针。"
+}

@@ -85,6 +85,14 @@ REFERENCE_CAPABILITIES = frozenset(
     }
 )
 
+# Phase 8 / P8-2 写侧 (0.8.11)：全工程引用替换。单独登记而不是并进上面的只读集合——
+# 它立即落盘且不进 Agent 撤销栈，缺失提示必须给对版本号，不能沿用 0.8.10 的说法。
+REFERENCE_REPLACE_CAPABILITIES = frozenset(
+    {
+        "replace_references",
+    }
+)
+
 
 class BridgeError(RuntimeError):
     """桥接器连接、协议或命令错误。"""
@@ -232,6 +240,7 @@ class BridgeClient:
             ANIMATION_CAPABILITIES: ("动画", "0.8.1"),
             LAYOUT_CAPABILITIES: ("布局/控制器", "0.8.8"),
             REFERENCE_CAPABILITIES: ("资源引用图", "0.8.10"),
+            REFERENCE_REPLACE_CAPABILITIES: ("全工程引用替换", "0.8.11"),
         }
         for capability_set, (label, minimum) in optional.items():
             if action in capability_set:

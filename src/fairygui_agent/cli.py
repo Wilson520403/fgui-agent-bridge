@@ -267,6 +267,12 @@ def build_parser() -> argparse.ArgumentParser:
     dependencies_parser.add_argument("--seek-level", choices=["selection", "samePackageButNotExported", "samePackage", "all"], default="samePackage", help="依赖搜索范围，默认 samePackage")
     dependencies_parser.add_argument("--max-items", type=int, help="最多返回条数（默认 200，上限 2000）")
     dependencies_parser.add_argument("--skip-package-open", action="store_true", help="不预先打开未打开的包；更快，但可能少算未打开包里的引用")
+    replace_refs_parser = subparsers.add_parser("replace-references", help="把全工程对一个资源的所有引用替换成另一个（0.8.11）")
+    replace_refs_parser.add_argument("url", help="被替换资源的 ui:// URL")
+    replace_refs_parser.add_argument("--new-url", required=True, help="替换目标资源的 ui:// URL")
+    replace_refs_parser.add_argument("--execute", action="store_true", help="真正执行替换；缺省只出预览。原生替换立即落盘且不可撤销")
+    replace_refs_parser.add_argument("--max-items", type=int, help=f"最多返回条数（默认 200，上限 2000）")
+    replace_refs_parser.add_argument("--skip-package-open", action="store_true", help="不预先打开未打开的包；更快，但可能少算未打开包里的引用")
 
     text_get_parser = subparsers.add_parser("get-text-style", help="读取文本样式")
     _add_target_arguments(text_get_parser)
@@ -615,6 +621,10 @@ def main() -> int:
         elif args.command == "dependencies":
             action = "query_dependencies"
             params = {"url": args.url, "seekLevel": args.seek_level, "skipPackageOpen": args.skip_package_open}
+            if args.max_items is not None: params["maxItems"] = args.max_items
+        elif args.command == "replace-references":
+            action = "replace_references"
+            params = {"url": args.url, "newUrl": args.new_url, "mode": "execute" if args.execute else "preview", "skipPackageOpen": args.skip_package_open}
             if args.max_items is not None: params["maxItems"] = args.max_items
         elif args.command == "get-text-style":
             action = "get_text_style"

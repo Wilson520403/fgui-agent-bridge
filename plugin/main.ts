@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.10";
+const BRIDGE_VERSION = "0.8.11";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -213,7 +213,7 @@ function writeStatus(): void {
             "verify_document", "replace_object_resource", "get_text_style", "set_text_style",
             "set_list_layout", "set_group_layout", "set_relation", "set_gear_display",
             "set_controller", "list_controllers",
-            "query_references", "query_dependencies"
+            "query_references", "query_dependencies", "replace_references"
         ]
     });
     lastStatusWrittenMs = Date.now();
@@ -2670,6 +2670,12 @@ function ownerItemName(info: FairyEditor.ReferenceInfo): any {
 // FairyGUI 的对象 id 形如 "n3_fix01"，后缀是所属资源的 id（真机实测：n3_fix01 属于
 // BridgeFixture/fix01）。解析成功才回报，解析不出来报 null ——
 // 未经校验的字符串猜测比空值更危险。
+//
+// 0.8.10 起这里只查「被引用资源所在的那个包」，那是默认值不是前提：跨包引用
+// （Package2 的组件引用 Package1 的图）时宿主在另一个包里，按被引用包查必然查不到，
+// 会把一个解析失败伪装成「宿主 item 为 null」。所以先在同包快路径上试，
+// 再遍历全工程包按 id 兜底。仍然查不到就是查不到（真机实测存在对象 id 后缀
+// 与所属 item id 不一致的组件，如 n0_p93m 属于 p93m3），报 null 不猜。
 function ownerItemFromObjectId(packageId: string, objectId: string): FairyEditor.FPackageItem {
     if (!objectId)
         return null;
@@ -2678,12 +2684,26 @@ function ownerItemFromObjectId(packageId: string, objectId: string): FairyEditor
     if (cut < 0 || cut === objectId.length - 1)
         return null;
 
+    const itemId = objectId.slice(cut + 1);
     try {
-        return App.project.GetItem(packageId, objectId.slice(cut + 1)) || null;
+        const samePackage = packageId ? App.project.GetItem(packageId, itemId) : null;
+        if (samePackage)
+            return samePackage;
+
+        const packages = App.project.allPackages;
+        for (let i = 0; i < packages.Count; i++) {
+            const pkg = packages.get_Item(i);
+            if (!pkg || (packageId && String(pkg.id) === String(packageId)))
+                continue;
+            const found = pkg.GetItem(itemId);
+            if (found)
+                return found;
+        }
     }
     catch (_) {
         return null;
     }
+    return null;
 }
 
 function describeReference(info: FairyEditor.ReferenceInfo): any {
@@ -2821,6 +2841,157 @@ function queryDependencies(params: any): any {
         totalCount,
         truncated: count < totalCount,
         dependencies
+    };
+}
+
+// --- Phase 8 / P8-2 写侧：全工程引用替换（0.8.11） -------------------------
+//
+// 原生签名只有 ReplaceReferences(newItem)，没有 old 参数：它改的是同一个
+// DependencyQuery 实例上 QueryReferences 已经查出来的那批引用。跨请求无法保存
+// 实例，所以执行时必须重新查询一次，而不是拿预览时的结果去套 —— 预览与执行之间
+// 工程可能已经变了，复用旧列表等于按一份过期清单改全工程。
+//
+// 真机 6.1.4 实测（tests/reports/p8-2-write-live.json）确认的三条边界，直接决定
+// 这里的实现与回报口径：
+//  1. 这是**立即落盘**的写操作：执行后包 XML 已经是新值，文档既不会被标记
+//     isModified，HasUnsavedDocuments 仍为 false。所以它不在 Agent 撤销栈里，
+//     也没有「保存前失败」可言 —— 必须先出预览。
+//  2. 文档没打开也能改（不必逐个打开），打开着的文档内存状态会同步更新，
+//     之后普通保存不会把替换覆盖回去。
+//  3. src/url 会更新，但 image 元素的 fileName **不会**跟着改，于是落盘那一刻
+//     磁盘上是一处半状态；该节点下一次经文档模型保存时由编辑器自己补齐
+//     （Document.ReplaceSelection 对同 URL 也会重写该节点，实测 fileName 归位）。
+//     验证因此不能宣称属性级一致，只能按引用图口径回报，并显式报出可能滞后的槽位。
+
+const REFERENCE_REPLACE_MODES = ["preview", "execute"];
+
+// image 元素带 fileName 伴随属性，而原生批量替换不改它（实测）。
+// 这些槽位是唯一已知的落盘半状态来源，按引用图即可判定，不必逐个解析宿主。
+function staleFileNameSlots(references: any[]): number {
+    let count = 0;
+    for (const reference of references) {
+        const slot = reference ? reference.slot : null;
+        if (!slot) continue;
+        if (String(slot.element) === "image" && String(slot.valueType) === "id")
+            count++;
+    }
+    return count;
+}
+
+function replaceMode(value: any): string {
+    if (value === undefined || value === null || value === "")
+        return "preview";
+    const mode = String(value).trim().toLowerCase();
+    if (REFERENCE_REPLACE_MODES.indexOf(mode) < 0)
+        verificationError("invalid_argument", `mode 取值无效：${value}`, { stage: "input", mode: value, allowed: REFERENCE_REPLACE_MODES });
+    return mode;
+}
+
+function replaceReferences(params: any): any {
+    const mode = replaceMode(params.mode);
+    const oldItem = resolveItem(params);
+    const newUrl = String(params.newUrl || params.newResourceURL || "").trim();
+    if (!newUrl)
+        verificationError("invalid_argument", "newUrl 不能为空", { stage: "input" });
+    if (newUrl.indexOf("ui://") !== 0)
+        verificationError("invalid_argument", "newUrl 必须是 ui:// URL", { stage: "input", newUrl });
+
+    const newItem = resolveItem({ url: newUrl });
+    const oldUrl = String(oldItem.GetURL());
+    if (oldUrl === String(newItem.GetURL()))
+        verificationError("invalid_argument", "替换源与目标是同一个资源，无需替换", { stage: "input", url: oldUrl });
+
+    const maxItems = queryItemLimit(params.maxItems);
+    const packages = ensurePackagesOpen(params);
+    const oldType = String(oldItem.type || "");
+    const newType = String(newItem.type || "");
+
+    // 执行与预览走同一条查询路径：execute 也要重新查，不能拿预览时的列表去改。
+    const query = new FairyEditor.DependencyQuery();
+    query.QueryReferences(App.project, oldUrl);
+    const list = query.references;
+    const stagedCount = list ? Number(list.Count) : 0;
+    const references: any[] = [];
+    const count = Math.min(stagedCount, maxItems);
+    for (let i = 0; i < count; i++)
+        references.push(describeReference(list.get_Item(i)));
+
+    const preview = {
+        mode,
+        packages,
+        from: describeQueryItem(oldItem),
+        to: describeQueryItem(newItem),
+        // 类型变了必须显式报出来：把图替成组件这类操作编辑器允许，但调用方多半没打算这么做
+        typeChange: oldType !== newType ? { from: oldType, to: newType } : null,
+        totalCount: stagedCount,
+        truncated: count < stagedCount,
+        staleFileNameSlots: staleFileNameSlots(references),
+        references
+    };
+
+    if (mode === "preview")
+        return {
+            ok: true,
+            preview: true,
+            executed: false,
+            ...preview,
+            note: "预览模式未做任何修改；执行请传 mode=execute。原生替换立即落盘且不进 Agent 撤销栈。"
+        };
+
+    const staleSlots = preview.staleFileNameSlots;
+    if (stagedCount > 0) {
+        try {
+            query.ReplaceReferences(newItem);
+        }
+        catch (error) {
+            verificationError("write_failed", `全工程替换失败：${safeValue(error)}`, {
+                stage: "replace",
+                from: oldUrl,
+                to: String(newItem.GetURL()),
+                stagedCount
+            });
+        }
+    }
+
+    // 引用图级回读：源资源应当一条不剩，目标资源应当至少接住本次替换的数量。
+    const verifyQuery = new FairyEditor.DependencyQuery();
+    verifyQuery.QueryReferences(App.project, oldUrl);
+    const remaining = verifyQuery.references ? Number(verifyQuery.references.Count) : 0;
+
+    const targetQuery = new FairyEditor.DependencyQuery();
+    targetQuery.QueryReferences(App.project, String(newItem.GetURL()));
+    const targetCount = targetQuery.references ? Number(targetQuery.references.Count) : 0;
+
+    const verified = remaining === 0;
+    if (!verified)
+        verificationError("persistence_failed", "全工程替换后仍能查到对旧资源的引用", {
+            stage: "verify",
+            from: oldUrl,
+            remainingReferences: remaining,
+            replacedCount: stagedCount
+        });
+
+    return {
+        ok: true,
+        preview: false,
+        executed: true,
+        ...preview,
+        replacedCount: stagedCount,
+        // 原生替换直接改包 XML：不是脏文档，不需要也不能靠 save 兜底。
+        persisted: true,
+        strength: "disk",
+        undoable: false,
+        writePath: WRITE_PATH_NATIVE,
+        verification: {
+            ok: verified,
+            scope: "reference-graph",
+            remainingReferences: remaining,
+            targetReferences: targetCount
+        },
+        warnings: staleSlots > 0
+            ? [`${staleSlots} 个 image 槽位的 fileName 不会随替换更新（原生行为，实测 6.1.4），`
+                + "落盘后该属性短暂滞后；这些节点下次经编辑器保存时自动补齐。"]
+            : []
     };
 }
 
@@ -4248,6 +4419,9 @@ function validatePropertyTarget(doc: FairyEditor.View.Document, obj: FairyEditor
 // (propName: string, value: any) => void（editor.d.ts L20114 / L17537），因此可按签名直接替换。
 const WRITE_PATH_DOCUMENT = "document-model";
 const WRITE_PATH_MODEL = "object-model";
+// 原生批处理入口（DependencyQuery.ReplaceReferences）：不经 Document、不产生脏文档，
+// 直接改包 XML。单独标出来，免得把它的落盘行为误读成"文档模型写"。
+const WRITE_PATH_NATIVE = "native-batch";
 
 // 最近一次写入实际走的路径。由各写入路径显式设置，验证层读取并回报，
 // 让"绕过文档模型"变成可观测事实而不是事后才知道的静默失败。
@@ -4744,6 +4918,8 @@ function handleCommand(request: AgentRequest): any {
         save_document: true,
         save_all: true,
         discard_document: true,
+        // 全工程引用替换立即落盘且不进撤销栈，发布期间执行无法回退
+        replace_references: true,
         undo: true,
         redo: true
     };
@@ -4866,6 +5042,9 @@ function handleCommand(request: AgentRequest): any {
 
         case "query_dependencies":
             return queryDependencies(params);
+
+        case "replace_references":
+            return replaceReferences(params);
 
         case "get_text_style":
             return getTextStyle(params);

@@ -28,13 +28,16 @@ let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
 let controllers,refRegistry,depRegistry;
+// 原生 ReplaceReferences 的调用轨迹：写侧用例要钉住「只调一次」「调的是本实例
+// 查出来的那批」，否则「预览复用旧列表」这类错误在测试里看不出来。
+let replaceCallCount,lastReplace;
 // 真机实测：ReferenceInfo.content 是 FairyGUI.Utils.XML 元素节点，其 attributes
 // 是 C# 字典（JSON.stringify 得 {}），只能靠 GetEnumerator/MoveNext/Current 取。
 // 夹具照这个形态建模，否则测试会通过一个真实环境不存在的假象。
 function makeXmlNode(tag,attributes){
  const pairs=Object.entries(attributes);
  let index=0;
- return {name:tag,text:'',
+ return {name:tag,text:'',__pairs:pairs,
   attributes:{
    get Count(){return pairs.length},
    GetEnumerator(){return {MoveNext(){if(index>=pairs.length)return false;index++;return true;},get Current(){const [k,v]=pairs[index-1];return {key:k,value:v};}};},
@@ -45,14 +48,39 @@ function makeDependencyQuery(){
  return {
   resultList:{Count:0,get_Item:()=>null},
   references:{Count:0,get_Item:()=>null},
+  _stagedUrl:null,
   QueryReferences(project,url){
    const refs=refRegistry[url]||[];
+   this._stagedUrl=url;
    this.references={Count:refs.length,get_Item:i=>Object.assign({ownerPkg:pkg,pkgId:pkg.id},refs[i])};
   },
   QueryDependencies(project,url,level){
    const entry=depRegistry[url];
    const list=(entry&&entry[level])||[];
    this.resultList={Count:list.length,get_Item:i=>list[i]};
+  },
+  // 真机 6.1.4 实测的语义，不是按签名想象的：
+  //  · 只收新资源，old 来自本实例上 QueryReferences 已经查出来的那一批；
+  //  · 没有查过就调用会抛错（跨请求复用实例时最该被抓住的那种错）；
+  //  · 改的是 src/url 本身，image 的 fileName 故意不跟着改——这正是原生批量
+  //    替换留下的半状态，模拟宿主不修它，测试才钉得住「验证不能宣称属性级一致」。
+  ReplaceReferences(newItem){
+   if(!this._stagedUrl)throw Error('ReplaceReferences without a staged QueryReferences on this instance');
+   replaceCallCount++;
+   const from=this._stagedUrl;
+   const staged=refRegistry[from]||[];
+   if(!staged.length)return;
+   const target=newItem.GetURL();
+   const kept=(refRegistry[target]||[]).slice();
+   const value=Number(newItem.valueTypeHint||0)===1?target:newItem.id;
+   const moved=staged.map(ref=>{
+    const next={};
+    ref.content.__pairs.forEach(([k,v])=>{next[k]=k===ref.propKey?value:v;});
+    return Object.assign({},ref,{content:makeXmlNode(ref.content.name,next)});
+   });
+   refRegistry[from]=[];
+   refRegistry[target]=kept.concat(moved);
+   lastReplace={from,to:target,movedCount:moved.length};
   }
  };
 }
@@ -194,6 +222,7 @@ function setup() {
  files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
  transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
+ replaceCallCount=0;lastReplace=null;
  controllers=[makeController('c1',['page0','page1'])];
  pkg=makePackage();
  const resource=(id,w=64,h=64)=>({id,owner:{id:'fixture0'},type:'image',width:w,height:h,GetURL:()=>`ui://fixture0${id}`});
@@ -219,10 +248,14 @@ function setup() {
  files['/pkg/package.xml']=serializePackageXml();
  // red 被两个属性槽引用：一个宿主对象在已打开的包里（名字可解析），一个 id 后缀
  // 解析不到所属资源（必须报 null，不许编）。
+ // valueType 照真机 6.1.4 的实测填：image 的 src 回报 id，loader 的 url 回报 url
+ // （见 tests/reports/p8-2-live.json）。填反了会让写侧「哪些槽位带 fileName」的
+ // 判定在一个真机不存在的形态上通过。image 节点还带 fileName，因为原生批量替换
+ // 就是不改它——这条半状态要能被测试钉住。
  refRegistry={
   'ui://fixture0red':[
-   {itemId:'mc1',propKey:'src',arrayIndex:0,valueType:1,
-    content:makeXmlNode('image',{id:'n3_fix01',name:'picture',src:'red',xy:'10,20'})},
+   {itemId:'mc1',propKey:'src',arrayIndex:0,valueType:0,
+    content:makeXmlNode('image',{id:'n3_fix01',name:'picture',src:'red',fileName:'red.png',xy:'10,20'})},
    {itemId:'ghost1',propKey:'pages',arrayIndex:2,valueType:0,
     content:makeXmlNode('list',{id:'n4_ghost',name:'listItems',pages:'0,1,2'})}
   ],
@@ -582,14 +615,15 @@ test('query_references reports the exact property slot that holds the reference'
   assert.equal(first.slot.element,'image');
   assert.equal(first.slot.propKey,'src');
   assert.equal(first.slot.arrayIndex,0);
-  assert.equal(first.slot.valueTypeCode,1);
-  assert.equal(first.slot.valueType,'url');
+  assert.equal(first.slot.valueTypeCode,0);      // 真机 6.1.4：image 的 src 回报 id
+  assert.equal(first.slot.valueType,'id');
   // 真正的引用方在 content（XML 元素节点）里
   assert.equal(first.owner.objectId,'n3_fix01');
   assert.equal(first.owner.objectName,'picture');
   assert.equal(first.owner.itemId,'fix01');
   assert.equal(first.owner.itemName,'BridgeFixture.xml');
   assert.equal(first.attributes.src,'red');
+  assert.equal(first.attributes.fileName,'red.png');   // image 带 fileName 伴随属性
   assert.equal(first.attributes.xy,'10,20');
 });
 test('query_references reports a null owner item when the id suffix resolves to nothing',()=>{
@@ -675,6 +709,78 @@ test('skipPackageOpen is an explicit opt-out that is reported as skipped',()=>{
   assert.equal(r.packages.skipped,true);
   assert.equal(r.packages.opened,0);
   assert.equal(pkg.opened,false);            // 代价可见，漏算风险由调用方自行承担
+});
+
+
+// ---- P8-2 写侧：全工程引用替换（0.8.11） ----
+// 原生 ReplaceReferences 只收新资源，old 来自同一实例上 QueryReferences 查出的那批；
+// 它立即改包 XML，不产生脏文档、不进 Agent 撤销栈，也没有 save 兜底。因此这些用例
+// 钉住四件事：默认只预览、执行必须重新查询而不是复用预览列表、验证口径是引用图
+// 而不是属性、fileName 半状态必须被显式报出而不是被宣称一致。
+const replaceRefs=(extra={})=>ctx.handleCommand({action:'replace_references',params:{url:'ui://fixture0red',newUrl:'ui://fixture0blue',...extra}});
+test('replace_references defaults to a preview that writes nothing',()=>{
+  const r=replaceRefs();
+  assert.equal(r.ok,true);
+  assert.equal(r.preview,true);
+  assert.equal(r.executed,false);
+  assert.equal(r.totalCount,2);
+  assert.equal(r.references.length,2);
+  assert.equal(replaceCallCount,0);          // 预览一次原生写都不能碰
+  assert.equal(refRegistry['ui://fixture0red'].length,2);
+});
+test('Executing re-queries on the executing instance instead of reusing the preview list',()=>{
+  const preview=replaceRefs();
+  assert.equal(preview.totalCount,2);
+  const r=replaceRefs({mode:'execute'});
+  assert.equal(r.executed,true);
+  assert.equal(replaceCallCount,1);
+  assert.equal(lastReplace.from,'ui://fixture0red');
+  assert.equal(lastReplace.to,'ui://fixture0blue');
+  assert.equal(r.replacedCount,2);
+  // 执行时查到的数量必须来自当时的引用图，不是预览那次的结果
+  assert.equal(r.totalCount,2);
+});
+test('Verification is scoped to the reference graph and refuses to claim attribute parity',()=>{
+  const r=replaceRefs({mode:'execute'});
+  assert.equal(r.verification.ok,true);
+  assert.equal(r.verification.scope,'reference-graph');
+  assert.equal(r.verification.remainingReferences,0);
+  assert.equal(r.verification.targetReferences,2);
+  // 原生替换不改 fileName：这是已知的落盘半状态，必须报出来而不是假装干净
+  assert.equal(r.staleFileNameSlots,1);     // 两个槽位里只有 image 那个带 fileName
+  assert.equal(r.warnings.length,1);
+  assert.match(r.warnings[0],/fileName/);
+});
+test('Executing reports that the write is already on disk and cannot be undone',()=>{
+  const r=replaceRefs({mode:'execute'});
+  assert.equal(r.persisted,true);
+  assert.equal(r.strength,'disk');
+  assert.equal(r.undoable,false);
+  assert.equal(r.writePath,'native-batch');
+});
+test('A resource with no references is a reported no-op, not a silent success',()=>{
+  const r=ctx.handleCommand({action:'replace_references',params:{url:'ui://fixture0blue',newUrl:'ui://fixture0red',mode:'execute'}});
+  assert.equal(r.replacedCount,0);
+  assert.equal(r.verification.remainingReferences,0);
+  assert.equal(r.staleFileNameSlots,0);
+  assert.equal(r.warnings.length,0);       // 跨 realm：逐字段断言，别用 deepEqual
+});
+test('Replacing a resource with itself is rejected before any write',()=>{
+  rejects(()=>ctx.handleCommand({action:'replace_references',params:{url:'ui://fixture0red',newUrl:'ui://fixture0red',mode:'execute'}}),'invalid_argument','input');
+  assert.equal(replaceCallCount,0);
+});
+test('An invalid mode and a non-ui target are rejected before any write',()=>{
+  rejects(()=>replaceRefs({mode:'replace'}),'invalid_argument','input');
+  rejects(()=>replaceRefs({newUrl:'p93m2'}),'invalid_argument','input');
+  rejects(()=>replaceRefs({newUrl:''}),'invalid_argument','input');
+  assert.equal(replaceCallCount,0);
+});
+test('A type change between source and target is reported, never silently applied',()=>{
+  const r=replaceRefs({mode:'execute',newUrl:'ui://fixture0panel'});
+  assert.equal(r.typeChange.from,'image');
+  assert.equal(r.typeChange.to,'component');
+  assert.equal(r.from.id,'red');           // from/to 是 resolveItem 拿到的资源本身
+  assert.equal(r.to.id,'panel');
 });
 
 

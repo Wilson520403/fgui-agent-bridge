@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fairygui_agent import mcp_server
-from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, REFERENCE_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
+from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
 from fairygui_agent.cli import build_parser
 
 
@@ -150,8 +150,8 @@ class CapabilityConsistencyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")
         tool_names = [name for name in vars(mcp_server) if name.startswith("fgui_")]
-        self.assertEqual(len(tool_names), 50)
-        self.assertIn("MCP 工具数：50", documented)
+        self.assertEqual(len(tool_names), 51)
+        self.assertIn("MCP 工具数：51", documented)
 
     def test_reference_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -160,6 +160,27 @@ class CapabilityConsistencyTests(unittest.TestCase):
             self.assertIn(f'"{action}"', plugin)
             self.assertIn(f'case "{action}"', plugin)
             self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+
+    def test_reference_replace_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        for action in REFERENCE_REPLACE_CAPABILITIES:
+            self.assertIn(f'"{action}"', plugin)
+            self.assertIn(f'case "{action}"', plugin)
+            self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+        # 写侧能力集不能混进只读集合：否则缺失提示会沿用 0.8.10 的说法。
+        self.assertEqual(REFERENCE_REPLACE_CAPABILITIES & REFERENCE_CAPABILITIES, frozenset())
+
+    def test_reference_replace_is_preview_first_and_blocked_during_publish(self) -> None:
+        """原生替换立即落盘、不可撤销：默认必须只预览，发布期间必须封锁。"""
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        blocked_during_publish = plugin.split("actionsBlockedDuringPublish:")[1].split("};")[0]
+        self.assertIn("replace_references: true", blocked_during_publish)
+
+        parser = build_parser()
+        parsed = parser.parse_args(["replace-references", "ui://pkgold", "--new-url", "ui://pkgnew"])
+        self.assertFalse(parsed.execute, "缺省必须是预览，不能默认执行")
 
     def test_reference_queries_are_read_only_in_every_layer(self) -> None:
         """只读语义必须在四层同时成立：插件不写、CLI 不带 save、MCP 不带写参数、能力集不与写动作混淆。"""

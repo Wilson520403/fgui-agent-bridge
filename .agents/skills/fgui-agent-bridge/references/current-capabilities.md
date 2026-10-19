@@ -9,7 +9,7 @@
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：50，其中新增 List/Group 布局、Relation、gearDisplay、Controller 与资源引用图工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：51，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图与全工程引用替换工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -258,8 +258,8 @@ python3 scripts/extract_editor_api.py --emit-stub plugin/main.ts --out plugin/ty
   未加载资源拖垮整条只读查询。
 - 两条都是只读：不写文档、不标记 modified、不参与 publish 期间的写操作封锁表，
   也没有 `save` / `external_reload` 参数（MCP、CLI、插件三层同时约束，回归用例钉住）。
-- 与 `replace_object_resource`（单对象覆盖）并存，语义不同：本阶段**尚无**
-  全工程替换的 `replace_references`（写操作，须先出预览），见计划 P8-2 剩余项。
+- 与 `replace_object_resource`（单对象覆盖）并存，语义不同：全工程替换走
+  `replace_references`（0.8.11，见下节），不要用只读查询代替它。
 
 ### 真机实测要点（Editor 6.1.4，证据 `tests/reports/p8-2-live.json`）
 
@@ -277,3 +277,48 @@ python3 scripts/extract_editor_api.py --emit-stub plugin/main.ts --out plugin/ty
 模拟宿主 129 项、Python 33 项全过（含 11 项新增引用图用例）。**已在 FairyGUI Editor
 6.1.4 真机复验**读侧全部能力与错误路径。**未复验**：多包工程中未打开的包是否会被少算
 （隔离工程只有一个已打开的包，`packages.opened` 恒为 0，真机触发不了该分支）。
+
+## 0.8.11：全工程引用替换（P8-2 写侧，P8-2 至此完成）
+
+### 行为
+
+- `fgui_replace_references`（`replace_references`）：把全工程对某个资源的所有引用
+  替换成另一个资源。`mode` 缺省 `preview`，**只出预览**；`--execute` / `execute=true`
+  才真正写入。这是硬要求：编辑器原生 `ReplaceReferences` 直接改包 XML，**立即落盘**、
+  不产生脏文档、不进 Agent 撤销栈、没有 `save` 兜底——响应里 `undoable: false`、
+  `strength: "disk"`、`writePath: "native-batch"` 就是在说这件事。
+- 原生签名只有 `ReplaceReferences(newItem)`，没有 old 参数：它改的是同一个
+  `DependencyQuery` 实例上 `QueryReferences` 查出来的那批引用。跨请求活不过实例，
+  所以**执行时重新查询一次**，绝不拿预览时的列表去改全工程。
+- 验证口径是**引用图**（`verification.scope: "reference-graph"`）：源资源残留引用必须
+  为 0，目标资源引用数回报在 `verification.targetReferences`。这不是属性级一致性证明，
+  响应里不宣称。
+- `staleFileNameSlots` + `warnings`：原生批量替换会更新 `src`/`url`，但**不更新**
+  image 元素的 `fileName`，于是落盘那一刻是一处半状态。这些节点下次经文档模型保存时
+  由编辑器自己补齐（实测 `Document.ReplaceSelection` 对同 URL 也会重写该节点）。
+  数量按引用图判定并显式上报，不静默。
+- `typeChange`：源与目标资源类型不同（图替成组件等）时显式回报，不静默执行。
+- 发布期间封锁（`actionsBlockedDuringPublish`）：立即落盘且不可撤销的动作不能与发布并发。
+- 与 `replace_object_resource` 的分工：后者改「某一个对象的某一个属性槽」，走文档模型、
+  可 Agent 撤销、有 `save`/`verify`/`external_reload` 梯子；前者改「全工程引用图」，
+  走原生批处理、不可撤销。两者不互相替代。
+- 顺带修复（0.8.10 遗留）：`owner.itemId/itemName` 原先只在**被引用资源所在包**里按对象
+  id 后缀查，跨包引用（Package2 的组件引用 Package1 的图）必然查不到，会把「解析失败」
+  伪装成「宿主为 null」。现在同包快路径失败后遍历全工程包兜底；仍查不到即 `null`
+  （真机确实存在对象 id 后缀与所属 item id 不一致的组件，不猜）。
+
+### 真机实测要点（Editor 6.1.4，证据 `tests/reports/p8-2-write-live.json`）
+
+- `ReplaceReferences` 在**所有文档关闭**时也能改（不必逐个打开），打开着的文档内存状态
+  会同步更新，之后普通保存不会把替换覆盖回去；
+- 执行后包 XML 已是新值，但文档 `isModified` 与 `HasUnsavedDocuments` 都仍为 false
+  ——它是即时落盘，不是脏文档，因此 `save` 对它没有意义；
+- `src` 更新而 `fileName` 不更新（与单对象路径 `ReplaceSelection` 对照，后者两者都更新）；
+  下一次经文档模型保存该节点时自动补齐；
+- 无引用时执行是幂等空操作（staged 0）。
+
+### 验证边界
+
+模拟宿主 137 项、Python 35 项全过（含 8 项新增写侧用例）。**已在 FairyGUI Editor
+6.1.4 真机复验**预览、执行、错误路径与幂等性。**未复验**：多包工程中的跨包替换与
+「未打开的包是否会被少算」（隔离工程仍只有一个已打开的包）。

@@ -645,6 +645,43 @@ def fgui_query_dependencies(resource_url: str, seek_level: str = "samePackage", 
 
 
 @mcp.tool()
+def fgui_replace_references(
+    resource_url: str,
+    new_resource_url: str,
+    execute: bool = False,
+    max_items: int | None = None,
+    skip_package_open: bool = False,
+) -> dict[str, Any]:
+    """把全工程对某个资源的所有引用替换成另一个资源（0.8.11+）。
+
+    先预览、再执行，这是硬要求而不是建议：编辑器原生 ReplaceReferences 直接改包 XML，
+    **立即落盘**、不进 Agent 撤销栈、没有 save 兜底，也没有 external_reload 可做——
+    响应里 undoable=false 就是这个意思。默认 execute=false 只出预览，
+    确认 totalCount 与 references 明细后再显式传 execute=True。
+
+    与 fgui_replace_object_resource 分工：那个改「某一个对象的某一个属性槽」，
+    走文档模型、可撤销、有 save/verify/external_reload 梯子；这个改「全工程引用图」，
+    走原生批处理、不可撤销。两者不要互相替代。
+
+    执行后按引用图回读验证（源资源残留引用必须为 0），verification.scope 会标明
+    "reference-graph"——这是引用图口径，不宣称属性级一致：原生批量替换不会同步
+    image 元素的 fileName，落盘后该属性短暂滞后，warnings 字段会显式报出槽位数量，
+    这些节点下次经编辑器保存时自动补齐。
+
+    max_items、skip_package_open 同 fgui_query_references。
+    """
+    params: dict[str, Any] = {
+        "url": resource_url,
+        "newUrl": new_resource_url,
+        "mode": "execute" if execute else "preview",
+        "skipPackageOpen": skip_package_open,
+    }
+    if max_items is not None:
+        params["maxItems"] = max_items
+    return _client.call("replace_references", params)
+
+
+@mcp.tool()
 def fgui_get_text_style(object_id: str | None = None, object_path: str | None = None, object_name: str | None = None) -> dict[str, Any]:
     """读取 TextField/RichText 的统一文本样式。"""
     return _client.call("get_text_style", {"target": _target(object_id, object_path, object_name)})

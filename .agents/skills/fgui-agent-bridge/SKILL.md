@@ -54,7 +54,8 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 用 `fgui_preview_animation` 播放、暂停、停止、跳帧或查询 Transition/MovieClip 预览状态。预览不保存，不能把预览状态描述为资源默认属性。
 - 按钮状态图顺序固定为 `up/down/over/selectedOver/disabled/selectedDisabled`，非空值必须是工程内图片 `ui://` URL。
 - 资源替换：替换显示对象引用的资源使用 `fgui_replace_object_resource`（当前仅支持 Image 与 Loader，不支持 Button 状态资源切换），支持传入 `expected_type` 校验并在 `--save` 时验证 Editor/XML 持久化。
-- 资源引用图（0.8.10+）：改资源引用**之前**先用只读的 `fgui_query_references`（谁引用了它）与 `fgui_query_dependencies`（它依赖了谁）确定影响面——返回分 `referencedItem`（被引用的资源）/`slot`（属性槽：`element.propKey`+`valueType`）/`owner`（宿主对象 `objectId`/`objectName`）/`attributes` 四段——注意编辑器原生 `ReferenceInfo` 的 `itemId` 指的是**被引用方**，「谁引用了它」要看 `owner` 段。两者不写文档、不标记 modified；返回 `totalCount` 与 `truncated`，取不到的名称为 `null`。`fgui_query_dependencies` 的 `seek_level` 默认 `samePackage`，需要跨包全量影响面时传 `all`。全工程替换语义（`replace_references`）尚未落地，替换仍走单对象的 `fgui_replace_object_resource`。
+- 资源引用图（0.8.10+）：改资源引用**之前**先用只读的 `fgui_query_references`（谁引用了它）与 `fgui_query_dependencies`（它依赖了谁）确定影响面——返回分 `referencedItem`（被引用的资源）/`slot`（属性槽：`element.propKey`+`valueType`）/`owner`（宿主对象 `objectId`/`objectName`）/`attributes` 四段——注意编辑器原生 `ReferenceInfo` 的 `itemId` 指的是**被引用方**，「谁引用了它」要看 `owner` 段。两者不写文档、不标记 modified；返回 `totalCount` 与 `truncated`，取不到的名称为 `null`。`fgui_query_dependencies` 的 `seek_level` 默认 `samePackage`，需要跨包全量影响面时传 `all`。
+- 全工程引用替换（0.8.11+）：`fgui_replace_references` 把某个资源在全工程的所有引用一次性换成另一个资源。**默认只预览**，确认 `totalCount` 与引用明细后再传 `execute=True`——它走编辑器原生批处理，**立即落盘、不进 Agent 撤销栈、没有 `save` 兜底**（响应 `undoable:false` / `strength:disk` / `writePath:native-batch`）。替换后按引用图回读验证（源资源残留必须为 0），原生路径不更新 image 的 `fileName`，响应以 `staleFileNameSlots` / `warnings` 显式报出该半状态，这些节点下次经编辑器保存时自动补齐。单对象覆盖仍用 `fgui_replace_object_resource`（走文档模型、可撤销、有 save/verify/external_reload 梯子），两者不要互相替代。
 - 文本样式：文本对象的样式读取与修改优先使用 `fgui_get_text_style` 和 `fgui_set_text_style`（支持 `fontSize`、`color`、`strokeColor`、`shadowColor`、`lineGap`、`letterSpacing`、`align`、`vAlign`、`autoSize` 等白名单属性），并提供回读验证；暂不支持自动 external reload。
 - 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
 - `set_property`、`insert_object`、`remove_object`、`replace_object_resource`、`set_text_style` 与全部 Transition 写操作统一走写验证：支持 `save` / `verify` / `external_reload`，返回 `persisted` + `strength`（`reload`/`disk`/`none`）；`external_reload` 需 `save=true`，为关闭重开文档后重新比对。`remove_object` 与 `remove_transition` 按缺失性验证（磁盘 XML 与重载后均不再解析到节点）。
@@ -185,6 +186,7 @@ git diff --check
 ## 安全边界
 
 - `.agent/` 是目标 FairyGUI 工程的运行时队列与日志，不纳入 Git。
+- `replace_references` 是立即落盘且不可撤销的原生批处理，不进 Agent 撤销栈；执行前必须先跑预览，执行期间被发布封锁。
 - 同一请求不要重复写入；响应必须按请求 ID 匹配。
 - 插件会拒绝执行超过 60 秒未被认领的过期请求，并在 Bridge 初始化时清理残留队列文件；客户端命令超时不代表操作未执行，重试前先检查状态（如 `fgui_status` / `fgui_get_active_document`），避免写操作重复执行。
 - 图片、声音、MovieClip 图片序列导入和发布是磁盘写入，执行前确认目标和冲突策略。Transition 声明式/关键帧修改与已有 MovieClip 更新/替换可由 Agent undo/redo 回退；全新资源创建、声音/图片导入和删除不能。

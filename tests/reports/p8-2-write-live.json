@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-2-write-live",
+  "bridgeVersion": "0.8.11",
+  "editorVersion": "6.1.4",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture）",
+  "verifiedAt": "2026-10-19",
+  "liveEditorVerified": true,
+  "environment": {
+    "note": "每次改插件都要 pkill 编辑器并用 editor_launcher.wake(open_project=True) 重开工程，否则加载的仍是旧 main.js",
+    "syncGuard": "同步前做过双向比对：工程快照与仓库同为 0.8.10 且关键符号计数一致，差异仅为本轮新增探针，才单向同步 0.8.11",
+    "restorePolicy": "每组真机实验后 git checkout -- sample/assets/ 并重启编辑器，避免内存态与磁盘脱节"
+  },
+  "probeFindings": [
+    {
+      "question": "ReplaceReferences 的 old 参数从哪来？",
+      "answer": "签名只有 (newItem)；old 来自同一 DependencyQuery 实例上 QueryReferences 已查出的 references。没查过就调用会抛错。",
+      "impact": "跨请求活不过实例，因此 execute 必须重新查询一次，不能复用预览时的列表——否则是拿过期清单改全工程。"
+    },
+    {
+      "question": "文档全部关闭时能改吗？",
+      "answer": "能。CloseAllDocuments 后执行，4 处引用照样被替换，且不需要逐个打开宿主文档。",
+      "impact": "省掉了 O(受影响文档数) 的打开开销；这是原生批处理相对逐对象写入的唯一结构性优势。"
+    },
+    {
+      "question": "文档打开时会不会留下内存与磁盘不一致？",
+      "answer": "不会。替换后 get_tree 读到内存 resourceURL 已是新值；随后一次普通 set_property --save 未把替换覆盖回去。",
+      "impact": "不需要额外的内存重载步骤。"
+    },
+    {
+      "question": "它产生脏文档吗？",
+      "answer": "不产生。执行后 isModified 仍为 false，HasUnsavedDocuments 仍为 false，但磁盘 XML 已经是新值。",
+      "impact": "它是立即落盘，不是脏文档。save 对它没有意义，也不可能靠 save 前置 fail-closed 检测拦住；这正是必须先预览的原因。"
+    },
+    {
+      "question": "src 与伴随属性是否都更新？",
+      "answer": "src/url 更新，image 的 fileName 不更新。对照单对象路径 replace_object_resource（Document.ReplaceSelection）两者都更新，落盘为 src=p93m1 + fileName=Red.png。",
+      "impact": "原生批量替换会留下瞬时半状态。已用 staleFileNameSlots + warnings 显式上报，不宣称属性级一致。"
+    },
+    {
+      "question": "半状态会一直留着吗？",
+      "answer": "不会。替换后对同一节点做一次普通 set_property --save，fileName 由 Blue.png 自动变回 Red.png。另外 Document.ReplaceSelection 在 src 已等于目标时仍会重写该节点（实测 fileName 归位）。",
+      "impact": "属于瞬时状态而非损坏；已写入文档说明，不为此引入高风险的 XML 手工修补。"
+    },
+    {
+      "question": "无引用时执行会怎样？",
+      "answer": "幂等空操作：staged 0，不报错，replacedCount 0，无 warnings。",
+      "impact": "可安全重试，不产生副作用。"
+    },
+    {
+      "question": "valueType 上 image.src 与 loader.url 分别是什么？",
+      "answer": "image.src 回报 id（code 0），loader.url 回报 url（code 1）。",
+      "impact": "staleFileNameSlots 的判定条件（element=image 且 valueType=id）据此确定。模拟宿主此前把 image.src 建模成 url，与真机不符，已按真机证据修正。"
+    }
+  ],
+  "replaceReferencesVerified": {
+    "method": "干净夹具上 Blue.png(p93m2) → Red.png(p93m1)，跨 3 个组件文档共 4 处引用（3 个 image.src + 1 个 loader.url）",
+    "previewFirst": {
+      "preview": true,
+      "executed": false,
+      "totalCount": 4,
+      "truncated": false,
+      "staleFileNameSlots": 3,
+      "diskUnchanged": true,
+      "note": "预览前后 sample/assets 全部 XML 的 sha256 汇总一致，预览一次原生写都没碰"
+    },
+    "execute": {
+      "preview": false,
+      "executed": true,
+      "replacedCount": 4,
+      "persisted": true,
+      "strength": "disk",
+      "undoable": false,
+      "writePath": "native-batch",
+      "verification": { "ok": true, "scope": "reference-graph", "remainingReferences": 0, "targetReferences": 6 },
+      "targetReferencesNote": "6 = Red 原有 2 处 + 本次移入 4 处",
+      "staleFileNameSlots": 3,
+      "diskDiff": "3 个 XML、4 处 src/url 改动；3 个 image 节点的 fileName 停留在 Blue.png，与 staleFileNameSlots 预判完全一致"
+    },
+    "idempotency": { "secondExecuteReplacedCount": 0, "remainingReferences": 0, "warnings": 0 },
+    "errorPaths": [
+      { "params": "url == newUrl, mode=execute", "code": "invalid_argument", "stage": "input", "message": "替换源与目标是同一个资源，无需替换" },
+      { "params": "newUrl=p93m1（非 ui://）", "code": "invalid_argument", "stage": "input", "message": "newUrl 必须是 ui:// URL" },
+      { "params": "mode=destroy", "code": "invalid_argument", "stage": "input", "message": "mode 取值无效：destroy" },
+      { "params": "url=ui://nope0nope（不存在）", "code": "target_not_found", "message": "未找到指定 FairyGUI 资源" }
+    ],
+    "errorPathDiskImpact": "四条错误路径后 git diff --stat 仍为 3 files / 4 insertions，未产生任何额外写入"
+  },
+  "latentDefectFixed": {
+    "what": "0.8.10 的 describeReference 用被引用资源所在包去按对象 id 后缀查宿主 item",
+    "why": "跨包引用（Package2 的组件引用 Package1 的图）时宿主在另一个包里，按被引用包查必然查不到，会把「解析失败」伪装成「宿主 itemId/itemName 为 null」",
+    "fix": "同包快路径失败后遍历全工程包按 id 兜底；仍查不到即 null",
+    "stillHonest": "真机确实存在对象 id 后缀与所属 item id 不一致的组件（n0_p93m 属于 p93m3、n0_mvx6 属于 mvx64），这类必须继续报 null，不猜"
+  },
+  "writePathRegression": {
+    "why": "0.8.11 在 0.8.10 写侧代码之上新增 Action，需证明没有回归",
+    "cases": [
+      { "action": "set_property", "target": "n0_fix01", "property": "x", "value": 45, "save": true, "persisted": true, "strength": "disk", "writePath": "document-model", "alsoProves": "原生替换留下的 fileName 半状态在该次保存后自愈" },
+      { "action": "replace_object_resource", "target": "n1_fix01（Loader）", "save": true, "externalReload": true, "persisted": true, "strength": "reload", "writePath": "object-model" },
+      { "action": "set_property", "target": "n6_fix01", "property": "x", "save": true, "externalReload": true, "persisted": true, "strength": "reload", "writePath": "document-model" }
+    ],
+    "note": "replace_object_resource 对 Loader 走成员写入路径（object-model），对 Image 走 Document.ReplaceSelection（document-model），与 0.8.9 定稿一致"
+  },
+  "mockedHostCoverage": {
+    "total": 137,
+    "newCases": 8,
+    "purpose": "模拟宿主照真机语义建模 ReplaceReferences（含「不查过就调用会抛错」「改 src 但不改 fileName」），钉住预览不写、执行重新查询、引用图验证口径、幂等与四条错误路径"
+  },
+  "notVerified": [
+    "多包工程中的跨包替换：隔离工程只有一个包，owner 跨包兜底解析的真机效果未验证",
+    "「未打开的包是否会被少算」：隔离工程只有 Package1 且启动时已打开，packages.opened 恒为 0，该分支真机仍触发不了（0.8.10 起挂账，本轮未清）",
+    "valueType 为 urlComplex / charImage / assetProperty 的槽位在批量替换下的行为",
+    "替换目标为导出资源与分支（branch）资源时的差异",
+    "Windows 编辑器上的行为（全部证据来自 macOS + Editor 6.1.4）"
+  ],
+  "boundary": "本报告只覆盖 0.8.11 的 P8-2 写侧 replace_references 与 0.8.10 写路径抽样回归。API 形态结论基于 FairyGUI Editor 6.1.4 的 editor.d.ts 声明 + 本次实测；升级编辑器后必须重新提取并复跑。"
+}

@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-`v0.8.10` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4`（含 0.8.9 写入路径真机复验） · 本地 JSON 队列 + MCP stdio
+`v0.8.11` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4`（含 0.8.11 全工程引用替换真机复验） · 本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
 
@@ -219,7 +219,8 @@ uv run fgui-agent publish --scope active
 - **大图独立图集**：达到 `1920×1080` 或任一边达到 `2048` 的图片自动标记为 `alone` 纹理集，发布时自动纠正历史大图配置。
 - **写操作验证**：写操作支持保存后磁盘 XML 比对，以及「关闭重开再比对」的强持久化验证。
 - **对象树比对**：`fgui_verify_document` 的 `expected` 可携带递归 `children` spec，逐层比对名称、类型和关键属性；`childrenMode` 支持 `exact`（按位置全等）与 `subset`（按 id/name/index 定位、允许多余节点），磁盘比对覆盖当前组件 XML 序列化范围。
-- **资源引用图（0.8.10）**：`fgui_query_references` / `fgui_query_dependencies` 只读查询「谁引用了它 / 它依赖了谁」，把引用精确到宿主对象与属性槽，改资源前先跑它看影响面。全工程替换语义（`replace_references`）尚未落地，替换仍走 `fgui_replace_object_resource`。
+- **资源引用图（0.8.10）**：`fgui_query_references` / `fgui_query_dependencies` 只读查询「谁引用了它 / 它依赖了谁」，把引用精确到宿主对象与属性槽，改资源前先跑它看影响面。
+- **全工程引用替换（0.8.11）**：`fgui_replace_references` 把某个资源在全工程的所有引用一次性换成另一个资源。**默认只预览**，确认 `totalCount` 与引用明细后再传 `execute=True`——它走编辑器原生批处理，立即落盘、不进 Agent 撤销栈、没有 `save` 兜底。替换后按引用图回读验证（源资源残留必须为 0）；原生路径不更新 image 的 `fileName`，响应以 `staleFileNameSlots` / `warnings` 显式报出该半状态，这些节点下次经编辑器保存时自动补齐。单对象覆盖仍用 `fgui_replace_object_resource`（可撤销、有验证梯子），两者不要互相替代。
 - **写入路径归位（0.8.9）**：属性写入优先走编辑器文档模型 `DocElement.SetProperty`，对象模型保留回退；写 Action 返回新增 `writePath`（`document-model` / `object-model`）字段，让绕过文档模型成为可观测事实。请求 `save:true` 时若内存已变而文档未进入修改状态，在 `doc.Save()` 之前以 `persistence_failed`（stage `modified`）失败关闭，不再让 Save 静默成功却什么都没写；幂等写入不触发该检查。
 - **真机复验（0.8.9）**：已在 FairyGUI Editor 6.1.4 实机验证 10 条写 Action 的 `writePath`
   与实际写入层一致，`set_property --external-reload` 得 `strength:reload`；证据
