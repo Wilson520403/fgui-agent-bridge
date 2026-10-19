@@ -869,8 +869,9 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, 
       `rotation` 有编码、`padding` **无编码**），故新增 `persistenceProfile` 提前披露落盘前景。
       **下面那条真机边界已闭合**：`useGlobalAtlasSettings=false` 的真机实例建成，包级
       `PackSettings` 真正参与判定，padding 与 square 两条分支真机触发。
-      **它应当能纠正既有的错误 `folderAtlas=alone`**——按发现①，那些标记已经在真实工程的
-      磁盘上了（纠正本身仍待做）。
+      **纠正不了既有的错误 `folderAtlas=alone`**：本条当时写的是「应当能纠正」，
+      2026-10-19 的活体探针已证伪该设想——包中已存在的 `atlas` 属性不可改，
+      `folderAtlas=""` 清不掉。详见下面那条的实测记录。
 - [x] 用真实 `PackSettings` 判定替换 `applyLargeImageAtlasRule` 的旧常量判定，并处理发现②的
       「内存不读回」。**0.8.14 已落地**：`import_image`（含同名替换）与 `publish` 前的归属
       施加改用 `decideAtlasAssignment`——与 `analyze_atlas_fit` 同一个判定函数，退役常量
@@ -886,11 +887,22 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, 
       真机另查出一处模拟宿主查不到的谎报：曾把 `wouldAssignAlone` 定义成「本次是否写入」，
       导致已正确标记的 4096 图误报 `disagrees=true`，已拆出独立的 `shouldBeAlone` 修正。
       **未做**：磁盘上已存在的多余 `folderAtlas=alone` **只上报不自动清除**——
-      `folderAtlas = ""` 的落盘语义尚未真机验证，不拿真实工程赌它。
+      原因已由 2026-10-19 的活体探针查清，不是「尚未验证」，见下一条。
 - [ ] 纠正磁盘上已存在的错误 `folderAtlas=alone`（输入已就位：`analyze_atlas_fit` 与
-      `publish` 的 `aloneNotNeeded` 列表）。**前置**：先真机确认「把 alone 清空」在 6.1.4 上
-      是否真能落盘并跨重启存活——真机的 `folderAtlas` 写盘保留、不读回，清空语义不能用
-      「写 alone 能落盘」类推。
+      `publish` 的 `aloneNotNeeded` 列表）。**前置已闭合且结论为否**（证据
+      `tests/reports/p8-5-atlas-marker-clear-probe.json`，2026-10-19 真机探针）：
+      `folderAtlas=""` **清不掉**已存在的 `alone` 标记。四组实测——
+      ①对照组不碰 `folderAtlas` 只 `Save()`，`package.xml` 确实被重写（mtime 确认）
+      而内容逐字不变，标记幸存；②置空 + `SetChanged` + 保存后标记纹丝不动，反而给 4 张
+      本无属性的图写进了 `atlas=""`；③赋非空值 `ProbeAtlas` 后 **getter 立刻返回该值**、
+      磁盘仍是 `alone`，紧接着再保存一次磁盘依旧 `alone`；④冷启动后全部 6 张图的
+      getter 都是空串。**坐实的经验规则**：包中已存在的图片资源一旦带了 `atlas` 属性，
+      该属性就是不可改的，对 `FPackageItem.folderAtlas` 赋任何值都不影响落盘；它只在该
+      资源**新建时**被写入一次。**所以原计划的实现路径（置空清除）是死胡同**，须换路线：
+      带外改 `package.xml`（由 ①② 可知编辑器保存时原样保留该属性、不会改写回来，故带外
+      修改能真正留存）或删除后重新导入（会换 item id、须重建引用）。在真正动手前维持
+      「只上报不自动改」。另记一个副作用：对无属性的干净资源调 `SetChanged` 会往磁盘塞
+      `atlas=""` 噪声属性。
 - [ ] 暴露 `PublishHandler` 的分步导出能力，便于"只导描述/只导资源"。
 
 ### P8-6 分支（完全空白的能力域）
@@ -1060,7 +1072,7 @@ Bridge 改进应在独立仓库完成：
 | 2 | ~~用真实声明生成类型 stub，接入编译期校验~~ **0.8.9 已完成** | P8-1 | 成本极低，且是 1 和后续所有项的安全网 |
 | 3 | ~~引用图（只读 + 全工程替换语义）~~ **0.8.10 + 0.8.11 已完成** | P8-2 | 直接清偿 §1.1 这条挂了两轮的技术债；写侧 `replace_references` 默认只预览、立即落盘不可撤销、`fileName` 半状态显式上报 |
 | 4 | ~~离屏渲染截图~~ **2026-10-19 已放弃**（`CaptureCamera` 对工程组件只出全透明空图，根因是编辑器不把组件交给 FairyGUI 运行时 stage 渲染）。`preview_run` 从本项剥离，仍待实现 | P8-4 | 解锁 Phase 7 的前提不成立，继续投入没有回报；证据见 `tests/reports/p8-4-render-feasibility.json` |
-| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧均已真机复验，0.8.14 判定侧已落地** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：纠正磁盘上已存在的错误 `folderAtlas=alone`（输入已就位，先真机确认清空语义）+ `PublishHandler` 分步导出 |
+| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧均已真机复验，0.8.14 判定侧已落地** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：`folderAtlas` 清空语义已真机证伪（置空清除走不通，需换带外改 XML 或删除重导入）+ `PublishHandler` 分步导出 |
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备 |
 | 7 | 分支能力 | P8-6 | 新增域，多端/多版本项目价值高 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影 |

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-atlas-marker-clear-probe",
+  "bridgeVersion": "0.8.14（含未提交的一次性探针，已撤回）",
+  "editorVersion": "6.1.4",
+  "platform": "macOS（AppTranslocation 运行）",
+  "project": "sample（Package1）",
+  "verifiedAt": "2026-10-19",
+  "liveEditorVerified": true,
+  "question": "计划里挂着的那个前置问题：在 Editor 6.1.4 上，把 FPackageItem.folderAtlas 置空能不能清掉磁盘上已存在的 atlas=\"alone\" 标记，并且活过一次重启？",
+  "verdict": "不能。folderAtlas=\"\" 清不掉已存在的 alone 标记。更强的一条：对于已经带 atlas 属性的图片资源，对 FPackageItem.folderAtlas 做任何赋值（空串或非空）都不会改变落盘的属性值。该属性是写 alone 落得下去、读回来读不到、清也清不掉的单向门。",
+  "experimentalDesign": {
+    "whyControlGroupIsMandatory": "单跑「清空后保存」无法区分两种完全不同的结论：(a) 清空动作无效；(b) 这个属性根本不参与保存、标记压根活不过任意一次保存。所以必须先跑「什么都不改、只保存」的对照组。",
+    "modes": {
+      "observe": "只读基线：内存 folderAtlas + 磁盘 package.xml 的 atlas 属性",
+      "save-control": "对照组：pkg.Save()，不触碰任何 folderAtlas",
+      "clear": "folderAtlas=\"\" + SetChanged() + pkg.Save()",
+      "assign": "folderAtlas=<非空值> + SetChanged() + pkg.Save()"
+    },
+    "validityCheck": "每一次保存后都用 mtime 确认 package.xml 确实被重写过——否则「保存没生效」和「保存了但属性没变」会混为一谈。clear/assign 两轮的文件均确认被重写（16:17:07 / 16:18:34）。"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "claim": "对照组：完全不碰 folderAtlas、只做 pkg.Save()，package.xml 被重写（mtime 16:16:50）但内容与探针前逐字一致，atlas=\"alone\" 原样幸存。",
+      "evidence": "diff /tmp/package.xml.probe-backup sample/assets/Package1/package.xml → 无差异；磁盘上仍为 atlas=\"alone\" 两处。",
+      "impact": "排除了「这个标记活不过任意一次保存」这条假设。它在保存中是稳定的，不是残留脏数据。"
+    },
+    {
+      "id": "F2",
+      "claim": "clear 模式把 6 张图全部置空并保存后，两个 alone 标记纹丝不动；而 4 张原本**没有** atlas 属性的图反而被写进了 atlas=\"\"。",
+      "evidence": "clear 前后磁盘差异：Red/Blue/AtlasFixture_Small/AtlasFixture_Probe 由 `exported=\"true\"` 变为 `exported=\"true\" atlas=\"\"`；AtlasFixture_HD 与 AtlasFixture_Huge 仍是 `atlas=\"alone\"`。",
+      "impact": "证明序列化器确实在写 atlas 属性（否则不会出现新的 atlas=\"\"），但对**已带属性**的资源，它写的不是 FPackageItem.folderAtlas。这条同时暴露一个副作用：对干净资源调 SetChanged 会往磁盘里塞噪声属性 atlas=\"\"。"
+    },
+    {
+      "id": "F3",
+      "claim": "assign 模式给已标记的 AtlasFixture_HD 赋非空值 ProbeAtlas：内存 getter 立刻返回 'ProbeAtlas'，磁盘仍是 'alone'；紧接着再做一次 save-control 保存，磁盘依旧是 'alone'。",
+      "evidence": "assign 后 mem='ProbeAtlas' disk='alone'；再次保存后仍是 mem='ProbeAtlas' disk='alone'；磁盘原始 XML 第 11 行仍为 `<image id=\"x5h76\" ... atlas=\"alone\"/>`。",
+      "impact": "这是决定性判别：属性确实被写进了内存（getter 不骗人），但序列化时用的不是它。排除「setter 完全无效」，坐实「setter 有效但保存不读它」。"
+    },
+    {
+      "id": "F4",
+      "claim": "getter 会说谎：编辑器冷启动后，全部 6 张图的 folderAtlasInMemory 都是空串，其中两张磁盘上是 alone。",
+      "evidence": "重启后 observe 基线：AtlasFixture_HD / AtlasFixture_Huge 均 mem='' disk='alone'。",
+      "impact": "与 0.8.12 的既有结论一致：folderAtlas 不与 package.xml 往返。这条独立复现，同时说明 0.8.14 「归属一律以磁盘为准」的设计决定是对的。"
+    }
+  ],
+  "empiricalRule": {
+    "statement": "对已经存在于包中的图片资源，package.xml 里一旦带了 atlas 属性，它就是不可改的：无论对 FPackageItem.folderAtlas 赋什么值（含空串），保存都不会改变它。属性只在该资源**新建**（如 import_image）时被写入一次。",
+    "mechanismStatus": "内部机制未确定（既可能是「加载时把属性存进了另一个字段」，也可能是「序列化时直接沿用加载进来的原始 XML 节点」）。两条解释对上面的实践规则给出的结论一致，故不影响本报告的可用性。",
+    "practicalConsequence": "「纠正磁盘上已存在的错误 alone 标记」这条路走不通了——原计划依赖的 folderAtlas=\"\" 是个死胡同。"
+  },
+  "whatThisBlocks": {
+    "planItem": "P8-5：纠正磁盘上已存在的错误 folderAtlas=alone",
+    "wasGatedOn": "先真机确认「把 alone 清空」在 6.1.4 上是否能落盘并跨重启存活",
+    "answer": "否。前置问题已由本报告关闭，但结论是这条实现路径不成立，需要换实现路线（见 remainingOptions）。"
+  },
+  "remainingOptions": [
+    {
+      "option": "删除后重新导入该图片资源",
+      "pros": "走的是已验证能写盘的新建路径，一次到位",
+      "cons": "会换掉 item id，所有指向它的引用必须重建；对有引用的大图风险最高"
+    },
+    {
+      "option": "关掉编辑器后直接改 package.xml",
+      "pros": "由 F1/F2 可知编辑器保存时**原样保留**该属性、不会改写回去，所以带外修改能真正留存",
+      "cons": "带外改工程文件，不走 Bridge 的验证梯子；一旦该资源被重新导入或结构被重写，属性仍会按新建路径写一次。属于绕过编辑器语义，应显式标注而不是当成常规路径"
+    },
+    {
+      "option": "维持现状：只上报不自动改",
+      "pros": "零风险",
+      "cons": "1920x1080 这类装得下的图会长期被单独成图集，浪费图集空间"
+    }
+  ],
+  "recommendation": "先维持「只上报不自动改」。真正要动手时优先选带外改 package.xml 那条——它有本报告 F1/F2 的直接支撑（编辑器不会把属性改回来），且不触碰资源身份与引用；但必须作为独立 Action 显式声明 writePath=out-of-band、不可撤销、且不承诺走验证梯子。删除重导入只在资源无引用时可用。",
+  "reproduction": {
+    "note": "探针已从出厂插件中撤回（它是未接验证梯子的写路径，留着就是个坑）。以下为原始探针代码，按此加回 plugin/main.ts 并加一条 dispatch 分支即可复现。",
+    "probeCode": "function probeAtlasMarkerSemantics(params: any): any {\n    const pkg = resolvePackage(params || {});\n    const mode = String((params && params.mode) || \"observe\");\n    const targetName = params && params.itemName ? String(params.itemName) : \"\";\n    const snapshot = (): any[] => {\n        const persisted = persistedAtlasByItemId(pkg);\n        const rows: any[] = [];\n        for (let i = 0; i < pkg.items.Count; i++) {\n            const item = pkg.items.get_Item(i);\n            if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE) continue;\n            if (targetName && String(item.name) !== targetName) continue;\n            rows.push({\n                id: String(item.id), name: String(item.name),\n                width: Number(item.width) || 0, height: Number(item.height) || 0,\n                supportAtlas: item.supportAtlas !== false,\n                folderAtlasInMemory: String(item.folderAtlas || \"\"),\n                folderAtlasOnDisk: String(persisted[String(item.id)] || \"\")\n            });\n        }\n        return rows;\n    };\n    const result: any = { probe: \"atlas-marker-semantics\", editorVersion: \"6.1.4\",\n        package: String(pkg.name), mode: mode, targetItemName: targetName || \"(全部图片)\",\n        before: snapshot() };\n    if (mode === \"save-control\") { pkg.Save(); App.project.Save(); result.after = snapshot(); }\n    else if (mode === \"clear\") {\n        for (let i = 0; i < pkg.items.Count; i++) {\n            const item = pkg.items.get_Item(i);\n            if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE) continue;\n            if (targetName && String(item.name) !== targetName) continue;\n            item.folderAtlas = \"\"; item.SetChanged();\n        }\n        pkg.Save(); App.project.Save(); result.after = snapshot();\n    }\n    else if (mode === \"assign\") {\n        const value = String((params && params.value) || \"\");\n        for (let i = 0; i < pkg.items.Count; i++) {\n            const item = pkg.items.get_Item(i);\n            if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE) continue;\n            if (targetName && String(item.name) !== targetName) continue;\n            item.folderAtlas = value; item.SetChanged();\n        }\n        pkg.Save(); App.project.Save(); result.after = snapshot();\n    }\n    else if (mode !== \"observe\") throw new Error(\"未知的探针模式：\" + mode);\n    return result;\n}",
+    "steps": [
+      "sync_to_project 同步插件后重启编辑器并打开 sample/sample.fairy（插件代码在启动时加载）",
+      "fgui-agent call probe_atlas_marker --params '{\"packageName\":\"Package1\",\"mode\":\"observe\"}'",
+      "fgui-agent call probe_atlas_marker --params '{\"packageName\":\"Package1\",\"mode\":\"save-control\"}' —— 对照组，必须先跑",
+      "fgui-agent call probe_atlas_marker --params '{\"packageName\":\"Package1\",\"mode\":\"clear\"}'",
+      "fgui-agent call probe_atlas_marker --params '{\"packageName\":\"Package1\",\"mode\":\"assign\",\"itemName\":\"AtlasFixture_HD\",\"value\":\"ProbeAtlas\"}'",
+      "每轮之后用 mtime + git diff 确认 package.xml 确实被重写过"
+    ]
+  },
+  "stateRestored": {
+    "sampleProject": "已用 git checkout -- sample/ 完全恢复：2 处 atlas=\"alone\" 复位，探针写入的 4 处 atlas=\"\" 全部消失。",
+    "plugin": "探针函数与 dispatch 分支均已从 plugin/main.ts 移除，main.js 重新编译，工作区与 e419511 完全一致。"
+  },
+  "notTested": [
+    "资源被删除后重新导入，atlas 属性是否会按新建路径重写（这是 remainingOptions 第 1 条的前提）",
+    "编辑器 UI 上「单独图集」复选框背后是否另有一份状态（声明文件里 FPackageItem 只有 folderAtlas 一个 atlas 相关可写属性，未找到第二处）",
+    "除 <image> 外，其他资源类型（字体、声音等）是否共享同一条「属性写一次就不可改」的规则"
+  ],
+  "boundary": "本报告的全部结论只对 FairyGUI Editor 6.1.4 成立。folderAtlas 在新版本上是否可写、导入路径是否仍是唯一能写盘的口径，都需要在升级后重跑这套探针——尤其是「已存在的属性不可改」这条，它恰恰是最容易被版本升级改掉的一条。"
+}
