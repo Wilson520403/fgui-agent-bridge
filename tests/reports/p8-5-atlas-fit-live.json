@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-atlas-fit",
+  "liveEditorVerified": true,
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.12",
+  "capturedAt": "2026-10-19T06:29:16.486855Z",
+  "evidence": "live-editor + mocked-editor-host",
+  "findings": [
+    {
+      "id": "F1",
+      "title": "图集判定在真实数据上跑通，exceeds 与分歧都被真实触发",
+      "detail": "导入 1920x1080 / 4096x4096 / 256x256 三张真实 PNG 后：4096 判 exceeds 且 binding=maxWidth；1920x1080 判 fits（2048 页装得下）但旧规则 legacyAlone=true，disagreements=1；summary.assignedAloneButFits=1。"
+    },
+    {
+      "id": "F2",
+      "title": "旧规则在 import_image 时就生效，不只在 publish",
+      "detail": "真机实测：只调用 import_image --save、全程未调用 publish，package.xml 已写入 atlas=\"alone\"。调用点在 main.ts:630（同名替换）与 main.ts:655（首次导入）。上一版文档只写「publish 时生效」是错的，已改为同时声明 import 与 publish（响应 legacyRule.appliedAt）。",
+      "impact": "旧规则不是发布前的猜测，而是导入成功就落盘的写入，作用于真实工程。"
+    },
+    {
+      "id": "F3",
+      "title": "FPackageItem.folderAtlas 在 6.1.4 上不与 package.xml 往返",
+      "detail": "<image atlas=\"alone\"> 写入 package.xml，且后续保存原样保留；但编辑器重启后 FPackageItem.folderAtlas 回到空串。双向验证：(a) 重启后内存读为 ''，磁盘仍有属性；(b) 对已标记图做同名替换，编辑器自身幂等守卫返回 largeImageAtlasApplied=true，说明它也认为内存为空、规则被重复施加。",
+      "impact": "只报内存 folderAtlas 会对使用者说谎（真实存在却显示为空），且 applyLargeImageAtlasRule 的幂等守卫在重启后恒不命中，每次 publish 都重复 SetChanged。",
+      "fix": "analyze_atlas_fit 改为分列 folderAtlasInMemory / folderAtlasOnDisk，图集归属解析与 assignedAloneOnDisk 一律以磁盘 package.xml 为准；响应新增 folderAtlasRoundTrip 显式声明该行为。"
+    }
+  ],
+  "live": {
+    "phase0Regression": {
+      "total": 21,
+      "passed": 21,
+      "failed": 0
+    },
+    "analyzeAtlasFit": {
+      "request": {
+        "action": "analyze_atlas_fit",
+        "params": {
+          "packageName": "Package1"
+        }
+      },
+      "summary": {
+        "images": 6,
+        "fits": 5,
+        "exceeds": 1,
+        "unknown": 0,
+        "disagreements": 1,
+        "assignedAloneButFits": 1
+      },
+      "response": {
+        "id": "1792391352327-a30f7fc4",
+        "ok": true,
+        "action": "analyze_atlas_fit",
+        "result": {
+          "packages": [
+            {
+              "package": {
+                "id": "qsezbqtw",
+                "name": "Package1",
+                "basePath": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1",
+                "opened": true,
+                "itemCount": 10
+              },
+              "useGlobalAtlasSettings": true,
+              "constraints": [
+                {
+                  "source": "global",
+                  "atlas": "",
+                  "sizeOption": "pot",
+                  "maxWidth": 2048,
+                  "maxHeight": 2048,
+                  "minWidth": 0,
+                  "minHeight": 0,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "pot": true,
+                  "mof": false,
+                  "multiPage": true
+                }
+              ],
+              "images": [
+                {
+                  "id": "p93m1",
+                  "name": "Red",
+                  "width": 64,
+                  "height": 64,
+                  "folderAtlasInMemory": "",
+                  "folderAtlasOnDisk": "",
+                  "constraintsSource": "global",
+                  "atlas": "",
+                  "assignedAloneOnDisk": false,
+                  "fit": "fits",
+                  "requiredWidth": 64,
+                  "requiredHeight": 64,
+                  "limitWidth": 2048,
+                  "limitHeight": 2048,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "legacyAlone": false,
+                  "disagrees": false
+                },
+                {
+                  "id": "p93m2",
+                  "name": "Blue",
+                  "width": 64,
+                  "height": 64,
+                  "folderAtlasInMemory": "",
+                  "folderAtlasOnDisk": "",
+                  "constraintsSource": "global",
+                  "atlas": "",
+                  "assignedAloneOnDisk": false,
+                  "fit": "fits",
+                  "requiredWidth": 64,
+                  "requiredHeight": 64,
+                  "limitWidth": 2048,
+                  "limitHeight": 2048,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "legacyAlone": false,
+                  "disagrees": false
+                },
+                {
+                  "id": "x5h75",
+                  "name": "AtlasFixture_Small",
+                  "width": 256,
+                  "height": 256,
+                  "folderAtlasInMemory": "",
+                  "folderAtlasOnDisk": "",
+                  "constraintsSource": "global",
+                  "atlas": "",
+                  "assignedAloneOnDisk": false,
+                  "fit": "fits",
+                  "requiredWidth": 256,
+                  "requiredHeight": 256,
+                  "limitWidth": 2048,
+                  "limitHeight": 2048,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "legacyAlone": false,
+                  "disagrees": false
+                },
+                {
+                  "id": "x5h76",
+                  "name": "AtlasFixture_HD",
+                  "width": 1920,
+                  "height": 1080,
+                  "folderAtlasInMemory": "",
+                  "folderAtlasOnDisk": "alone",
+                  "constraintsSource": "global",
+                  "atlas": "",
+                  "assignedAloneOnDisk": true,
+                  "fit": "fits",
+                  "requiredWidth": 1920,
+                  "requiredHeight": 1080,
+                  "limitWidth": 2048,
+                  "limitHeight": 2048,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "legacyAlone": true,
+                  "disagrees": true
+                },
+                {
+                  "id": "x5h77",
+                  "name": "AtlasFixture_Huge",
+                  "width": 4096,
+                  "height": 4096,
+                  "folderAtlasInMemory": "",
+                  "folderAtlasOnDisk": "alone",
+                  "constraintsSource": "global",
+                  "atlas": "",
+                  "assignedAloneOnDisk": true,
+                  "fit": "exceeds",
+                  "requiredWidth": 4096,
+                  "requiredHeight": 4096,
+                  "limitWidth": 2048,
+                  "limitHeight": 2048,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "binding": "maxWidth",
+                  "legacyAlone": true,
+                  "disagrees": false
+                },
+                {
+                  "id": "n4yz8",
+                  "name": "AtlasFixture_Probe",
+                  "width": 128,
+                  "height": 128,
+                  "folderAtlasInMemory": "",
+                  "folderAtlasOnDisk": "",
+                  "constraintsSource": "global",
+                  "atlas": "",
+                  "assignedAloneOnDisk": false,
+                  "fit": "fits",
+                  "requiredWidth": 128,
+                  "requiredHeight": 128,
+                  "limitWidth": 2048,
+                  "limitHeight": 2048,
+                  "padding": 0,
+                  "square": false,
+                  "rotation": false,
+                  "legacyAlone": false,
+                  "disagrees": false
+                }
+              ],
+              "summary": {
+                "images": 6,
+                "skippedNotAtlasable": 0,
+                "fits": 5,
+                "exceeds": 1,
+                "unknown": 0,
+                "disagreements": 1,
+                "assignedAloneButFits": 1
+              }
+            }
+          ],
+          "summary": {
+            "images": 6,
+            "fits": 5,
+            "exceeds": 1,
+            "unknown": 0,
+            "disagreements": 1,
+            "assignedAloneButFits": 1
+          },
+          "folderAtlasRoundTrip": {
+            "memoryMatchesDisk": false,
+            "note": "真机实测（Editor 6.1.4）：<image atlas=\"alone\"> 写入 package.xml 且保存时保留，但 FPackageItem.folderAtlas 重启后不读回。因此每张图分列 folderAtlasInMemory 与 folderAtlasOnDisk，图集归属解析与 assignedAloneOnDisk 一律以磁盘为准。"
+          },
+          "legacyRule": {
+            "longSideMin": 1920,
+            "shortSideMin": 1080,
+            "side2kMin": 2048,
+            "atlas": "alone",
+            "stillAppliedOnPublish": true,
+            "alsoAppliedOnImport": true,
+            "appliedAt": [
+              "import_image",
+              "import_image(replace)",
+              "publish"
+            ],
+            "note": "旧规则不只在 publish 生效：import_image（含同名替换）在导入成功后就直接写 folderAtlas=alone 并落盘（真机已验，见 tests/reports/p8-5-atlas-fit-live.json）。因此 disagreements 统计的是**已经写进工程的**图集归属，不只是下次发布会发生什么。本 Action 自身只读不改。"
+          }
+        },
+        "timestamp": "2026-10-19T06:29:12.431Z"
+      }
+    },
+    "fixturesAdded": [
+      "AtlasFixture_Small 256x256",
+      "AtlasFixture_HD 1920x1080",
+      "AtlasFixture_Huge 4096x4096",
+      "AtlasFixture_Probe 128x128"
+    ],
+    "fixtureNote": "AtlasFixture_Probe 仅用于 folderAtlas 往返实验，本可删除，但 FPackage.DeleteItem 只接在 remove_movieclip 上，没有通用包资源删除 Action，而手改 package.xml 被工程规范 §5.3 明令禁止，故保留并在基线中登记。",
+    "baselineUpdate": "tests/fixtures/phase0/initial-resources.json 增加上述 4 项（差异仅为新增，无丢失）。"
+  },
+  "captureCaveat": {
+    "finding": "直接重跑 phase0_fixture.py capture 会把会话级值烤进 initial-tree.json：savedVersion 3→1、运行时节点 id n0_dftm→n0_ujgr。这些由编辑器按会话分配（规划中已记录该现象），capture 时把它们固化会让基线随会话漂移。",
+    "handling": "本次只接受 initial-resources.json 的改动，initial-tree.json 已用 git checkout 撤回。"
+  },
+  "unverified": [
+    "包级 PackSettings 路径真机无实例：隔离工程只有 Package1 且 useGlobalAtlasSettings=true。仅有编译期声明校验（字段名取自 6.1.4 真实 editor.d.ts）+ 模拟宿主覆盖。闭掉它需要写侧 set_publish_settings 把 useGlobalAtlasSettings 置 false。",
+    "padding / rotation / square 三条分支真机未被触发：真机没有非全局图集设置的包，样例图也是刚导入的规则同一时刻写 alone，无从构造「旧规则判 alone 但按约束装得下且带 padding」的组合。",
+    "声明存在≠运行时可用（0.8.8 的 GetGear 返回空接口 IGear 即反例）。"
+  ],
+  "mockHost": {
+    "passed": 153,
+    "total": 153,
+    "newCases": [
+      "Unknown property rejected before partial text mutation",
+      "Atlas fit is judged by the real packer limits, not by pixel-size guessing",
+      "An image that exceeds the page reports which constraint bound it and by how much",
+      "Rotation rescues a portrait page but is powerless under square packing",
+      "Rotation cannot help a page that is already square in both sides",
+      "An image smaller than the atlas minimum is judged at the upscaled footprint",
+      "Unknown limits are reported as unknown, never as a confident fits",
+      "A resource pinned to an unconfigured atlas is unknown, not silently judged",
+      "The atlas assignment is read from disk, not from the in-memory folderAtlas",
+      "Images already marked alone on disk but actually fitting are counted",
+      "Each image is judged against the atlas it actually belongs to",
+      "Images that never enter an atlas are counted as skipped, not judged",
+      "Analyzing atlas fit is read-only: no atlas assignment and no dirty package",
+      "The report states that publish still applies the legacy rule",
+      "The report also says the legacy rule fires on import, not only on publish"
+    ]
+  },
+  "python": {
+    "passed": 35,
+    "total": 35
+  },
+  "boundary": "本切片只落地 analyze_atlas_fit（只读）。publish 与 import_image 仍按旧 LARGE_IMAGE_* 常量写 folderAtlas=alone，响应 legacyRule.appliedAt 已显式声明；切换该行为需写侧 set_publish_settings 与真机证据。"
+}

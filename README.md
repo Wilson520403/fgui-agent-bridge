@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-`v0.8.11` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4`（含 0.8.11 全工程引用替换真机复验） · 本地 JSON 队列 + MCP stdio
+`v0.8.12` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4`（含 0.8.12 图集约束分析真机复验） · 本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
 
@@ -221,6 +221,7 @@ uv run fgui-agent publish --scope active
 - **对象树比对**：`fgui_verify_document` 的 `expected` 可携带递归 `children` spec，逐层比对名称、类型和关键属性；`childrenMode` 支持 `exact`（按位置全等）与 `subset`（按 id/name/index 定位、允许多余节点），磁盘比对覆盖当前组件 XML 序列化范围。
 - **资源引用图（0.8.10）**：`fgui_query_references` / `fgui_query_dependencies` 只读查询「谁引用了它 / 它依赖了谁」，把引用精确到宿主对象与属性槽，改资源前先跑它看影响面。
 - **全工程引用替换（0.8.11）**：`fgui_replace_references` 把某个资源在全工程的所有引用一次性换成另一个资源。**默认只预览**，确认 `totalCount` 与引用明细后再传 `execute=True`——它走编辑器原生批处理，立即落盘、不进 Agent 撤销栈、没有 `save` 兜底。替换后按引用图回读验证（源资源残留必须为 0）；原生路径不更新 image 的 `fileName`，响应以 `staleFileNameSlots` / `warnings` 显式报出该半状态，这些节点下次经编辑器保存时自动补齐。单对象覆盖仍用 `fgui_replace_object_resource`（可撤销、有验证梯子），两者不要互相替代。
+- **图集约束分析（0.8.12）**：`fgui_analyze_atlas_fit` **按图集打包器的真实约束**判断每张图能否入图集，取代原先只看像素大小的大图硬编码猜测。判定吃 `PackSettings`（`padding` / `minWidth` / `maxWidth` / `maxHeight` / `square` / `rotation`）与全局 `AtlasSetting`（`maxSize` / `forceSquare` / `allowRotation`），逐图给出 `fit`（`fits` / `exceeds` / `unknown`）与卡住它的约束 `binding`；`unknown` 用于约束缺失（如页尺寸未指定）时**拒绝下结论**，不猜。最可执行的指标是 `summary.assignedAloneButFits`——**磁盘上已标成 `alone`、但按真实约束其实装得下**的图有几张。**纯只读**。两点务必知道：①旧的大图常量**不只在 publish 生效**，`import_image` 成功后就直接写 `folderAtlas=alone` 并落盘（响应 `legacyRule.appliedAt` 列出三个调用点）；②FairyGUI 6.1.4 的 `folderAtlas` **不与 `package.xml` 往返**（写进磁盘、保存时保留，但重启后内存读回为空），所以每张图分列 `folderAtlasInMemory` / `folderAtlasOnDisk`，归属解析一律以磁盘为准。
 - **写入路径归位（0.8.9）**：属性写入优先走编辑器文档模型 `DocElement.SetProperty`，对象模型保留回退；写 Action 返回新增 `writePath`（`document-model` / `object-model`）字段，让绕过文档模型成为可观测事实。请求 `save:true` 时若内存已变而文档未进入修改状态，在 `doc.Save()` 之前以 `persistence_failed`（stage `modified`）失败关闭，不再让 Save 静默成功却什么都没写；幂等写入不触发该检查。
 - **真机复验（0.8.9）**：已在 FairyGUI Editor 6.1.4 实机验证 10 条写 Action 的 `writePath`
   与实际写入层一致，`set_property --external-reload` 得 `strength:reload`；证据

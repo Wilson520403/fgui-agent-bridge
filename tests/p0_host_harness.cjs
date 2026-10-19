@@ -28,6 +28,7 @@ let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
 let controllers,refRegistry,depRegistry;
+let globalSettings;
 // 原生 ReplaceReferences 的调用轨迹：写侧用例要钉住「只调一次」「调的是本实例
 // 查出来的那批」，否则「预览复用旧列表」这类错误在测试里看不出来。
 let replaceCallCount,lastReplace;
@@ -138,13 +139,18 @@ function rebuildTransitionFromXml(node){
  return t;
 }
 function serializePackageXml(){
- return `<packageDescription id="${pkg.id}"><resources>${packageItems.map(i=>`<${i.type} id="${i.id}" name="${i.name}" path="/" exported="${i.exported}"/>`).join('')}</resources><publish name=""/></packageDescription>`;
+ // 真机实测：<image atlas="alone"> 会写进 package.xml 并在后续保存中保留，
+ // 但 FPackageItem.folderAtlas 重启后不读回。夹具照这个形态建模——atlas 属性
+ // 从一个独立的 _persistedAtlas 读，不从内存 folderAtlas 读，否则
+ // analyze_atlas_fit 的磁盘口径会在测试里通过一个真机不存在的假象。
+ return `<packageDescription id="${pkg.id}"><resources>${packageItems.map(i=>`<${i.type} id="${i.id}" name="${i.name}" path="/" exported="${i.exported}"${i._persistedAtlas?` atlas="${i._persistedAtlas}"`:''}/>`).join('')}</resources><publish name=""/></packageDescription>`;
 }
 function makePackageItem(name,type,ext){
  const id='it'+(packageItems.length+1);
  const file=`/pkg/${name}${ext}`;
- const it={id,name:`${name}${ext}`,type,title:name,path:'/',file,width:64,height:64,exported:true,folderAtlas:'',_asset:null,
+ const it={id,name:`${name}${ext}`,type,title:name,path:'/',file,width:64,height:64,exported:true,folderAtlas:'',_asset:null,_atlasIndex:0,supportAtlas:type==='image',
   GetURL:()=>`ui://${pkg.id}${id}`,
+  GetAtlasIndex(){return it._atlasIndex;},
   SetChanged(){},EnsureOpen(){},
   UnloadAsset(){it._asset=null;},
   GetAsset(){if(!(it.file in files))return null;it._asset=it._asset||{file:it.file};return it._asset;},
@@ -154,11 +160,40 @@ function makePackageItem(name,type,ext){
  resources[it.GetURL()]=it;
  return it;
 }
+// 发布设置夹具。字段名照 6.1.4 真实声明（GlobalPublishSettings / PublishSettings /
+// AtlasSettings / PackSettings），形状不同是真实的：全局只有 AtlasSetting
+// (maxSize/forceSquare/allowRotation)，包级才有 packSettings (padding/maxWidth/
+// square/rotation/...)。两套形状都必须能归一化，否则「按真实约束判断」只是换名字的猜测。
+function makePackSettings(over){
+ const base={pot:false,mof:false,padding:0,rotation:false,minWidth:0,minHeight:0,
+  maxWidth:2048,maxHeight:2048,square:false,fast:false,edgePadding:false,duplicatePadding:false,multiPage:true};
+ return Object.assign(base,over||{});
+}
+function makeAtlasSettings(name,over){
+ return {name:name||'Main',compression:true,extractAlpha:true,packSettings:makePackSettings(over)};
+}
+function makePackagePublishSettings(over){
+ return Object.assign({path:'',fileName:'',packageCount:2,genCode:false,codePath:'',branchPath:'',
+  useGlobalAtlasSettings:true,atlasList:[],excludedList:{Count:0,get_Item:()=>null}},over||{});
+}
+function makeGlobalPublishSettings(){
+ return {path:'',branchPath:'',fileExtension:'bytes',packageCount:2,compressDesc:true,binaryFormat:true,
+  jpegQuality:80,compressPNG:false,includeHighResolution:0,branchProcessing:0,seperatedAtlasForBranch:false,
+  codeGeneration:{allowGenCode:true,codePath:'',classNamePrefix:'UI_',memberNamePrefix:'m_',packageName:null,
+   ignoreNoname:true,getMemberByName:false,codeType:''},
+  // 与 sample 工程真机读数一致（tests/reports 里的 get_publish_settings 证据）
+  atlasSetting:{maxSize:2048,paging:true,sizeOption:'pot',forceSquare:false,allowRotation:false,trimImage:true}};
+}
 function makePackage(){
  const items=[];
  return {
   id:'fixture0',name:'Fixture',basePath:'/pkg',opened:true,_items:items,
-  get items(){return {Count:items.length,get_Item:i=>items[i]}},
+  publishSettings:makePackagePublishSettings(),
+  // The real FPackage.items enumerates the package's own resources; the previous
+  // stub kept a private array nothing was ever pushed to, so it always reported
+  // zero items. analyze_atlas_fit walks items directly and would silently judge
+  // nothing under that stub.
+  get items(){const own=packageItems.filter(i=>!i.owner||i.owner===this);return {Count:own.length,get_Item:i=>own[i]};},
   rootItem:{type:'folder',path:'/'},
   EnsureOpen(){this.opened=true;},SetChanged(){this.changed=true;},
   Save(){if(pkgSaveMode==='throw')throw Error('disk full');if(pkgSaveMode==='stale')return;files['/pkg/package.xml']=serializePackageXml();this.changed=false;},
@@ -224,6 +259,7 @@ function setup() {
  transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
  replaceCallCount=0;lastReplace=null;
  controllers=[makeController('c1',['page0','page1'])];
+ globalSettings=makeGlobalPublishSettings();
  pkg=makePackage();
  const resource=(id,w=64,h=64)=>({id,owner:{id:'fixture0'},type:'image',width:w,height:h,GetURL:()=>`ui://fixture0${id}`});
  resources={'ui://fixture0red':resource('red'),'ui://fixture0blue':resource('blue',128,128)};
@@ -279,7 +315,7 @@ function setup() {
   OpenDocument(url){ if(openMode==='throw')throw Error('open failed'); if(openMode==='null')return null; doc=makeDoc(); return doc; }
  };
  const app={activeDoc:null,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
-  GetItemByURL:url=>resources[url] || null,GetPackage:()=>pkg,GetPackageByName:()=>pkg,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,SetChanged(){},Save(){}},docView};
+  GetItemByURL:url=>resources[url] || null,GetPackage:()=>pkg,GetPackageByName:name=>name===pkg.name?pkg:null,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,GetSettings:name=>name==='Publish'?globalSettings:null,SetChanged(){},Save(){}},docView};
  ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
@@ -781,6 +817,161 @@ test('A type change between source and target is reported, never silently applie
   assert.equal(r.typeChange.to,'component');
   assert.equal(r.from.id,'red');           // from/to 是 resolveItem 拿到的资源本身
   assert.equal(r.to.id,'panel');
+});
+
+// ---------------------------------------------------------------- analyze_atlas_fit
+function addImage(name,w,h,opts){
+ const it=makePackageItem(name,'image','.png');
+ it.width=w;it.height=h;
+ Object.assign(it,opts||{});
+ files[it.file]='PNG';
+ return it;
+}
+const atlasFit=()=>ctx.handleCommand({action:'analyze_atlas_fit',params:{}});
+const imgOf=(r,name)=>r.packages[0].images.find(i=>i.name===`${name}.png`);
+
+test('Atlas fit is judged by the real packer limits, not by pixel-size guessing',()=>{
+ addImage('small',64,64); addImage('hd',1920,1080); addImage('huge',4096,4096);
+ const r=atlasFit();
+ assert.equal(imgOf(r,'small').fit,'fits');
+ assert.equal(imgOf(r,'huge').fit,'exceeds');
+ // 全局 maxSize=2048：1920x1080 装得下，但旧规则会把它标 alone——这正是分歧点
+ assert.equal(imgOf(r,'hd').fit,'fits');
+ assert.equal(imgOf(r,'hd').legacyAlone,true);
+ assert.equal(imgOf(r,'hd').disagrees,true);
+ assert.equal(r.summary.disagreements,1);
+ assert.equal(imgOf(r,'huge').legacyAlone,true);
+ assert.equal(imgOf(r,'huge').disagrees,false);   // 两者都判它超限，算一致
+});
+test('An image that exceeds the page reports which constraint bound it and by how much',()=>{
+ addImage('wide',3000,1000);
+ const e=imgOf(atlasFit(),'wide');
+ assert.equal(e.fit,'exceeds');
+ assert.equal(e.binding,'maxWidth');
+ assert.equal(e.requiredWidth,3000);
+ assert.equal(e.limitWidth,2048);
+});
+test('Padding counts twice per side, which the old rule could never see',()=>{
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
+  atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Main',{padding:10})}});
+ const it=addImage('edge',2040,10); it._atlasIndex=0;
+ const e=imgOf(atlasFit(),'edge');
+ assert.equal(e.fit,'exceeds');          // 2040+2*10=2060 > 2048
+ assert.equal(e.requiredWidth,2060);
+ assert.equal(e.padding,10);
+ assert.equal(e.legacyAlone,false);       // 旧规则完全看不到 padding
+ assert.equal(e.disagrees,true);
+});
+test('Rotation rescues a portrait page but is powerless under square packing',()=>{
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
+  atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Tall',{maxWidth:2048,maxHeight:4096,rotation:true})}});
+ const it=addImage('tall',3000,1000); it._atlasIndex=0;
+ assert.equal(imgOf(atlasFit(),'tall').fit,'fits');   // 转 90° 后 1000x3000 装得下
+ // 同样的尺寸在方形图集里仍超限：正方形边长在旋转下不变
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
+  atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Sq',{maxWidth:2048,maxHeight:2048,square:true,rotation:true})}});
+ const e=imgOf(atlasFit(),'tall');
+ assert.equal(e.fit,'exceeds');
+ assert.equal(e.binding,'squareSide');
+});
+test('Rotation cannot help a page that is already square in both sides',()=>{
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
+  atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Main',{rotation:true})}});
+ const it=addImage('wide',3000,1000); it._atlasIndex=0;
+ assert.equal(imgOf(atlasFit(),'wide').fit,'exceeds');
+});
+test('An image smaller than the atlas minimum is judged at the upscaled footprint',()=>{
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,
+  atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Main',{minWidth:512})}});
+ const it=addImage('tiny',64,64); it._atlasIndex=0;
+ const e=imgOf(atlasFit(),'tiny');
+ assert.equal(e.fit,'fits');
+ assert.equal(e.requiredWidth,512);      // 打包器会把它放大到下限
+});
+test('Unknown limits are reported as unknown, never as a confident fits',()=>{
+ globalSettings.atlasSetting.maxSize=0;
+ const it=addImage('any',100,100);
+ const e=imgOf(atlasFit(),'any');
+ assert.equal(e.fit,'unknown');
+ assert.equal(e.reason,'limits-unspecified');
+ assert.equal(atlasFit().summary.unknown,1);
+});
+test('A resource pinned to an unconfigured atlas is unknown, not silently judged',()=>{
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,atlasList:{Count:1,get_Item:()=>makeAtlasSettings('Main')}});
+ const it=addImage('pinned',100,100); it._persistedAtlas='alone';
+ files['/pkg/package.xml']=serializePackageXml();
+ const e=imgOf(atlasFit(),'pinned');
+ assert.equal(e.fit,'unknown');
+ assert.equal(e.reason,'atlas-not-configured');
+});
+test('The atlas assignment is read from disk, not from the in-memory folderAtlas',()=>{
+ // 真机 6.1.4：磁盘写了 atlas="alone"，重启后内存 folderAtlas 却回到空串。
+ // 若按内存值解析归属，这张图会被当成「没指定图集」，判定整个走偏。
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,atlasList:{
+  Count:2,get_Item:i=>i===0?makeAtlasSettings('Small',{maxWidth:512,maxHeight:512}):makeAtlasSettings('Big',{maxWidth:4096,maxHeight:4096})}});
+ const it=addImage('pinned',3000,3000); it.folderAtlas=''; it._persistedAtlas='Big'; it._atlasIndex=0;
+ files['/pkg/package.xml']=serializePackageXml();
+ const e=imgOf(atlasFit(),'pinned');
+ assert.equal(e.atlas,'Big');              // 磁盘上的 Big，而不是 GetAtlasIndex() 的 0(Small)
+ assert.equal(e.fit,'fits');
+ assert.equal(e.folderAtlasInMemory,'');     // 内存确实为空，输出如实回报
+ assert.equal(e.folderAtlasOnDisk,'Big');
+});
+test('Images already marked alone on disk but actually fitting are counted',()=>{
+ addImage('hd',1920,1080); addImage('huge',4096,4096);
+ for(const it of packageItems.filter(i=>i.name.startsWith('AtlasFixture')||i.name.startsWith('hd')||i.name.startsWith('huge')))it._persistedAtlas='alone';
+ files['/pkg/package.xml']=serializePackageXml();
+ const r=atlasFit();
+ assert.equal(imgOf(r,'hd').assignedAloneOnDisk,true);
+ assert.equal(imgOf(r,'huge').assignedAloneOnDisk,true);
+ assert.equal(r.summary.assignedAloneButFits,1);   // 只有 hd 是「标了 alone 但其实装得下」
+ assert.equal(r.folderAtlasRoundTrip.memoryMatchesDisk,false);
+});
+test('Each image is judged against the atlas it actually belongs to',()=>{
+ pkg.publishSettings=makePackagePublishSettings({useGlobalAtlasSettings:false,atlasList:{
+  Count:2,get_Item:i=>i===0?makeAtlasSettings('Small',{maxWidth:512,maxHeight:512}):makeAtlasSettings('Big',{maxWidth:4096,maxHeight:4096})}});
+ const a=addImage('a',300,300); a._atlasIndex=0;
+ const b=addImage('b',3000,3000); b._atlasIndex=1;
+ const r=atlasFit();
+ assert.equal(imgOf(r,'a').atlas,'Small');
+ assert.equal(imgOf(r,'b').atlas,'Big');
+ assert.equal(imgOf(r,'a').fit,'fits');
+ assert.equal(imgOf(r,'b').fit,'fits');   // 放在 Big 里装得下
+});
+test('Images that never enter an atlas are counted as skipped, not judged',()=>{
+ const it=addImage('noatlas',100,100); it.supportAtlas=false;
+ const r=atlasFit();
+ assert.equal(r.packages[0].summary.skippedNotAtlasable,1);
+ assert.equal(r.packages[0].images.length,0);
+});
+test('Analyzing atlas fit is read-only: no atlas assignment and no dirty package',()=>{
+ const it=addImage('hd',1920,1080);
+ atlasFit();
+ assert.equal(it.folderAtlas,'');         // 只读动作不得顺手标 alone
+ assert.ok(!pkg.changed);
+});
+test('The report states that publish still applies the legacy rule',()=>{
+ addImage('hd',1920,1080);
+ const r=atlasFit();
+ assert.equal(r.legacyRule.stillAppliedOnPublish,true);
+ assert.equal(r.legacyRule.longSideMin,1920);
+});
+test('The report also says the legacy rule fires on import, not only on publish',()=>{
+ // 真机实测：1920x1080 导入后 package.xml 就写上 atlas="alone"，全程没调用过 publish。
+ // 文档若只写「publish 时生效」，读者会以为导入后归属未变——这条用例钉住事实。
+ addImage('hd',1920,1080);
+ const r=atlasFit();
+ assert.equal(r.legacyRule.alsoAppliedOnImport,true);
+ // 跨 realm 数组不能 deepEqual（同本文件既有告诫），逐项断言
+ const at=r.legacyRule.appliedAt;
+ assert.equal(at.length,3);
+ assert.equal(at[0],'import_image');
+ assert.equal(at[1],'import_image(replace)');
+ assert.equal(at[2],'publish');
+});
+test('A missing package is rejected',()=>{
+ // 与相邻的 get_publish_settings 保持一致：对不存在的包抛普通 Error，不新造错误码
+ assert.throws(()=>ctx.handleCommand({action:'analyze_atlas_fit',params:{packageName:'NoSuchPackage'}}),/未找到包/);
 });
 
 

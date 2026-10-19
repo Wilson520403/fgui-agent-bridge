@@ -34,6 +34,7 @@ REQUIRED_CAPABILITIES = frozenset(
         "save_document",
         "save_all",
         "get_publish_settings",
+        "analyze_atlas_fit",
         "publish",
         "get_history",
         "discard_document",

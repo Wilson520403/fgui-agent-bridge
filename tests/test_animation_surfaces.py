@@ -150,8 +150,8 @@ class CapabilityConsistencyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")
         tool_names = [name for name in vars(mcp_server) if name.startswith("fgui_")]
-        self.assertEqual(len(tool_names), 51)
-        self.assertIn("MCP 工具数：51", documented)
+        self.assertEqual(len(tool_names), 52)
+        self.assertIn("MCP 工具数：52", documented)
 
     def test_reference_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
         root = Path(__file__).resolve().parents[1]

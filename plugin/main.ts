@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.11";
+const BRIDGE_VERSION = "0.8.12";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -205,6 +205,7 @@ function writeStatus(): void {
             "save_document",
             "save_all",
             "get_publish_settings",
+            "analyze_atlas_fit",
             "publish",
             "get_history",
             "discard_document",
@@ -4688,6 +4689,418 @@ function describePublishSettings(params: any): any {
     };
 }
 
+// 图集打包器的真实约束。全局设置用 GlobalPublishSettings.AtlasSetting（maxSize/
+// forceSquare/allowRotation），包级设置用 AtlasSettings.packSettings（PackSettings，
+// 带 padding / minWidth / maxWidth / square / rotation）。两者形状不同，必须分开归一化
+// 成同一个判定模型，否则「按真实约束判断」只是换了个名字的猜测。
+interface AtlasConstraints {
+    source: string;
+    atlas: string;
+    sizeOption: string;
+    maxWidth: number;
+    maxHeight: number;
+    minWidth: number;
+    minHeight: number;
+    padding: number;
+    square: boolean;
+    rotation: boolean;
+    pot: boolean;
+    mof: boolean;
+    multiPage: boolean;
+}
+
+function readPackSettings(pack: any): any {
+    if (!pack)
+        return null;
+    return {
+        sizeOption: pack.pot ? "pot" : "",
+        maxWidth: Number(pack.maxWidth) || 0,
+        maxHeight: Number(pack.maxHeight) || 0,
+        minWidth: Number(pack.minWidth) || 0,
+        minHeight: Number(pack.minHeight) || 0,
+        padding: Number(pack.padding) || 0,
+        square: !!pack.square,
+        rotation: !!pack.rotation,
+        pot: !!pack.pot,
+        mof: !!pack.mof,
+        multiPage: !!pack.multiPage
+    };
+}
+
+// 包级 atlasList 里的每一条 AtlasSettings 是一条独立图集约束；条目按名字与资源的
+// folderAtlas 对应，对不上的资源不猜，报 unknown。
+function readPackageAtlasConstraints(pkg: FairyEditor.FPackage): AtlasConstraints[] {
+    const publishSettings: any = pkg.publishSettings;
+    if (!publishSettings || !publishSettings.atlasList)
+        return [];
+
+    const result: AtlasConstraints[] = [];
+    for (let i = 0; i < publishSettings.atlasList.Count; i++) {
+        const atlas = publishSettings.atlasList.get_Item(i);
+        const pack = readPackSettings(atlas ? atlas.packSettings : null);
+        if (!pack)
+            continue;
+        result.push({
+            source: "package",
+            atlas: String((atlas && atlas.name) || ""),
+            sizeOption: pack.sizeOption,
+            maxWidth: pack.maxWidth,
+            maxHeight: pack.maxHeight,
+            minWidth: pack.minWidth,
+            minHeight: pack.minHeight,
+            padding: pack.padding,
+            square: pack.square,
+            rotation: pack.rotation,
+            pot: pack.pot,
+            mof: pack.mof,
+            multiPage: pack.multiPage
+        });
+    }
+    return result;
+}
+
+// 全局 AtlasSetting 没有 padding/minWidth 概念，maxSize 同时是宽高上限；
+// sizeOption 只有 pot 时才等价于 PackSettings.pot。
+function readGlobalAtlasConstraints(settings: FairyEditor.GlobalPublishSettings): AtlasConstraints[] {
+    const atlasSetting: any = settings.atlasSetting;
+    if (!atlasSetting)
+        return [];
+    const maxSize = Number(atlasSetting.maxSize) || 0;
+    return [{
+        source: "global",
+        atlas: "",
+        sizeOption: String(atlasSetting.sizeOption || ""),
+        maxWidth: maxSize,
+        maxHeight: maxSize,
+        minWidth: 0,
+        minHeight: 0,
+        padding: 0,
+        square: !!atlasSetting.forceSquare,
+        rotation: !!atlasSetting.allowRotation,
+        pot: String(atlasSetting.sizeOption || "") === "pot",
+        mof: false,
+        multiPage: !!atlasSetting.paging
+    }];
+}
+
+function resolveAtlasConstraints(pkg: FairyEditor.FPackage, settings: FairyEditor.GlobalPublishSettings): AtlasConstraints[] {
+    const publishSettings: any = pkg.publishSettings;
+    if (!publishSettings || publishSettings.useGlobalAtlasSettings !== false)
+        return readGlobalAtlasConstraints(settings);
+    return readPackageAtlasConstraints(pkg);
+}
+
+// 约束是否够用：上限必须是正数，否则 packer 没告诉我们页有多大，
+// 此时报 unknown 而不是报 fits——「猜它装得下」和「确认它装得下」不能混同。
+function constraintsUsable(c: AtlasConstraints): boolean {
+    return c.maxWidth > 0 && c.maxHeight > 0;
+}
+
+// 单图 fit 判定。padding 在每个方向占 2 份；minWidth/minHeight 表示打包器会把
+// 过小的图放大到下限，所以足迹取 max(实际+padding, 下限)；rotation 允许 90°
+// 打包，**任一朝向成立即算装得下**；square（方形图集）下每张图占一个正方形区域，
+// 正方形边长在旋转下不变，所以旋转对 square 没有帮助。
+function judgeAtlasFit(width: number, height: number, c: AtlasConstraints): any {
+    const padding = Math.max(0, c.padding);
+    const orientations: number[][] = [[width, height]];
+    if (c.rotation)
+        orientations.push([height, width]);
+
+    const footprints: number[][] = [];
+    let fitted: number[] | null = null;
+    // 装不下时，回报「差得最近」的那次尝试，让调用方看得到超出多少，而不是只给一个布尔。
+    let closest: number[] | null = null;
+    let closestBinding = "";
+
+    for (let i = 0; i < orientations.length; i++) {
+        const fw = Math.max(orientations[i][0] + 2 * padding, c.minWidth);
+        const fh = Math.max(orientations[i][1] + 2 * padding, c.minHeight);
+        footprints.push([fw, fh]);
+
+        if (!footprintExceeds(fw, fh, c)) {
+            if (!fitted)
+                fitted = [fw, fh];
+            continue;
+        }
+
+        const binding = c.square ? "squareSide" : (fw > c.maxWidth ? "maxWidth" : "maxHeight");
+        if (!closest || fw + fh < closest[0] + closest[1]) {
+            closest = [fw, fh];
+            closestBinding = binding;
+        }
+    }
+
+    return {
+        fits: fitted !== null,
+        binding: fitted !== null ? "" : closestBinding,
+        requiredWidth: fitted ? fitted[0] : (closest ? closest[0] : 0),
+        requiredHeight: fitted ? fitted[1] : (closest ? closest[1] : 0),
+        footprints: footprints
+    };
+}
+
+function footprintExceeds(fw: number, fh: number, c: AtlasConstraints): boolean {
+    if (c.square)
+        return Math.max(fw, fh) > c.maxWidth || Math.max(fw, fh) > c.maxHeight;
+    return fw > c.maxWidth || fh > c.maxHeight;
+}
+
+// 真机实测（Editor 6.1.4）：FPackageItem.folderAtlas **不经过 package.xml 往返**——
+// 导入时写进 <image atlas="alone"/>，磁盘也保留，但重启后内存里的 folderAtlas 回到
+// 空串（编辑器自己的幂等守卫 applyLargeImageAtlasRule 因此每次都重新施加）。
+// 所以「这张图当前是不是被标成 alone」必须以磁盘为准，只报内存值会说谎。
+// 读失败不抛错：只读分析不该因为 package.xml 不可读就整体失败，退化成空映射并回报。
+function persistedAtlasByItemId(pkg: FairyEditor.FPackage): { [itemId: string]: string } {
+    const result: { [itemId: string]: string } = {};
+    try {
+        const file = IOPath.Combine(String(pkg.basePath || ""), "package.xml");
+        if (!IOFile.Exists(file))
+            return result;
+        const XmlType = (CS as any).FairyGUI.Utils.XML;
+        const xml: any = new XmlType(String(IOFile.ReadAllText(file)));
+        const resources = xml.GetNode("resources");
+        if (!resources)
+            return result;
+        for (let i = 0; i < resources.elements.Count; i++) {
+            const node = resources.elements.get_Item(i);
+            const id = String(node.GetAttribute("id") || "");
+            const atlas = String(node.GetAttribute("atlas") || "");
+            if (id && atlas)
+                result[id] = atlas;
+        }
+    }
+    catch (error) {
+        return {};
+    }
+    return result;
+}
+
+// analyze_atlas_fit：按打包器真实约束判断每张图能否入图集。纯只读。
+// 刻意不改成发布行为——先让新旧两种判断的差异可见（disagreements），再决定
+// 是不是让 runPublish 按真实约束走。旧规则仍在 publish 里生效，见 LARGE_IMAGE_*。
+function analyzeAtlasFit(params: any): any {
+    const settings = App.project.GetSettings("Publish") as FairyEditor.GlobalPublishSettings;
+    if (!settings)
+        throw new Error("FairyGUI 工程缺少 Publish 设置");
+
+    const packageName = params && params.packageName ? String(params.packageName) : "";
+    const sourcePackages: FairyEditor.FPackage[] = [];
+    if (packageName) {
+        const pkg = App.project.GetPackageByName(packageName);
+        if (!pkg)
+            throw new Error(`未找到包：${packageName}`);
+        sourcePackages.push(pkg);
+    }
+    else {
+        for (let i = 0; i < App.project.allPackages.Count; i++)
+            sourcePackages.push(App.project.allPackages.get_Item(i));
+    }
+
+    const packages: any[] = [];
+    let totalImages = 0;
+    let totalFits = 0;
+    let totalExceeds = 0;
+    let totalUnknown = 0;
+    let totalDisagreements = 0;
+    let totalAloneButFits = 0;
+
+    for (let i = 0; i < sourcePackages.length; i++) {
+        const pkg = sourcePackages[i];
+        const constraints = resolveAtlasConstraints(pkg, settings);
+        const persistedAtlas = persistedAtlasByItemId(pkg);
+        const images: any[] = [];
+        let skipped = 0;
+        let fits = 0;
+        let exceeds = 0;
+        let unknown = 0;
+        let disagreements = 0;
+        let aloneButFits = 0;
+
+        for (let j = 0; j < pkg.items.Count; j++) {
+            const item = pkg.items.get_Item(j);
+            if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE)
+                continue;
+            if (item.supportAtlas === false) {
+                skipped++;
+                continue;
+            }
+
+            totalImages++;
+            const width = Number(item.width) || 0;
+            const height = Number(item.height) || 0;
+            // 归属解析用磁盘值：内存 folderAtlas 重启后恒为空（真机实测），
+            // 用它会把「已标记 alone」误判成「没指定图集」。
+            const memoryAtlas = String(item.folderAtlas || "");
+            const folderAtlas = String(persistedAtlas[String(item.id)] || "");
+            const matched = matchAtlasConstraints(constraints, item, folderAtlas);
+            const legacyAlone = isLargeImageDimensions(width, height);
+
+            const entry: any = {
+                id: item.id,
+                name: item.name,
+                width: width,
+                height: height,
+                // 内存值与磁盘值分列，因为它们在 6.1.4 上不一致（见 persistedAtlasByItemId）。
+                // 只有一个字段时，读者无从判断该信哪个。
+                folderAtlasInMemory: memoryAtlas,
+                folderAtlasOnDisk: String(persistedAtlas[String(item.id)] || ""),
+                constraintsSource: matched ? matched.source : "unknown",
+                atlas: matched ? matched.atlas : ""
+            };
+            entry.assignedAloneOnDisk = entry.folderAtlasOnDisk === LARGE_IMAGE_ATLAS;
+
+            if (!width || !height) {
+                entry.fit = "unknown";
+                entry.reason = "no-dimensions";
+                unknown++;
+                images.push(entry);
+                continue;
+            }
+
+            if (!matched) {
+                entry.fit = "unknown";
+                entry.reason = folderAtlas ? "atlas-not-configured" : "no-constraints";
+                unknown++;
+                images.push(entry);
+                continue;
+            }
+
+            if (!constraintsUsable(matched)) {
+                entry.fit = "unknown";
+                entry.reason = "limits-unspecified";
+                unknown++;
+                images.push(entry);
+                continue;
+            }
+
+            const verdict = judgeAtlasFit(width, height, matched);
+            entry.fit = verdict.fits ? "fits" : "exceeds";
+            entry.requiredWidth = verdict.requiredWidth;
+            entry.requiredHeight = verdict.requiredHeight;
+            entry.limitWidth = matched.maxWidth;
+            entry.limitHeight = matched.maxHeight;
+            entry.padding = matched.padding;
+            entry.square = matched.square;
+            entry.rotation = matched.rotation;
+            if (verdict.fits)
+                fits++;
+            else {
+                exceeds++;
+                entry.binding = verdict.binding;
+            }
+
+            // 旧规则与真实约束不一致，是这一刀真正的产出：它直接说明发布时
+            // 会被标成 alone 的那张图，其实按打包器约束根本装得下（或反之）。
+            // 分歧 ⟺ 旧规则要 alone，而真实约束说装得下；两者都 alone / 都装得下都算一致。
+            // 显式给 true/false 而不是「不一致时才加字段」：缺字段的布尔无法和
+            // false 区分，消费方只能靠 === undefined 兜，这正是诊断字段谎报的老路。
+            entry.legacyAlone = legacyAlone;
+            entry.disagrees = legacyAlone !== !verdict.fits;
+            if (entry.disagrees)
+                disagreements++;
+            // 最可执行的一个数：磁盘上已经标成 alone，但按真实约束其实装得下。
+            if (entry.assignedAloneOnDisk && verdict.fits)
+                aloneButFits++;
+            images.push(entry);
+        }
+
+        totalFits += fits;
+        totalExceeds += exceeds;
+        totalUnknown += unknown;
+        totalDisagreements += disagreements;
+        totalAloneButFits += aloneButFits;
+
+        packages.push({
+            package: describePackage(pkg),
+            useGlobalAtlasSettings: !!(pkg.publishSettings && pkg.publishSettings.useGlobalAtlasSettings !== false),
+            constraints: constraints.map(describeAtlasConstraints),
+            images: images,
+            summary: {
+                images: images.length,
+                skippedNotAtlasable: skipped,
+                fits: fits,
+                exceeds: exceeds,
+                unknown: unknown,
+                disagreements: disagreements,
+                assignedAloneButFits: aloneButFits
+            }
+        });
+    }
+
+    return {
+        packages,
+        summary: {
+            images: totalImages,
+            fits: totalFits,
+            exceeds: totalExceeds,
+            unknown: totalUnknown,
+            disagreements: totalDisagreements,
+            assignedAloneButFits: totalAloneButFits
+        },
+        folderAtlasRoundTrip: {
+            memoryMatchesDisk: false,
+            note: "真机实测（Editor 6.1.4）：<image atlas=\"alone\"> 写入 package.xml 且保存时保留，但 FPackageItem.folderAtlas 重启后不读回。因此每张图分列 folderAtlasInMemory 与 folderAtlasOnDisk，图集归属解析与 assignedAloneOnDisk 一律以磁盘为准。"
+        },
+        legacyRule: {
+            longSideMin: LARGE_IMAGE_LONG_SIDE_MIN,
+            shortSideMin: LARGE_IMAGE_SHORT_SIDE_MIN,
+            side2kMin: LARGE_IMAGE_2K_SIDE_MIN,
+            atlas: LARGE_IMAGE_ATLAS,
+            stillAppliedOnPublish: true,
+            alsoAppliedOnImport: true,
+            appliedAt: ["import_image", "import_image(replace)", "publish"],
+            note: "旧规则不只在 publish 生效：import_image（含同名替换）在导入成功后就直接写 folderAtlas=alone 并落盘（真机已验，见 tests/reports/p8-5-atlas-fit-live.json）。因此 disagreements 统计的是**已经写进工程的**图集归属，不只是下次发布会发生什么。本 Action 自身只读不改。"
+        }
+    };
+}
+
+function matchAtlasConstraints(constraints: AtlasConstraints[], item: any, folderAtlas: string): AtlasConstraints | null {
+    if (!constraints || constraints.length === 0)
+        return null;
+    // 全局设置只有一条约束，与资源挂在哪张图集无关。
+    if (constraints.length === 1 && constraints[0].source === "global")
+        return constraints[0];
+
+    if (folderAtlas) {
+        for (let i = 0; i < constraints.length; i++) {
+            if (constraints[i].atlas === folderAtlas)
+                return constraints[i];
+        }
+        // 资源已经指到一张没配置的图集（如 alone 这类编辑器内建图集名），
+        // 不猜它用哪套约束。
+        return null;
+    }
+
+    let index = -1;
+    try {
+        index = Number(item.GetAtlasIndex());
+    }
+    catch (e) {
+        index = -1;
+    }
+    if (index >= 0 && index < constraints.length)
+        return constraints[index];
+    return constraints.length === 1 ? constraints[0] : null;
+}
+
+function describeAtlasConstraints(c: AtlasConstraints): any {
+    return {
+        source: c.source,
+        atlas: c.atlas,
+        sizeOption: c.sizeOption,
+        maxWidth: c.maxWidth,
+        maxHeight: c.maxHeight,
+        minWidth: c.minWidth,
+        minHeight: c.minHeight,
+        padding: c.padding,
+        square: c.square,
+        rotation: c.rotation,
+        pot: c.pot,
+        mof: c.mof,
+        multiPage: c.multiPage
+    };
+}
+
 interface FileStamp {
     length: string;
     modifiedTicks: string;
@@ -5247,6 +5660,9 @@ function handleCommand(request: AgentRequest): any {
 
         case "get_publish_settings":
             return describePublishSettings(params);
+
+        case "analyze_atlas_fit":
+            return analyzeAtlasFit(params);
 
         case "publish":
             return publishPackages(params);

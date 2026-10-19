@@ -19,10 +19,10 @@
 | Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
 | Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
 | Phase 4 | 部分完成 | **0.8.8 已实现** `set_list_layout`/`set_group_layout`/`set_relation`/`set_gear_display`/`set_controller`/`list_controllers` 六个 Action 并接入统一验证梯子（editor → save → 磁盘 XML → external reload）；模拟宿主 112 项全过，**已在 FairyGUI Editor 6.1.4 真机验证**（`tests/reports/phase4-live-0.8.8.json`）；List 的 numItems/item placeholder 写入、Controller page 批量资源替换尚未实现。 |
-| Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API 已实现；自动同步关键帧、专用验证及截图未完成。 |
+| Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API 已实现；自动同步关键帧、专用验证未完成；**0.8.12 已落地按真实 `PackSettings` 的图集约束分析（`analyze_atlas_fit`）并真机复验**，截图诉求由 P8-4 结论承担（Unity 侧渲染）。 |
 | Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
 | Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。**2026-10-19：Bridge 侧离屏截图路线已证伪并放弃**（见 P8-4），截图诉求改由发布后在 Unity 侧渲染承担；`preview_run` 交互预览仍待实现。 |
-| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。P8-3 ~ P8-7 规划完成未实现。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
+| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。**0.8.12 落地 P8-5 只读切片** `analyze_atlas_fit`：按真实 `PackSettings`（`padding`／下限放大／`maxWidth/maxHeight`／`square`／`rotation`）与全局 `AtlasSetting` 逐图判定 fit 与 binding，约束缺失时报 `unknown` 拒绝下结论，主产出是与旧大图硬编码规则的差异数 `disagreements`；纯只读，`publish` 仍按旧常量标记并以 `legacyRule.stillAppliedOnPublish` 显式声明。模拟宿主 150 项与 Python 35 项全过，**真机 6.1.4 已复验全局约束路径**（证据 `tests/reports/p8-5-atlas-fit-live.json`）；包级 `PackSettings` 路径真机无实例，仅模拟宿主覆盖。P8-5 写侧 `set_publish_settings`、`PublishHandler` 分步导出，以及 P8-3 ~ P8-7 规划完成未实现。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
 
 > **重排说明（2026-10-19）：** 本轮据此新增 Phase 8，并在 §7.1 给出按"能否清偿既有技术债"
 > 重排的当前实际待办；Phase 6（Lanhu 工作流）顺延。证据、边界与 API 依据见
@@ -838,9 +838,31 @@ AtlasSettings  { name, compression, extractAlpha, packSettings }
 PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, ClearOldResFiles, CollectClasses }
 ```
 
-- [ ] 新增 `set_publish_settings`（按包设置图集、代码生成、分支排除）；
-- [ ] `analyze_atlas_fit`：**按真实 `PackSettings` 约束**判断大图能否入图集，
-      替换当前硬编码的 `LARGE_IMAGE_LONG_SIDE_MIN` 猜测（Phase 5 未完成项）；
+- [x] `analyze_atlas_fit`：**按真实 `PackSettings` 约束**判断大图能否入图集，
+      替换当前硬编码的 `LARGE_IMAGE_LONG_SIDE_MIN` 猜测（Phase 5 未完成项）。
+      **0.8.12 只读切片已落地并真机复验**（证据 `tests/reports/p8-5-atlas-fit-live.json`）：
+      判定吃包级 `PackSettings`（`padding` 每边 2 份、`minWidth/minHeight` 下限放大、
+      `maxWidth/maxHeight`、`square`、`rotation`）与全局 `AtlasSetting`
+      （`maxSize`/`forceSquare`/`allowRotation`），逐图给 `fit` 与卡住它的 `binding`；
+      约束缺失时报 `unknown` 拒绝下结论。纯只读。
+      **真机三条发现（改变了这项的定位）：**
+      ①**旧规则在 `import_image` 时就生效，不只在 publish**——只调
+      `import_image --save`、未调 publish，`package.xml` 已写入 `atlas="alone"`
+      （调用点 `main.ts:630`/`655`）。它改的是真实工程，不只是下次发布。
+      ②**`FPackageItem.folderAtlas` 在 6.1.4 上不与 `package.xml` 往返**——属性写入
+      磁盘且保存保留，重启后内存读回为空；编辑器自身幂等守卫因此恒不命中，每次
+      publish 重复 `SetChanged`。故输出分列 `folderAtlasInMemory`/`folderAtlasOnDisk`，
+      归属一律以磁盘为准。
+      ③最可执行的指标不是 `disagreements` 而是 `summary.assignedAloneButFits`
+      （磁盘已标 alone 但按真实约束装得下）。真机实测 1920x1080 即属此列。
+- [ ] `set_publish_settings`（按包设置图集、代码生成、分支排除）。**未实现**，也是
+      闭掉下面那条真机边界的关键：包级 `PackSettings` 路径目前只在模拟宿主跑过，
+      真机没有任何 `useGlobalAtlasSettings=false` 的实例。该对象是包级设置、
+      **无 `DocElement` 入口**，必然走对象模型，须显式声明 `writePath:object-model`
+      并接验证梯子，不得靠 `doc.SetModified(true)` 兜。**它还应当能纠正既有的错误
+      `folderAtlas=alone`**——按发现①，那些标记已经在真实工程的磁盘上了。
+- [ ] 评估用真实 `PackSettings` 判定替换 `applyLargeImageAtlasRule` 的旧常量判定，
+      并同时处理发现②暴露的「内存不读回」问题（否则换判定也只在当前会话有效）。
 - [ ] 暴露 `PublishHandler` 的分步导出能力，便于"只导描述/只导资源"。
 
 ### P8-6 分支（完全空白的能力域）
@@ -875,7 +897,7 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 | --- | --- | --- |
 | 1 | P8-0 + P8-1 | 先把写入路径纠正到文档模型层并获得编译期保护，否则新 Action 会复制现有坑 |
 | 2 | P8-2 | 直接清偿 §1.1 的技术债，是计划里最明确的一条 |
-| 3 | ~~P8-4~~ + P8-5 | **2026-10-19：P8-4 放弃**（见下节），本批只剩 P8-5 解锁 Phase 5 的硬骨头；`preview_run` 并入后续批次 |
+| 3 | ~~P8-4~~ + P8-5 | **2026-10-19：P8-4 放弃**（见下节），本批只剩 P8-5 解锁 Phase 5 的硬骨头；`preview_run` 并入后续批次。**0.8.12：P8-5 只读切片完成**（`analyze_atlas_fit`），写侧 `set_publish_settings` 与 `PublishHandler` 分步导出仍在本批 |
 | 4 | P8-3 + P8-6 | 动画深入与新能力域 |
 | 5 | P8-7 批量 | 审计 / i18n / 原生撤销栈 / 可见性 |
 
@@ -1010,7 +1032,7 @@ Bridge 改进应在独立仓库完成：
 | 2 | ~~用真实声明生成类型 stub，接入编译期校验~~ **0.8.9 已完成** | P8-1 | 成本极低，且是 1 和后续所有项的安全网 |
 | 3 | ~~引用图（只读 + 全工程替换语义）~~ **0.8.10 + 0.8.11 已完成** | P8-2 | 直接清偿 §1.1 这条挂了两轮的技术债；写侧 `replace_references` 默认只预览、立即落盘不可撤销、`fileName` 半状态显式上报 |
 | 4 | ~~离屏渲染截图~~ **2026-10-19 已放弃**（`CaptureCamera` 对工程组件只出全透明空图，根因是编辑器不把组件交给 FairyGUI 运行时 stage 渲染）。`preview_run` 从本项剥离，仍待实现 | P8-4 | 解锁 Phase 7 的前提不成立，继续投入没有回报；证据见 `tests/reports/p8-4-render-feasibility.json` |
-| 5 | 图集与发布配置（按真实 `PackSettings` 给建议） | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测 |
+| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片已落地**；写侧 `set_publish_settings` 未做 | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：写侧 + `PublishHandler` 分步导出 |
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备 |
 | 7 | 分支能力 | P8-6 | 新增域，多端/多版本项目价值高 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影 |

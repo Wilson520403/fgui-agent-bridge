@@ -7,6 +7,10 @@
     <component id="p93m3" name="BridgeTestButton.xml" path="/" exported="true"/>
     <component id="mvx64" name="BridgeTextTest.xml" path="/" exported="true"/>
     <component id="fix01" name="BridgeFixture.xml" path="/" exported="true"/>
+    <image id="x5h75" name="AtlasFixture_Small.png" path="/" exported="true"/>
+    <image id="x5h76" name="AtlasFixture_HD.png" path="/" exported="true" atlas="alone"/>
+    <image id="x5h77" name="AtlasFixture_Huge.png" path="/" exported="true" atlas="alone"/>
+    <image id="n4yz8" name="AtlasFixture_Probe.png" path="/" exported="true"/>
   </resources>
   <publish name=""/>
 </packageDescription>

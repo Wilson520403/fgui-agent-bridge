@@ -78,6 +78,58 @@
       "exported": true,
       "folderAtlas": "",
       "url": "ui://qsezbqtwfix01"
+    },
+    {
+      "id": "x5h75",
+      "name": "AtlasFixture_Small",
+      "title": "AtlasFixture_Small",
+      "type": "image",
+      "path": "/",
+      "file": "AtlasFixture_Small.png",
+      "width": 256,
+      "height": 256,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwx5h75"
+    },
+    {
+      "id": "x5h76",
+      "name": "AtlasFixture_HD",
+      "title": "AtlasFixture_HD",
+      "type": "image",
+      "path": "/",
+      "file": "AtlasFixture_HD.png",
+      "width": 1920,
+      "height": 1080,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwx5h76"
+    },
+    {
+      "id": "x5h77",
+      "name": "AtlasFixture_Huge",
+      "title": "AtlasFixture_Huge",
+      "type": "image",
+      "path": "/",
+      "file": "AtlasFixture_Huge.png",
+      "width": 4096,
+      "height": 4096,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwx5h77"
+    },
+    {
+      "id": "n4yz8",
+      "name": "AtlasFixture_Probe",
+      "title": "AtlasFixture_Probe",
+      "type": "image",
+      "path": "/",
+      "file": "AtlasFixture_Probe.png",
+      "width": 128,
+      "height": 128,
+      "exported": true,
+      "folderAtlas": "",
+      "url": "ui://qsezbqtwn4yz8"
     }
   ]
 }

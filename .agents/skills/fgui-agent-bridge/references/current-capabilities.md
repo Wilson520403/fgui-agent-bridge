@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.10`
+- Bridge 版本：`0.8.12`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：51，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图与全工程引用替换工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：52，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换与图集约束分析工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -322,3 +322,64 @@ python3 scripts/extract_editor_api.py --emit-stub plugin/main.ts --out plugin/ty
 模拟宿主 137 项、Python 35 项全过（含 8 项新增写侧用例）。**已在 FairyGUI Editor
 6.1.4 真机复验**预览、执行、错误路径与幂等性。**未复验**：多包工程中的跨包替换与
 「未打开的包是否会被少算」（隔离工程仍只有一个已打开的包）。
+
+## 0.8.12：图集约束分析（P8-5 只读切片）
+
+### 行为
+
+- `fgui_analyze_atlas_fit`（`analyze_atlas_fit`）：**纯只读**，按图集打包器的真实约束
+  判断每张图能否入图集，取代原先只看像素大小的大图硬编码猜测
+  （`LARGE_IMAGE_LONG_SIDE_MIN=1920` / `SHORT_SIDE_MIN=1080` / `2K_SIDE_MIN=2048`）。
+- 约束有两个来源，形状不同但都必须归一化：包级 `PublishSettings.atlasList` 里每条
+  `AtlasSettings.packSettings`（`padding` 每边 2 份、`minWidth/minHeight` 会把小图放大到
+  下限、`maxWidth/maxHeight`、`square`、`rotation`、`pot`、`multiPage`），与全局
+  `GlobalPublishSettings.atlasSetting`（`maxSize` / `forceSquare` / `allowRotation` /
+  `sizeOption` / `paging`，无 padding 概念）。`useGlobalAtlasSettings` 决定用哪套；
+  全局只有一条约束，与资源挂在哪张图集无关。
+- 判定：`padding` 后足迹取 `max(实际+padding, 下限)`；`rotation` 允许 90° 打包，
+  **任一朝向成立即算装得下**；`square` 下每张图占正方形区域，边长在旋转下不变，
+  所以**旋转对方形图集没有帮助**。
+- `fit` 三态：`fits` / `exceeds` / `unknown`。`unknown` 用于约束缺失时**拒绝下结论**
+  （`reason` 为 `no-dimensions` / `no-constraints` / `atlas-not-configured` /
+  `limits-unspecified`），不猜、不当 fits 放行。资源已钉到没配置的图集（如 `alone`
+  这类编辑器内建名）同样报 `unknown` 而不是猜一套约束。
+- `supportAtlas=false` 的资源计入 `skippedNotAtlasable`，不参与判定。
+- **图集归属以磁盘为准**：真机实测 6.1.4 的 `FPackageItem.folderAtlas` **不与 `package.xml`
+  往返**——`<image atlas="alone">` 写入磁盘且后续保存原样保留，但编辑器重启后内存读回
+  为空串。因此每张图分列 `folderAtlasInMemory` / `folderAtlasOnDisk`，归属解析与
+  `assignedAloneOnDisk` 一律读磁盘 `package.xml`，响应 `folderAtlasRoundTrip`
+  显式声明该行为。只报内存值会对使用者说谎（真实标了 alone 却显示为空）。
+- **旧规则在 import 时就生效，不只在 publish**（真机实证）：只调
+  `import_image --save`、全程未调 publish，`package.xml` 已写入 `atlas="alone"`。
+  调用点为 `import_image`（首次导入与同名替换）。因此 `disagreements` 统计的是
+  **已经写进工程的**图集归属，不只是下次发布会发生什么。响应
+  `legacyRule.appliedAt` 列出全部三个调用点。附带后果：因内存值不读回，
+  `applyLargeImageAtlasRule` 的幂等守卫在重启后恒不命中，每次 publish 都会重复
+  `SetChanged`。
+- **主产出是 `summary.assignedAloneButFits`**：磁盘上已标 `alone`、但按真实约束
+  装得下的图有几张——这是最直接可执行的数。逐图 `legacyAlone` 与 `disagrees`
+  （恒为布尔，不靠缺字段表示 false）。
+- **不改任何东西**：不写 `folderAtlas`、不置脏。要改归属得等写侧 `set_publish_settings`。
+
+### 验证边界
+
+模拟宿主 153 项、Python 35 项全过（含 16 项新增用例：真实上限、padding、rotation、
+方形图集、下限放大、unknown 三态、按磁盘归属分派、内存/磁盘不一致、只读性、错误路径）。
+**已在 FairyGUI Editor 6.1.4 真机复验**：全局约束路径、真实大图（1920x1080 / 4096x4096 /
+256x256）触发 `exceeds` 与 `disagreements`、以及 `folderAtlas` 不往返这一发现
+（证据 `tests/reports/p8-5-atlas-fit-live.json`）。活体回归 `phase0_fixture verify --live`
+21/21 通过。
+
+**未复验**：①包级 `PackSettings` 路径真机没有可跑实例（隔离工程只有 Package1 且
+`useGlobalAtlasSettings=true`），仅过编译期声明校验与模拟宿主；②`padding` / `rotation` /
+`square` 三条分支真机未被触发——真机没有非全局图集设置的包。声明存在≠运行时可用
+（`GetGear` 返回空接口 `IGear` 即反例），闭掉①需要一次把 `useGlobalAtlasSettings`
+置 false 的真机操作，即写侧 `set_publish_settings`。
+
+**夹具与基线注意**：sample 包新增 4 张图集夹具（`AtlasFixture_Small/HD/Huge/Probe`），
+`tests/fixtures/phase0/initial-resources.json` 已随之更新（差异仅为新增）。
+**不要盲目重跑 `phase0_fixture.py capture`**：它会把会话级值（`savedVersion`、
+按会话分配的运行时节点 id 如 `n0_dftm`→`n0_ujgr`）固化进 `initial-tree.json`，
+让基线随会话漂移。`AtlasFixture_Probe` 仅为验证 `folderAtlas` 往返而建，本可删除，
+但 `FPackage.DeleteItem` 只接在 `remove_movieclip` 上、没有通用包资源删除 Action，
+而手改 `package.xml` 被工程规范 §5.3 禁止，故保留。

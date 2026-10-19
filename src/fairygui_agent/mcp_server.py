@@ -921,6 +921,21 @@ def fgui_get_publish_settings(package_name: str | None = None) -> dict[str, Any]
 
 
 @mcp.tool()
+def fgui_analyze_atlas_fit(package_name: str | None = None) -> dict[str, Any]:
+    """按图集打包器的真实约束（PackSettings / 全局 AtlasSetting）判断每张图能否入图集。
+
+    只读，不改任何资源。返回每张图的 fit（fits / exceeds / unknown）、卡住它的约束
+    （maxWidth / maxHeight / squareSide）以及与旧的大图硬编码规则的差异统计
+    （disagreements）——发布时仍按旧规则标记 folderAtlas=alone，本工具只暴露差异，
+    供决定是否切换。
+    """
+    params: dict[str, Any] = {}
+    if package_name:
+        params["packageName"] = package_name
+    return _client.call("analyze_atlas_fit", params)
+
+
+@mcp.tool()
 def fgui_publish(
     scope: Literal["active", "packages", "all"] = "active",
     package_names: list[str] | None = None,

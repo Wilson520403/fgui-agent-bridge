@@ -357,6 +357,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("save-all", help="保存全部文档、已打开包和工程")
     publish_settings_parser = subparsers.add_parser("publish-settings", help="读取工程和包级发布设置")
     publish_settings_parser.add_argument("package_name", nargs="?")
+
+    atlas_fit_parser = subparsers.add_parser("analyze-atlas-fit", help="按真实图集约束分析每张图能否入图集（只读）")
+    atlas_fit_parser.add_argument("package_name", nargs="?")
     publish_parser = subparsers.add_parser("publish", help="按 FairyGUI 工程发布设置导出资源")
     publish_parser.add_argument(
         "--scope",
@@ -703,6 +706,10 @@ def main() -> int:
             action = "save_all"
         elif args.command == "publish-settings":
             action = "get_publish_settings"
+            if args.package_name:
+                params["packageName"] = args.package_name
+        elif args.command == "analyze-atlas-fit":
+            action = "analyze_atlas_fit"
             if args.package_name:
                 params["packageName"] = args.package_name
         elif args.command == "publish":
