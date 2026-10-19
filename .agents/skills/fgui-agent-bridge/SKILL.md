@@ -54,6 +54,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 用 `fgui_preview_animation` 播放、暂停、停止、跳帧或查询 Transition/MovieClip 预览状态。预览不保存，不能把预览状态描述为资源默认属性。
 - 按钮状态图顺序固定为 `up/down/over/selectedOver/disabled/selectedDisabled`，非空值必须是工程内图片 `ui://` URL。
 - 资源替换：替换显示对象引用的资源使用 `fgui_replace_object_resource`（当前仅支持 Image 与 Loader，不支持 Button 状态资源切换），支持传入 `expected_type` 校验并在 `--save` 时验证 Editor/XML 持久化。
+- 资源引用图（0.8.10+）：改资源引用**之前**先用只读的 `fgui_query_references`（谁引用了它）与 `fgui_query_dependencies`（它依赖了谁）确定影响面——返回分 `referencedItem`（被引用的资源）/`slot`（属性槽：`element.propKey`+`valueType`）/`owner`（宿主对象 `objectId`/`objectName`）/`attributes` 四段——注意编辑器原生 `ReferenceInfo` 的 `itemId` 指的是**被引用方**，「谁引用了它」要看 `owner` 段。两者不写文档、不标记 modified；返回 `totalCount` 与 `truncated`，取不到的名称为 `null`。`fgui_query_dependencies` 的 `seek_level` 默认 `samePackage`，需要跨包全量影响面时传 `all`。全工程替换语义（`replace_references`）尚未落地，替换仍走单对象的 `fgui_replace_object_resource`。
 - 文本样式：文本对象的样式读取与修改优先使用 `fgui_get_text_style` 和 `fgui_set_text_style`（支持 `fontSize`、`color`、`strokeColor`、`shadowColor`、`lineGap`、`letterSpacing`、`align`、`vAlign`、`autoSize` 等白名单属性），并提供回读验证；暂不支持自动 external reload。
 - 属性修改（如 `text`、`icon`、`font` 等白名单属性）进入 Agent 属性事务栈；结构创建、插入和删除没有完整结构快照撤销。
 - `set_property`、`insert_object`、`remove_object`、`replace_object_resource`、`set_text_style` 与全部 Transition 写操作统一走写验证：支持 `save` / `verify` / `external_reload`，返回 `persisted` + `strength`（`reload`/`disk`/`none`）；`external_reload` 需 `save=true`，为关闭重开文档后重新比对。`remove_object` 与 `remove_transition` 按缺失性验证（磁盘 XML 与重载后均不再解析到节点）。

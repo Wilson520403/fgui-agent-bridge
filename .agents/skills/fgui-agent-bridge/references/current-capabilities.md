@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.8`
+- Bridge 版本：`0.8.10`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：48，其中新增 List/Group 布局、Relation、gearDisplay 和 Controller 工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：50，其中新增 List/Group 布局、Relation、gearDisplay、Controller 与资源引用图工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -32,6 +32,7 @@
 | `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth` | 读取活动文档或对象树 |
 | `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
 | `fgui_replace_object_resource` | target、resource_url、expected_type、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用（Button 状态显式拒绝） |
+| `fgui_query_references` / `fgui_query_dependencies` | `resource_url`、`max_items?`、`skip_package_open?` / 另加 `seek_level?` | 只读引用图：谁引用了这个资源 / 这个资源依赖了谁，精确到 packageId/itemId/propKey/arrayIndex/valueType；`seek_level` 取 `selection`/`samePackageButNotExported`/`samePackage`（默认）/`all`，`max_items` 默认 200、上限 2000 |
 | `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读 |
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态；expected 含 children 时执行递归对象树比对 |
 | `fgui_set_list_layout` | target、`fields`（布局字段集）、save?、verify?、external_reload? | 修改 List 布局：`layout`/`selectionMode`/`lineGap`/`columnGap`/`defaultItem`/`autoItemSize`/`align`/`vAlign`/`selectionController`/`foldInvisibleItems`/`clearOnPublish`/`scrollItemToViewOnClick`/`overflow`/`margin` |
@@ -162,3 +163,117 @@
 - 五个写 Action 沿用统一验证梯子（editor → save → 磁盘 XML → external reload）；Controller/Relation/gearDisplay 的 XML 阶段分别比对顶层 `<controller>` 元素和对象节点下的 `<relation>`/`<gearDisplay>` 子元素；枚举型序列化属性缺省（未写出）时计入 `verification.xmlSkippedKeys`，不当作失败也不声称已验证。
 - 真机 6.1.4 已确认的序列化行为：`GetPageNames()` 返回 `id:name` 混合串（读取页面名须用 `GetPages().name`）；`scrollItemToViewOnClick` 序列化默认值为 `true`（缺省不写出）；`selectionMode` 仅在非默认时序列化；`FList` 的 `clearOnPublish`/`foldInvisibleItems`/`scrollItemToViewOnClick` 是公开字段，`overflow`/`marginStr` 在 `FComponent` 基类。
 - 模拟宿主新增 25 项用例（总数 112）；**真机 6.1.4 已验证**（证据：`tests/reports/phase4-live-0.8.8.json`）：list/group 布局写+存+重载、relation 整组替换（含 external reload）、gearDisplay 绑定/名称页面解析/清除、controller 创建/页面/选中页/删除与 external reload、全部错误路径按结构化 code+stage 失败。
+
+## 0.8.9：写入路径归位到编辑器文档模型
+
+背景：Phase 4 真机已暴露 `FRelations.Reset()+AddItem` 绕过文档模型会让文档卡在 modified
+且 save 静默失败；`GetGear` 返回空接口 `IGear`。0.8.9 把同类风险从"事后靠验证发现"
+前移到"写入路径本身就正确 + 绕过时可见且 fail-closed"。
+
+### 行为变化
+
+- **写入优先走文档模型**：`set_property` 一类属性写入改为优先调用
+  `FairyEditor.View.DocElement.SetProperty`（与 `FObject.SetProperty` 签名一致），
+  对象模型保留为回退（未打开文档的资源没有 `docElement`）。`opaque` 是 `FComponent`
+  成员属性、文档模型无对应入口，维持成员写入。
+- **写入路径回报**：所有经 `writeVerification` 的写 Action 返回新增 `writePath` 字段，
+  取值 `document-model`（走了编辑器文档模型）或 `object-model`（绕过文档模型，
+  持久化仅依赖显式 `SetModified` + 磁盘回读）。
+- **静默保存 fail-closed**：请求 `save:true` 时，若写入确实改变了内存值、但文档
+  未进入修改状态，直接报 `persistence_failed`（`details.stage = "modified"`），
+  **在调用 `doc.Save()` 之前**失败关闭——而不是让 Save 静默成功却什么都没写。
+  幂等写入（目标值与现值相同，如重复替换同一资源）不算绕过，不触发该检查。
+
+### 编译期类型校验（构建工具）
+
+`plugin/types/editor.d.ts` 不再是手写 `any` stub，改为由
+`scripts/extract_editor_api.py --emit-stub` 从 FairyGUI Editor 包内真实声明生成：
+成员名、静态性、参数个数（含重载与可选参数 `?`）、继承关系均与真实 API 一致。
+参数与返回类型除基本类型外统一擦成 `any` 以避免拖入标准库依赖树。
+
+它能挡住此前编译期完全放过的错误，例如：
+
+```text
+main.ts(3955,9): error TS2551: Property 'SetPropertty' does not exist on type 'FObject'. Did you mean 'SetProperty'?
+main.ts(147,69):  error TS2554: Expected 1-3 arguments, but got 5.
+main.ts(98,14):   error TS2576: Property 'project' does not exist on type 'App'. Did you mean to access the static member 'App.project' instead?
+```
+
+重新生成（需本机已装 FairyGUI Editor，清单只对 6.1.4 有效）：
+
+```bash
+python3 scripts/extract_editor_api.py --emit-stub plugin/main.ts --out plugin/types/editor.d.ts
+```
+
+### 验证边界
+
+模拟宿主 118 项、Python 31 项全过。**已在 FairyGUI Editor 6.1.4 真机复验**
+（证据：`tests/reports/p8-0-p8-1-live.json`）：10 条写 Action 的 `writePath` 全部与实际写入层
+一致——`set_property`/`set_relation`/`set_gear_display`/`replace_object_resource`（Image）
+为 `document-model`，`set_text_style`/`set_list_layout`/`set_group_layout`/`set_controller`/
+`upsert_transition`/`replace_object_resource`（Loader）为 `object-model`；
+`set_property --external-reload` 得 `strength:reload`。
+
+**真机复验中发现并修复了两个本轮引入的缺陷：**
+
+1. `writePath` 谎报——`lastWritePath` 原本只在 `setWritableProperty` 里赋值，
+   `set_text_style` 等走成员赋值的路径从不赋值，会报出上一个 action 留下的值。
+   改为每个请求入口重置为 `null`、每条写路径显式声明；新增回归用例
+   `writePath is declared per action and never inherited from the previous one`。
+2. `replace_object_resource` 最初漏报（Image 走 `Document.ReplaceSelection` 属文档模型，
+   Loader 走 `FLoader.url` 属对象模型），已分别声明。
+
+未在真机上验证的部分：持久化守卫主动触发 `persistence_failed` 的路径需要人为制造
+「写入生效但文档未标记修改」，本次只由 mock host 覆盖。
+
+## 0.8.10：资源引用图（只读，P8-2 的一半）
+
+背景：§1.1 的「图片资源替换语义不完整」缺的不是替换能力，而是**替换前的影响面**——
+过去无法回答「改这张图会波及哪些节点」。编辑器原生 `DependencyQuery` 正好提供
+`propKey` / `arrayIndex` 这种「哪个对象的哪个属性槽」的精度。
+
+### 行为
+
+- `fgui_query_references`（`query_references`）：全工程范围内，列出所有引用目标资源的
+  位置。**每条分四段**（真机实测后定稿，勿按 `ReferenceInfo` 的字段名想当然）：
+  - `referencedItem`：被引用的资源（`packageId` / `packageName` / `itemId` / `itemName`）。
+    `ReferenceInfo` 自身的 `ownerPkg`/`pkgId`/`itemId` 指的就是它，**不是引用方**；
+  - `slot`：引用发生的属性槽（`element` 元素标签 / `propKey` / `arrayIndex` /
+    `valueTypeCode` / `valueType`：`id`/`url`/`urlComplex`/`charImage`/`assetProperty`）；
+  - `owner`：持有该槽的宿主对象（`objectId` / `objectName`，以及按对象 id 后缀解析出的
+    `itemId` / `itemName`，解析不到即 `null`）；
+  - `attributes`：该 XML 元素的完整属性表，便于调用方自行复核。
+- `fgui_query_dependencies`（`query_dependencies`）：目标资源依赖了哪些资源。
+  `seek_level` 取 `selection` / `samePackageButNotExported` / `samePackage`（默认）/
+  `all`，分隔符写法不敏感（`same_package` 等价）；响应回报实际生效的 `seekLevel` 与
+  `seekLevelCode`。
+- 两条都返回 `readOnly: true`、`totalCount`、`truncated`。`max_items` 默认 200、上限 2000；
+  **截断必须显式上报**，`totalCount` 始终是真实总数，不静默丢弃。
+- **先打开未打开的包**：项目级引用查询若只扫已打开的包，会返回一个看起来完整、
+  实际少算的结果。默认先 `EnsureOpen` 全部包，代价记录在 `packages` 字段
+  （`{skipped, opened, packageCount}`）；`skip_package_open=true` 可跳过，但漏算风险
+  由调用方自行承担，且响应会标 `skipped:true`。
+- 取不到的名字报 `null`：引用方所在包可能没打开，不会为了展示一个名字去 `EnsureOpen`
+  把一堆包装起来。资源描述失败时退回最小身份信息（`id`/`name`/`url`），不让单个
+  未加载资源拖垮整条只读查询。
+- 两条都是只读：不写文档、不标记 modified、不参与 publish 期间的写操作封锁表，
+  也没有 `save` / `external_reload` 参数（MCP、CLI、插件三层同时约束，回归用例钉住）。
+- 与 `replace_object_resource`（单对象覆盖）并存，语义不同：本阶段**尚无**
+  全工程替换的 `replace_references`（写操作，须先出预览），见计划 P8-2 剩余项。
+
+### 真机实测要点（Editor 6.1.4，证据 `tests/reports/p8-2-live.json`）
+
+- `ReferenceInfo.content` 是 `FairyGUI.Utils.XML` 元素节点；`attributes` 是 C# 字典，
+  `JSON.stringify` 得 `{}`、`Keys.get_Item` 不存在，只能 `GetEnumerator()` + `MoveNext()`；
+- `XML.ToXMLString()` 在 Puerts 下抛「overload is striped by unity」，不可用；
+- `seekLevel` 语义实测：非选中查询只有 `samePackage` / `all` 有产出，`selection` 与
+  `samePackageButNotExported` 在本工程返回 0 条；
+- 只读性已验证：打开文档后连续查询，文档 `modified` 仍为 false，磁盘 XML 哈希不变；
+- 顺带修复：`resolveItem` 的「未找到指定 FairyGUI 资源」此前被归成 `editor_rejected`，
+  现为 `target_not_found`。
+
+### 验证边界
+
+模拟宿主 129 项、Python 33 项全过（含 11 项新增引用图用例）。**已在 FairyGUI Editor
+6.1.4 真机复验**读侧全部能力与错误路径。**未复验**：多包工程中未打开的包是否会被少算
+（隔离工程只有一个已打开的包，`packages.opened` 恒为 0，真机触发不了该分支）。

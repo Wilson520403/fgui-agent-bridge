@@ -2,7 +2,7 @@
 
 通过 MCP (Model Context Protocol) 或 CLI，让 AI 编程 Agent（如 Cursor、Claude、Codex、VS Code 等）以结构化指令直接操作 FairyGUI Editor，实现自动拼 UI 界面、动效制作与一键发布。
 
-`v0.8.8` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4` · 本地 JSON 队列 + MCP stdio
+`v0.8.10` · 队列协议 `1.0` · 已验证 FairyGUI Editor `6.1.4`（含 0.8.9 写入路径真机复验） · 本地 JSON 队列 + MCP stdio
 
 > **说明**：Bridge 仓库与业务 FairyGUI 工程分开存放。FairyGUI 工程只需安装轻量插件；在宿主 IDE 中可按需安装 Skill 提高 AI 操作准确率。
 
@@ -206,7 +206,7 @@ uv run fgui-agent publish --scope active
 | **Transition 动效** | `fgui_list_transitions`、`fgui_get_transition`、`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item` | 声明式增改整段过渡动效，或原子化修改特定轨道关键帧 |
 | **动画预览** | `fgui_preview_animation` | 在编辑器中实时播放、暂停、停止、跳帧预览 Transition 或 MovieClip |
 | **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 属性与操作撤销/重做、保存文档或放弃全部未保存修改 |
-| **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树（`expected.children` 递归比对）、替换 Image/Loader 资源引用、读写文本样式 |
+| **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`、`fgui_query_references`、`fgui_query_dependencies`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树、替换 Image/Loader 资源引用、只读查询资源引用图、读写文本样式 |
 | **布局与控制器** | `fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 修改 List/Group 布局字段、整体替换 Relation 绑定、设置 gearDisplay 联动、增删改组件 Controller |
 | **发布** | `fgui_get_publish_settings`、`fgui_publish` | 查询发布设置、执行资源发布（支持活动包/指定包/全部包） |
 
@@ -219,6 +219,13 @@ uv run fgui-agent publish --scope active
 - **大图独立图集**：达到 `1920×1080` 或任一边达到 `2048` 的图片自动标记为 `alone` 纹理集，发布时自动纠正历史大图配置。
 - **写操作验证**：写操作支持保存后磁盘 XML 比对，以及「关闭重开再比对」的强持久化验证。
 - **对象树比对**：`fgui_verify_document` 的 `expected` 可携带递归 `children` spec，逐层比对名称、类型和关键属性；`childrenMode` 支持 `exact`（按位置全等）与 `subset`（按 id/name/index 定位、允许多余节点），磁盘比对覆盖当前组件 XML 序列化范围。
+- **资源引用图（0.8.10）**：`fgui_query_references` / `fgui_query_dependencies` 只读查询「谁引用了它 / 它依赖了谁」，把引用精确到宿主对象与属性槽，改资源前先跑它看影响面。全工程替换语义（`replace_references`）尚未落地，替换仍走 `fgui_replace_object_resource`。
+- **写入路径归位（0.8.9）**：属性写入优先走编辑器文档模型 `DocElement.SetProperty`，对象模型保留回退；写 Action 返回新增 `writePath`（`document-model` / `object-model`）字段，让绕过文档模型成为可观测事实。请求 `save:true` 时若内存已变而文档未进入修改状态，在 `doc.Save()` 之前以 `persistence_failed`（stage `modified`）失败关闭，不再让 Save 静默成功却什么都没写；幂等写入不触发该检查。
+- **真机复验（0.8.9）**：已在 FairyGUI Editor 6.1.4 实机验证 10 条写 Action 的 `writePath`
+  与实际写入层一致，`set_property --external-reload` 得 `strength:reload`；证据
+  `tests/reports/p8-0-p8-1-live.json`。复验中发现并修复 `writePath` 跨 action 继承导致的
+  谎报，以及 `replace_object_resource` 的 Image/Loader 分支漏报。
+- **编译期类型校验（0.8.9）**：`plugin/types/editor.d.ts` 改由 `scripts/extract_editor_api.py --emit-stub` 从编辑器包内真实声明生成，成员名、静态性、参数个数（含重载与可选参数）、继承关系均与真实 API 一致，可挡住拼错成员名、参数个数错误和静态/实例误用。
 - **布局与联动（0.8.8）**：List/Group 布局字段经类型化校验写入（对象模型未暴露的属性回退 `GetProperty`/`SetProperty`）；`fgui_set_relation` 为整体替换语义；`fgui_set_gear_display` 的 `pages` 接受页面 id 或名称；`fgui_set_controller` 的 `pages` 整体替换会重新分配页面 id。五个写 Action 沿用 `save`/`verify`/`external_reload` 验证梯子，序列化缺省的枚举属性计入 `verification.xmlSkippedKeys`，不虚报验证覆盖。
 
 ---

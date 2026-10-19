@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-0-p8-1-live",
+  "bridgeVersion": "0.8.9",
+  "editorVersion": "6.1.4",
+  "editorBuild": "8586c82ced4c",
+  "editorPath": "/Users/wilson/Downloads/FairyGUI-Editor.app",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture）",
+  "liveEditorVerified": true,
+  "verifiedAt": "2026-10-19",
+  "purpose": [
+    "P8-0 写入路径归位：属性写入优先走编辑器文档模型 DocElement.SetProperty，对象模型保留回退",
+    "P8-0 writePath 回报：每条写 action 显式声明实际写入层，未声明即 null（unknown），不得继承上一个 action",
+    "P8-0 静默保存 fail-closed：save 前若内存已变而文档未进入修改状态，以 persistence_failed(stage=modified) 在 doc.Save() 之前失败",
+    "P8-1 编译期类型校验：plugin/types/editor.d.ts 改为从真实声明生成，main.ts 对真实 API 0 error"
+  ],
+  "environment": {
+    "heartbeatAdvances": true,
+    "activeDocument": "BridgeFixture",
+    "editorFocused": "osascript 置前台后心跳稳定推进",
+    "note": "编辑器退到后台会被节流，App.runInBackground=true 不能完全避免；复验全程保持前台"
+  },
+  "writePathMatrix": [
+    { "case": "set_property",            "actual": "document-model", "expected": "document-model", "match": true, "strength": "disk",  "layer": "DocElement.SetProperty" },
+    { "case": "set_text_style",          "actual": "object-model",   "expected": "object-model",   "match": true, "strength": "disk",  "layer": "FTextField 成员赋值" },
+    { "case": "set_relation",            "actual": "document-model", "expected": "document-model", "match": true, "strength": "disk",  "layer": "DocElement.UpdateRelations" },
+    { "case": "set_gear_display",        "actual": "document-model", "expected": "document-model", "match": true, "strength": "disk",  "layer": "DocElement.UpdateGears" },
+    { "case": "set_list_layout",         "actual": "object-model",   "expected": "object-model",   "match": true, "strength": "disk",  "layer": "FList 公开字段" },
+    { "case": "set_group_layout",        "actual": "object-model",   "expected": "object-model",   "match": true, "strength": "disk",  "layer": "FGroup 公开字段" },
+    { "case": "set_controller",          "actual": "object-model",   "expected": "object-model",   "match": true, "strength": "disk",  "layer": "FController 成员（DocElement 无入口）" },
+    { "case": "upsert_transition",       "actual": "object-model",   "expected": "object-model",   "match": true, "strength": "disk",  "layer": "FTransitions / FTransitionItem" },
+    { "case": "replace_object_resource (Image)",  "actual": "document-model", "expected": "document-model", "match": true, "strength": "disk", "layer": "Document.ReplaceSelection" },
+    { "case": "replace_object_resource (Loader)", "actual": "object-model",   "expected": "object-model",   "match": true, "strength": "disk", "layer": "FLoader.url 成员赋值" }
+  ],
+  "idempotentWrite": {
+    "case": "set_property 同值再写 + save",
+    "result": "ok",
+    "note": "内存值未变时文档保持未修改是正确的，不得被判定为绕过文档模型；本轮曾因此误报，已修正并补回归用例",
+    "regressionTest": "mock host: 'an idempotent replace is not mistaken for a document-model bypass'"
+  },
+  "externalReload": {
+    "case": "set_property scaleX=1.5 --save --external-reload",
+    "strength": "reload",
+    "note": "关闭重开文档后重新定位并比对通过，writePath 仍为 document-model"
+  },
+  "noWriteReportsNull": {
+    "case": "replace_object_resource 指向当前已生效的同一资源",
+    "writePath": null,
+    "note": "未发生写入，因此没有可声明的写入层；null 是正确取值，不得沿用上一次 action 的值"
+  },
+  "defectsFoundAndFixedDuringThisVerification": [
+    {
+      "id": "P8-0-D1",
+      "severity": "high",
+      "title": "writePath 谎报：未声明的写路径继承上一个 action 的值",
+      "foundBy": "真机复验",
+      "detail": "lastWritePath 早先只在 setWritableProperty/writeObjectProperty 中赋值；set_text_style 等走直接成员赋值的路径从未赋值，于是会报出上一个 set_property 留下的 document-model",
+      "fix": "每个请求入口 beginWrite() 重置为 null；每条写路径显式声明写入层；四条验证链统一回报 writePath；新增 mock host 回归用例 'writePath is declared per action and never inherited from the previous one'",
+      "regressionLocked": true
+    },
+    {
+      "id": "P8-0-D2",
+      "severity": "high",
+      "title": "静默保存守卫误伤幂等写入",
+      "foundBy": "mock host",
+      "detail": "首版守卫只看 doc.isModified，把「目标值与现值相同、根本没写入」的正确情形判为绕过文档模型",
+      "fix": "守卫增加 changedInMemory 前置条件，只有内存确实变化时才检查；新增回归用例钉住",
+      "regressionLocked": true
+    }
+  ],
+  "offlineSuites": {
+    "mockHost": "118/118",
+    "pythonUnittest": "31/31",
+    "tsc": "0 error（plugin/main.ts 对着由真实声明生成的 stub）"
+  },
+  "notVerified": [
+    "持久化守卫在真机上主动触发 fail-closed 的路径：需要人为制造「写入生效但文档未标记修改」，本次未在真机上构造该场景，仅由 mock host 覆盖",
+    "P8-2 ~ P8-7 未实现，无真机证据"
+  ],
+  "boundary": "本报告只覆盖 0.8.9 的 P8-0 / P8-1。写入层判定基于 FairyGUI Editor 6.1.4 的 editor.d.ts 声明 + 本次实测；升级编辑器后必须重新提取并复跑本矩阵。"
+}

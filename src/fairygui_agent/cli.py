@@ -257,6 +257,17 @@ def build_parser() -> argparse.ArgumentParser:
     resource_parser.add_argument("--no-verify", action="store_true")
     resource_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
 
+    # P8-2 引用图（只读）。不带 --save / --verify 语义：这两条命令不写任何东西。
+    references_parser = subparsers.add_parser("references", help="查询哪些资源引用了目标资源（只读）")
+    references_parser.add_argument("url", help="目标资源的 ui:// URL")
+    references_parser.add_argument("--max-items", type=int, help=f"最多返回条数（默认 200，上限 2000）")
+    references_parser.add_argument("--skip-package-open", action="store_true", help="不预先打开未打开的包；更快，但可能少算未打开包里的引用")
+    dependencies_parser = subparsers.add_parser("dependencies", help="查询目标资源依赖了哪些资源（只读）")
+    dependencies_parser.add_argument("url", help="目标资源的 ui:// URL")
+    dependencies_parser.add_argument("--seek-level", choices=["selection", "samePackageButNotExported", "samePackage", "all"], default="samePackage", help="依赖搜索范围，默认 samePackage")
+    dependencies_parser.add_argument("--max-items", type=int, help="最多返回条数（默认 200，上限 2000）")
+    dependencies_parser.add_argument("--skip-package-open", action="store_true", help="不预先打开未打开的包；更快，但可能少算未打开包里的引用")
+
     text_get_parser = subparsers.add_parser("get-text-style", help="读取文本样式")
     _add_target_arguments(text_get_parser)
     text_set_parser = subparsers.add_parser("set-text-style", help="设置文本样式")
@@ -597,6 +608,14 @@ def main() -> int:
             action = "replace_object_resource"
             params = {"target": target_from_args(args), "resourceURL": args.resource_url, "expectedType": args.expected_type, "verify": not args.no_verify, "save": args.save, "externalReload": args.external_reload}
             if args.state: params["state"] = args.state
+        elif args.command == "references":
+            action = "query_references"
+            params = {"url": args.url, "skipPackageOpen": args.skip_package_open}
+            if args.max_items is not None: params["maxItems"] = args.max_items
+        elif args.command == "dependencies":
+            action = "query_dependencies"
+            params = {"url": args.url, "seekLevel": args.seek_level, "skipPackageOpen": args.skip_package_open}
+            if args.max_items is not None: params["maxItems"] = args.max_items
         elif args.command == "get-text-style":
             action = "get_text_style"
             params = {"target": target_from_args(args)}

@@ -76,6 +76,15 @@ LAYOUT_CAPABILITIES = frozenset(
     }
 )
 
+# Phase 8 / P8-2 (0.8.10)：资源引用图（只读）。写侧的 replace_references 尚未落地，
+# 出现全工程替换语义前，这两个只读查询就是唯一能回答"谁引用了它"的入口。
+REFERENCE_CAPABILITIES = frozenset(
+    {
+        "query_references",
+        "query_dependencies",
+    }
+)
+
 
 class BridgeError(RuntimeError):
     """桥接器连接、协议或命令错误。"""
@@ -222,6 +231,7 @@ class BridgeClient:
         optional = {
             ANIMATION_CAPABILITIES: ("动画", "0.8.1"),
             LAYOUT_CAPABILITIES: ("布局/控制器", "0.8.8"),
+            REFERENCE_CAPABILITIES: ("资源引用图", "0.8.10"),
         }
         for capability_set, (label, minimum) in optional.items():
             if action in capability_set:

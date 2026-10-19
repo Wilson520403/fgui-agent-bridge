@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.8";
+const BRIDGE_VERSION = "0.8.10";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -212,7 +212,8 @@ function writeStatus(): void {
             "redo",
             "verify_document", "replace_object_resource", "get_text_style", "set_text_style",
             "set_list_layout", "set_group_layout", "set_relation", "set_gear_display",
-            "set_controller", "list_controllers"
+            "set_controller", "list_controllers",
+            "query_references", "query_dependencies"
         ]
     });
     lastStatusWrittenMs = Date.now();
@@ -517,6 +518,9 @@ function toCsStringArray(values: string[]): any {
 }
 
 function markPackageChanged(pkg: FairyEditor.FPackage): void {
+    // 包资源创建/导入/删除走 FPackage.ImportResource / UpdateResource / DeleteItem 等
+    // 包层 API，组件文档模型不参与这条路径。
+    lastWritePath = WRITE_PATH_MODEL;
     pkg.SetChanged();
     App.project.SetChanged();
     clearAgentHistory();
@@ -1354,6 +1358,21 @@ function writeVerification(doc: any, obj: any, before: any, after: any, params: 
     const verification = verifyObject(doc, obj, expected, false, null, null, readers);
     let saved = false;
     if (params.save) {
+        // Silent-save precondition: if neither the editor's document model nor the
+        // explicit doc.SetModified(true) registered the change, doc.Save() would
+        // report success while writing nothing — the exact failure signature seen
+        // with FRelations.Reset()+AddItem on 6.1.4. Fail closed before attempting it.
+        //
+        // Only meaningful when the write actually changed something: a request that
+        // resolves to the value already present (e.g. replacing an image with the
+        // same resource again) legitimately leaves the document unmodified, and
+        // treating that as a bypass would reject a correct no-op.
+        const changedInMemory = !valuesEqual(before, after);
+        if (changedInMemory && doc.isModified !== true)
+            verificationError(
+                "persistence_failed",
+                "写入后文档未进入修改状态，保存会静默跳过；这通常意味着写入绕过了编辑器文档模型",
+                { stage: "modified", target, writePath: lastWritePath, expected });
         try { doc.Save(); }
         catch (error) { verificationError("persistence_failed", "保存失败", { stage: "save", target, reason: String(error), expected }); }
         saved = doc.isModified === false;
@@ -1370,6 +1389,10 @@ function writeVerification(doc: any, obj: any, before: any, after: any, params: 
         ok: true, target, before, after,
         documentModified: Boolean(liveDoc.isModified),
         saved, persisted: strength !== NONE_STRENGTH, strength, verification: checked,
+        // Which editor layer actually applied the write. object-model here means the
+        // write bypassed the document model and persistence rests on the explicit
+        // SetModified + disk readback alone.
+        writePath: lastWritePath,
         note: `${strengthNote(checked, saved, "仅验证 expected 中的字段；")}失败不自动回滚。`
     };
 }
@@ -1442,6 +1465,9 @@ function layoutMemberValue(obj: any, spec: any): any {
 }
 
 function assignLayoutMember(obj: any, spec: any, value: any): void {
+    // List/Group 布局成员在编辑器对象模型里就是公开字段，直接成员赋值，
+    // 不经过 DocElement（序列化属性名与成员名不一定一致）。
+    lastWritePath = WRITE_PATH_MODEL;
     const member = spec.member || spec.attr;
     if (obj[member] !== undefined) { obj[member] = value; return; }
     if (typeof obj.SetProperty === "function") { obj.SetProperty(spec.attr, value); return; }
@@ -1806,6 +1832,7 @@ function setRelation(params: any): any {
         else if (rel.items) while (rel.items.Count > 0) rel.RemoveItem(rel.items.get_Item(0));
         for (const spec of specs) rel.AddItem(spec.targetObj, spec.sidePair);
     }
+    lastWritePath = applied ? WRITE_PATH_DOCUMENT : WRITE_PATH_MODEL;
     doc.SetModified(true);
     doc.RefreshInspectors();
     const after = relationMemoryValues(obj);
@@ -1995,6 +2022,7 @@ function setGearDisplay(params: any): any {
             }
         }
     }
+    lastWritePath = applied ? WRITE_PATH_DOCUMENT : WRITE_PATH_MODEL;
     doc.SetModified(true);
     doc.RefreshInspectors();
     if (typeof obj.CheckGearDisplay === "function") { try { obj.CheckGearDisplay(); } catch (_) { } }
@@ -2101,11 +2129,15 @@ function controllerWriteVerification(doc: any, name: string, params: any, expect
     const strength = verificationStrength(verification, saved);
     return {
         state, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+        writePath: lastWritePath,
         note: `${strengthNote(verification, saved, "仅验证 Controller 名称、页面集与选中页；")}失败不自动回滚。`
     };
 }
 
 function setController(params: any): any {
+    // Controller 页面集与选中页走 FController 成员（AddPage/RemovePageAt/
+    // SetSelectedIndex…），DocElement 没有对应入口。
+    lastWritePath = WRITE_PATH_MODEL;
     const doc = getActiveDocument();
     const name = String(params.name || "");
     if (!name) verificationError("invalid_argument", "缺少控制器 name", { stage: "input" });
@@ -2126,7 +2158,8 @@ function setController(params: any): any {
             ok: true, target, before, removed: before,
             documentModified: Boolean((verification.state && verification.state.doc || doc).isModified),
             saved: verification.saved, persisted: verification.persisted, strength: verification.strength,
-            verification: verification.verification, note: verification.note
+            verification: verification.verification, note: verification.note,
+            writePath: verification.writePath
         };
     }
 
@@ -2188,7 +2221,8 @@ function setController(params: any): any {
         ok: true, target, before, after,
         documentModified: Boolean((verification.state && verification.state.doc || doc).isModified),
         saved: verification.saved, persisted: verification.persisted, strength: verification.strength,
-        verification: verification.verification, note: verification.note
+        verification: verification.verification, note: verification.note,
+        writePath: verification.writePath
     };
 }
 
@@ -2300,6 +2334,7 @@ function transitionWriteVerification(doc: any, name: string, expectPresent: bool
     const strength = verificationStrength(verification, saved);
     return {
         state, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+        writePath: lastWritePath,
         note: `${strengthNote(verification, saved, "仅验证 Transition 名称与公开条目数；")}失败不自动回滚。`
     };
 }
@@ -2384,6 +2419,8 @@ function packageItemAssetReload(item: any, target: any): any {
 // caller after mutation (or before deletion, for absent checks). checkFile asks
 // the verification to hard-fail when the item's backing file is missing.
 function writePackageVerification(pkg: any, ref: any, params: any): any {
+    // 包资源写入走 FPackage.ImportResource/UpdateResource/DeleteItem 等包层 API，
+    // 组件文档模型不参与。
     const expectPresent = ref.present !== false;
     const target = { id: ref.id || null, name: ref.name || null, path: ref.path || null, type: ref.type || "packageItem", url: ref.url || null };
     const stub = { id: ref.id, name: ref.name, objectType: ref.type || "packageItem" };
@@ -2435,6 +2472,7 @@ function writePackageVerification(pkg: any, ref: any, params: any): any {
     const strength = verificationStrength(verification, saved);
     return {
         ok: true, target, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
+        writePath: lastWritePath,
         note: `${strengthNote(verification, saved, "包资源验证覆盖 package.xml 条目与资源文件；")}失败不自动回滚。`
     };
 }
@@ -2476,8 +2514,14 @@ function replaceObjectResource(params: any): any {
     const preserveSize = params.preserveSize !== false;
     if (preserveSize) { expected.width = obj.width; expected.height = obj.height; }
     if (before.resourceURL !== canonicalUrl) {
-        if (type === "loader") obj.url = canonicalUrl;
-        else {
+        if (type === "loader") {
+            // Loader 只有成员写入路径
+            lastWritePath = WRITE_PATH_MODEL;
+            obj.url = canonicalUrl;
+        } else {
+            // Image 走 Document.ReplaceSelection：编辑器自己的替换命令，
+            // 会按资源类型处理默认尺寸/图集归属，优于直接改成员。
+            lastWritePath = WRITE_PATH_DOCUMENT;
             doc.SetSelection(obj);
             doc.ReplaceSelection(canonicalUrl);
             // ReplaceSelection can invalidate the old object reference. Re-resolve by stable ID.
@@ -2488,6 +2532,296 @@ function replaceObjectResource(params: any): any {
         doc.RefreshInspectors();
     }
     return writeVerification(doc, obj, before, verifiedObjectValues(obj), params, expected);
+}
+
+// --- Phase 8 / P8-2：资源引用图（只读） ------------------------------------
+// 编辑器自带的 DependencyQuery 能给出 propKey / arrayIndex 这种"哪个对象的哪个
+// 属性槽"的精度，正是 §1.1 缺的那一半。这里只放只读查询：全工程替换语义
+// （ReplaceReferences）是写操作，另开 replace_references，且必须先出预览。
+
+const DEPENDENCY_SEEK_LEVEL_NAMES = ["selection", "samePackageButNotExported", "samePackage", "all"];
+const DEPENDENCY_SEEK_LEVELS: { [key: string]: number } = {
+    selection: 0,
+    samepackagebutnotexported: 1,
+    samepackage: 2,
+    all: 3
+};
+
+// ReferenceInfo.content 在真机（Editor 6.1.4）上是 FairyGUI.Utils.XML 的元素节点，
+// 它才是「谁在引用」的答案：attributes 里带宿主对象的 id/name（如 n3_fix01/btnMain）。
+// 而 ReferenceInfo 自身的 pkgId/itemId 指的是**被引用的那个资源**——
+// 拿这两个字段回答「谁引用了它」会得到「Red 引用了它自己」这种自相矛盾的输出。
+// valueType 的数值是声明里的确定值，名字只是给人看的；遇到未来版本新增取值时
+// 按代码原样回报，绝不猜。
+const REFERENCE_VALUE_TYPES: { [key: number]: string } = {
+    0: "id",
+    1: "url",
+    2: "urlComplex",
+    3: "charImage",
+    4: "assetProperty"
+};
+
+const REFERENCE_QUERY_MAX_ITEMS = 200;
+const REFERENCE_QUERY_MAX_ITEMS_CEILING = 2000;
+
+function dependencySeekLevel(value: any): { name: string, level: number } {
+    if (value === undefined || value === null || value === "")
+        return { name: DEPENDENCY_SEEK_LEVEL_NAMES[2], level: 2 };
+
+    if (typeof value === "number") {
+        const level = Math.round(value);
+        if (level < 0 || level >= DEPENDENCY_SEEK_LEVEL_NAMES.length)
+            verificationError("invalid_argument", `seekLevel 数值越界：${value}`, { stage: "input", seekLevel: value, allowed: DEPENDENCY_SEEK_LEVEL_NAMES });
+        return { name: DEPENDENCY_SEEK_LEVEL_NAMES[level], level };
+    }
+
+    // 允许 samePackage / same_package / SAME-PACKAGE 三种写法，避免调用方
+    // 因为分隔符不同而拿到一个看起来像"不支持"的结果。
+    const level = DEPENDENCY_SEEK_LEVELS[String(value).replace(/[^A-Za-z]/g, "").toLowerCase()];
+    if (level === undefined)
+        verificationError("invalid_argument", `seekLevel 取值无效：${value}`, { stage: "input", seekLevel: value, allowed: DEPENDENCY_SEEK_LEVEL_NAMES });
+    return { name: DEPENDENCY_SEEK_LEVEL_NAMES[level], level };
+}
+
+function queryItemLimit(value: any): number {
+    if (value === undefined || value === null)
+        return REFERENCE_QUERY_MAX_ITEMS;
+
+    const limit = Number(value);
+    if (!isFinite(limit) || limit < 1 || limit > REFERENCE_QUERY_MAX_ITEMS_CEILING)
+        verificationError("invalid_argument", `maxItems 必须是 1..${REFERENCE_QUERY_MAX_ITEMS_CEILING} 的数字`, { stage: "input", maxItems: value });
+    return Math.floor(limit);
+}
+
+function isHostObject(value: any): boolean {
+    return value !== null && value !== undefined && typeof value === "object";
+}
+
+function xmlElementName(xml: any): any {
+    if (!isHostObject(xml) || xml.name === undefined || xml.name === null)
+        return null;
+    return safeValue(xml.name);
+}
+
+// XML.attributes 是 C# 字典：JSON.stringify 得到 {}，attributes.Keys 在 Puerts 下
+// 也不是可用的键集合（真机实测 keys.get_Item 不存在）。唯一可靠的取法是
+// GetEnumerator + MoveNext/Current。
+function xmlAttributes(xml: any): { [key: string]: string } {
+    const result: { [key: string]: string } = {};
+    if (!isHostObject(xml) || !isHostObject(xml.attributes))
+        return result;
+
+    try {
+        const enumerator = xml.attributes.GetEnumerator();
+        while (enumerator.MoveNext()) {
+            const pair = enumerator.Current;
+            const key = pair.key !== undefined ? pair.key : pair.Key;
+            const value = pair.value !== undefined ? pair.value : pair.Value;
+            result[String(key)] = String(value);
+        }
+    }
+    catch (_) {
+        // 取不到就返回空字典：宁可少给字段，也不给看起来像属性表的假数据。
+        return {};
+    }
+    return result;
+}
+
+// DepItem.content 与 ReferenceInfo.content 同为 XML 元素节点（真机实测）。
+// 标量原样返回，宿主对象只输出能确证的字段，识别不了就报 null ——
+// 对宿主对象做 String() 会得到一段看起来可信、实际无意义的文本。
+function describeQueryContent(content: any): any {
+    if (content === null || content === undefined)
+        return null;
+
+    const valueType = typeof content;
+    if (valueType === "string" || valueType === "number" || valueType === "boolean")
+        return content;
+    if (!isHostObject(content))
+        return null;
+
+    const element = xmlElementName(content);
+    const attributes = xmlAttributes(content);
+    const summary: any = {};
+    if (element !== null) summary.element = element;
+    if (Object.keys(attributes).length) summary.attributes = attributes;
+    if (content.objectType !== undefined && content.objectType !== null) summary.objectType = safeValue(content.objectType);
+    if (content.id !== undefined && content.id !== null) summary.id = safeValue(content.id);
+    if (content.name !== undefined && content.name !== null && element === null) summary.name = safeValue(content.name);
+    return Object.keys(summary).length ? summary : null;
+}
+
+// 引用方所在的包可能根本没打开。取不到名字就报 null，不能为了一个展示字段
+// 去 EnsureOpen 把一堆包装起来 —— 只读查询不该有这种副作用。
+function ownerItemName(info: FairyEditor.ReferenceInfo): any {
+    try {
+        const pkg = info.ownerPkg;
+        const itemId = String(info.itemId || "");
+        if (!pkg || !itemId)
+            return null;
+        const item = pkg.GetItem(itemId);
+        return item ? safeValue(item.name) : null;
+    }
+    catch (_) {
+        return null;
+    }
+}
+
+// FairyGUI 的对象 id 形如 "n3_fix01"，后缀是所属资源的 id（真机实测：n3_fix01 属于
+// BridgeFixture/fix01）。解析成功才回报，解析不出来报 null ——
+// 未经校验的字符串猜测比空值更危险。
+function ownerItemFromObjectId(packageId: string, objectId: string): FairyEditor.FPackageItem {
+    if (!objectId)
+        return null;
+
+    const cut = objectId.lastIndexOf("_");
+    if (cut < 0 || cut === objectId.length - 1)
+        return null;
+
+    try {
+        return App.project.GetItem(packageId, objectId.slice(cut + 1)) || null;
+    }
+    catch (_) {
+        return null;
+    }
+}
+
+function describeReference(info: FairyEditor.ReferenceInfo): any {
+    const valueType = Number(info.valueType);
+    const pkg = info.ownerPkg;
+    const packageId = pkg ? safeValue(pkg.id) : null;
+    const attributes = xmlAttributes(info.content);
+    const objectId = attributes.id || null;
+    const owner = packageId ? ownerItemFromObjectId(String(packageId), String(objectId || "")) : null;
+
+    return {
+        // 被引用的资源：ReferenceInfo 自身的身份字段指的就是它
+        referencedItem: {
+            packageId,
+            packageName: pkg ? safeValue(pkg.name) : null,
+            itemId: safeValue(info.itemId),
+            itemName: ownerItemName(info)
+        },
+        // 引用发生的那个属性槽
+        slot: {
+            element: xmlElementName(info.content),
+            propKey: safeValue(info.propKey) || null,
+            arrayIndex: Number(info.arrayIndex) || 0,
+            valueTypeCode: isFinite(valueType) ? valueType : null,
+            valueType: REFERENCE_VALUE_TYPES[valueType] || null
+        },
+        // 持有该属性槽的宿主对象
+        owner: {
+            objectId,
+            objectName: attributes.name || null,
+            itemId: owner ? safeValue(owner.id) : null,
+            itemName: owner ? safeValue(owner.name) : null
+        },
+        // 该 XML 元素的完整属性表，便于调用方自己定位与复核
+        attributes
+    };
+}
+
+function describeQueryItem(item: any): any {
+    if (!item)
+        return null;
+    try {
+        return describeItem(item);
+    }
+    catch (_) {
+        // 依赖图里可能混有尚未加载的资源。取不到就退回最小身份信息，
+        // 不能让一条只读查询因为单个资源抛错而整条失败。
+        let url: any = null;
+        try { url = String(item.GetURL()); }
+        catch (_) { url = null; }
+        return { id: safeValue(item.id), name: safeValue(item.name), url };
+    }
+}
+
+// 项目级引用查询必须先把包都打开：编辑器只会扫到已打开的包，否则拿到的
+// 是一个看起来完整、实际少算的结果——那比报错更难发现。代价（打开 N 个包）
+// 显式回报在响应里，需要速度的调用方可用 skipPackageOpen 自行承担漏算风险。
+function ensurePackagesOpen(params: any): any {
+    if (params.skipPackageOpen === true)
+        return { skipped: true, opened: 0, packageCount: 0 };
+
+    const packages = App.project.allPackages;
+    const packageCount = packages ? Number(packages.Count) : 0;
+    let opened = 0;
+    for (let i = 0; i < packageCount; i++) {
+        const pkg = packages.get_Item(i);
+        if (!pkg || pkg.opened)
+            continue;
+        pkg.EnsureOpen();
+        opened++;
+    }
+    return { skipped: false, opened, packageCount };
+}
+
+function queryReferences(params: any): any {
+    const item = resolveItem(params);
+    const maxItems = queryItemLimit(params.maxItems);
+    const packages = ensurePackagesOpen(params);
+    const url = String(item.GetURL());
+    const query = new FairyEditor.DependencyQuery();
+    query.QueryReferences(App.project, url);
+
+    const list = query.references;
+    const totalCount = list ? Number(list.Count) : 0;
+    const references: any[] = [];
+    const count = Math.min(totalCount, maxItems);
+    for (let i = 0; i < count; i++)
+        references.push(describeReference(list.get_Item(i)));
+
+    return {
+        ok: true,
+        readOnly: true,
+        target: describeQueryItem(item),
+        packages,
+        totalCount,
+        truncated: count < totalCount,
+        references
+    };
+}
+
+function queryDependencies(params: any): any {
+    const item = resolveItem(params);
+    const seek = dependencySeekLevel(params.seekLevel);
+    const maxItems = queryItemLimit(params.maxItems);
+    const packages = ensurePackagesOpen(params);
+    const url = String(item.GetURL());
+    const query = new FairyEditor.DependencyQuery();
+    // 用 (project, url) 重载而不是 (IList<FPackageItem>)：后者要求从 JS 构造
+    // C# 泛型 List，而引用图查询本来就是一个资源一条命令。
+    query.QueryDependencies(App.project, url, seek.level);
+
+    const list = query.resultList;
+    const totalCount = list ? Number(list.Count) : 0;
+    const dependencies: any[] = [];
+    const count = Math.min(totalCount, maxItems);
+    for (let i = 0; i < count; i++) {
+        const dep: FairyEditor.DepItem = list.get_Item(i);
+        dependencies.push({
+            item: describeQueryItem(dep.item),
+            isSource: Boolean(dep.isSource),
+            analysed: dep.analysed === undefined || dep.analysed === null ? null : Boolean(dep.analysed),
+            targetPath: safeValue(dep.targetPath) || null,
+            refCount: Number(dep.refCount) || 0,
+            content: describeQueryContent(dep.content)
+        });
+    }
+
+    return {
+        ok: true,
+        readOnly: true,
+        target: describeQueryItem(item),
+        seekLevel: seek.name,
+        seekLevelCode: seek.level,
+        packages,
+        totalCount,
+        truncated: count < totalCount,
+        dependencies
+    };
 }
 
 function colorHex(value: any): any {
@@ -2543,6 +2877,7 @@ function setTextStyle(params: any): any {
     }
     const before = textStyle(obj);
     const aliases: any = { vAlign: "verticalAlign", lineGap: "leading" };
+    lastWritePath = WRITE_PATH_MODEL;
     for (const key of Object.keys(style)) obj[aliases[key] || key] = key === "color" ? unityColor(style[key], "color") : style[key];
     doc.SetModified(true);
     doc.RefreshInspectors();
@@ -3315,6 +3650,8 @@ function applyAnimationHistory(entry: AgentAnimationHistoryEntry, undo: boolean)
 }
 
 function mutateTransitions(params: any, operation: string, mutate: (doc: FairyEditor.View.Document) => any, verifySpec: { name: string; present: boolean }): any {
+    // Transition 条目经 transition.CreateItem/DeleteItem 与 FTransitionItem 成员写入。
+    lastWritePath = WRITE_PATH_MODEL;
     const doc = getActiveDocument();
     const transitionTarget = { id: null, name: verifySpec.name, path: null, type: "transition" };
     // Reject impossible reload combinations before any mutation, so a bad
@@ -3343,7 +3680,8 @@ function mutateTransitions(params: any, operation: string, mutate: (doc: FairyEd
         document: describeDocument(liveDoc), transitions: listTransitions(liveDoc),
         documentModified: Boolean(liveDoc.isModified),
         saved: verified.saved, persisted: verified.persisted, strength: verified.strength,
-        verification: verified.verification, note: verified.note
+        verification: verified.verification, note: verified.note,
+        writePath: verified.writePath
     };
 }
 
@@ -3896,20 +4234,75 @@ function validatePropertyTarget(doc: FairyEditor.View.Document, obj: FairyEditor
         throw new Error("opaque 是组件定义属性，只能对当前文档根组件设置");
 }
 
+// ---------- P8-0: 写入路径归位到编辑器文档模型层 ----------
+//
+// FairyGUI Editor 的文档模型层是 FairyEditor.View.DocElement（经 FObject.docElement 取到）。
+// 直接改 F* 对象模型时编辑器不知道文档被改过：6.1.4 实测 FRelations.Reset()+AddItem 就是
+// 这么把文档卡在 modified 且 save 静默失败（见 FGUI-BRIDGE-IMPROVEMENT-PLAN Phase 4 记录）。
+//
+// Bridge 过去对所有写 action 统一手工 doc.SetModified(true) 兜底。那是补丁不是正解——
+// 它只骗过"要不要保存"这个开关，文档内部状态与序列化结果仍然可能不一致，而这种不一致
+// 往往到 external reload 才暴露，表现为"内存已改、磁盘没改"。
+//
+// DocElement.SetProperty 与 FObject.SetProperty 签名完全一致
+// (propName: string, value: any) => void（editor.d.ts L20114 / L17537），因此可按签名直接替换。
+const WRITE_PATH_DOCUMENT = "document-model";
+const WRITE_PATH_MODEL = "object-model";
+
+// 最近一次写入实际走的路径。由各写入路径显式设置，验证层读取并回报，
+// 让"绕过文档模型"变成可观测事实而不是事后才知道的静默失败。
+//
+// 必须是"每条写路径都显式声明"，不能用上一次的值兜底：各写路径的写入方式
+// 并不相同（文本样式与布局成员是直接成员赋值，relation/gear 走 DocElement，
+// controller/transition 走对象模型成员），一旦某条路径忘了设置，继承上一个
+// action 的值就会**撒谎**——真机复验时 set_text_style 报出 document-model
+// 就是这么来的。因此每个请求入口重置为 null，未声明即报 null（unknown）。
+let lastWritePath: string | null = null;
+
+function beginWrite(): void {
+    lastWritePath = null;
+}
+
+function docElementFor(obj: any): any {
+    try {
+        const el = obj ? obj.docElement : null;
+        return el && typeof el.SetProperty === "function" ? el : null;
+    } catch (_) { return null; }
+}
+
+// 走文档模型写入单个属性；不可用或抛错时回退到对象模型。
+// 返回实际使用的路径，供调用方回报。
+function writeObjectProperty(obj: FairyEditor.FObject, property: string, value: any): string {
+    const el = docElementFor(obj);
+    if (el) {
+        try {
+            el.SetProperty(property, value);
+            lastWritePath = WRITE_PATH_DOCUMENT;
+            return WRITE_PATH_DOCUMENT;
+        } catch (_) { /* 回退到对象模型 */ }
+    }
+    obj.SetProperty(property, value);
+    lastWritePath = WRITE_PATH_MODEL;
+    return WRITE_PATH_MODEL;
+}
+
 function getWritableProperty(obj: FairyEditor.FObject, property: string): any {
     if (property === "opaque")
         return (obj as FairyEditor.FComponent).opaque;
     return obj.GetProperty(property);
 }
 
-function setWritableProperty(obj: FairyEditor.FObject, property: string, value: any): void {
+function setWritableProperty(obj: FairyEditor.FObject, property: string, value: any): string {
     if (property === "opaque") {
+        // opaque 是组件定义属性、只存在于 FComponent 成员上，文档模型没有对应入口，
+        // 保持成员写入；它的持久化由 writeVerification 的磁盘回读保证。
         if (typeof value !== "boolean")
             throw new Error("opaque 只接受布尔值");
         (obj as FairyEditor.FComponent).opaque = value;
-        return;
+        lastWritePath = WRITE_PATH_MODEL;
+        return WRITE_PATH_MODEL;
     }
-    obj.SetProperty(property, value);
+    return writeObjectProperty(obj, property, value);
 }
 
 function valuesEqual(a: any, b: any): boolean {
@@ -4315,6 +4708,9 @@ async function publishPackages(params: any): Promise<any> {
 }
 
 function handleCommand(request: AgentRequest): any {
+    // 每条写路径必须自己声明写入层；不声明就是 null（unknown），
+    // 不能沿用上一个 action 的值——那会让 writePath 变成谎报。
+    beginWrite();
     const action = String(request.action || "");
     const params = request.params || {};
     const requestProtocol = String(request.protocolVersion || "");
@@ -4464,6 +4860,12 @@ function handleCommand(request: AgentRequest): any {
 
         case "replace_object_resource":
             return replaceObjectResource(params);
+
+        case "query_references":
+            return queryReferences(params);
+
+        case "query_dependencies":
+            return queryDependencies(params);
 
         case "get_text_style":
             return getTextStyle(params);
@@ -4759,7 +5161,10 @@ function completeRequestError(claimedPath: string, requestId: string, action: st
     const stack = error && error.stack ? String(error.stack) : undefined;
     const text = message.toLowerCase();
     let code = "editor_rejected";
-    if (text.indexOf("未找到对象") >= 0 || text.indexOf("未找到资源引用") >= 0) code = "target_not_found";
+    // 「未找到指定 FairyGUI 资源/包」来自 resolveItem/resolvePackage，属于调用方
+    // 定位失败，必须归到 target_not_found；漏掉会让 agent 拿到 editor_rejected，
+    // 分不清是编辑器拒绝执行还是目标根本不存在。
+    if (text.indexOf("未找到对象") >= 0 || text.indexOf("未找到资源引用") >= 0 || text.indexOf("未找到指定") >= 0) code = "target_not_found";
     else if (text.indexOf("不唯一") >= 0) code = "ambiguous_target";
     else if (text.indexOf("不支持") >= 0 || text.indexOf("白名单") >= 0 || text.indexOf("不是文本对象") >= 0) code = "unsupported_property";
     else if (text.indexOf("必须") >= 0 || text.indexOf("格式") >= 0) code = "invalid_argument";

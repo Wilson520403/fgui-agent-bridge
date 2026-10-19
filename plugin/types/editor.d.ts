@@ -1,60 +1,1039 @@
 /**
- * FairyGUI Agent Bridge 编译所需的最小宿主类型声明。
+ * FairyGUI Agent Bridge 编译所用的宿主类型声明——**自动生成，请勿手改**。
  *
- * 这里只描述 main.ts 实际使用的宿主入口；运行时对象由 FairyGUI Editor、
- * Puerts、Unity 和 .NET 提供。使用 any 是为了避免复制 FairyGUI 生成的
- * 大体积第三方声明文件，同时保留独立 TypeScript 构建能力。
+ * 由 scripts/extract_editor_api.py 从 FairyGUI Editor 包内的真实声明生成：
+ *   Contents/Resources/Data/StreamingAssets/Scripts/Puerts/editor.d.ts
+ * 只保留 main.ts 实际引用到的类型；成员名、静态性与参数个数与真实 API 一致，
+ * 参数与返回类型除基本类型外统一擦成 any，以避免拖入整棵标准库依赖树。
+ *
+ * 重新生成（需本机已安装 FairyGUI Editor）：
+ *   python3 scripts/extract_editor_api.py --emit-stub plugin/main.ts \
+ *       --out plugin/types/editor.d.ts
+ *
+ * 声明 ≠ 运行时可用：实机仍可能返回空接口（如 FairyEditor.Framework.Gears.IGear）。
+ * 新增 Action 后仍须按 FGUI-BRIDGE-IMPROVEMENT-PLAN.md 的标准在真机验收。
  */
 declare namespace CS {
-    namespace System {
-        const Array: any;
-        const String: any;
-
-        namespace IO {
-            const Directory: any;
-            const File: any;
-            const FileInfo: any;
-            const Path: any;
-            const SearchOption: any;
+    namespace FairyEditor {
+        class App extends System.Object {
+            static isMacOS: boolean;
+            static language: string;
+            static batchMode: boolean;
+            static batchModeAction: string;
+            static preferences: any;
+            static localStore: any;
+            static hotkeyManager: any;
+            static externalImagePool: any;
+            static groot: any;
+            static project: any;
+            static workspaceSettings: any;
+            static mainView: any;
+            static docView: any;
+            static libView: any;
+            static inspectorView: any;
+            static testView: any;
+            static timelineView: any;
+            static consoleView: any;
+            static menu: any;
+            static viewManager: any;
+            static dragManager: any;
+            static pluginManager: any;
+            static docFactory: any;
+            static activeDoc: any;
+            static preferenceFolder: any;
+            static isActive: any;
+            static add_onProjectOpened($p0: any): any;
+            static remove_onProjectOpened($p0: any): any;
+            static add_onProjectClosed($p0: any): any;
+            static remove_onProjectClosed($p0: any): any;
+            static add_onUpdate($p0: any): any;
+            static remove_onUpdate($p0: any): any;
+            static add_onLateUpdate($p0: any): any;
+            static remove_onLateUpdate($p0: any): any;
+            static add_onValidate($p0: any): any;
+            static remove_onValidate($p0: any): any;
+            static GetString($p0: any): any;
+            static GetIcon($p0: any, $p1?: any): any;
+            static StartBackgroundJob(): any;
+            static EndBackgroundJob(): any;
+            static SetFrameRateFactor($p0: any, $p1: any): any;
+            static OpenProject($p0: any): any;
+            static CloseProject(): any;
+            static RefreshProject(): any;
+            static ShowPreview($p0: any): any;
+            static FindReference($p0: any): any;
+            static GetActiveFolder(): any;
+            static OnScreenSizeChanged(): any;
+            static QueryToClose($p0: any): any;
+            static Close(): any;
+            static Alert($p0: any, $p1?: any, $p2?: any): any;
+            static Confirm($p0: any, $p1: any): any;
+            static Input($p0: any, $p1: any, $p2: any): any;
+            static SetWaitCursor($p0: any): any;
+            static ShowWaiting($p0?: any, $p1?: any): any;
+            static CloseWaiting(): any;
+            static SetVar($p0: any, $p1: any): any;
+            static On($p0: any, $p1: any): any;
+            static Off($p0: any, $p1: any): any;
+            static Dispatch($p0: any, $p1?: any): any;
+            static ChangeColorSapce($p0: any): any;
+            constructor(): any;
+        }
+        class ComponentTemplates extends System.Object {
+            CreateLabelItem($p0: any, $p1: any, $p2: any, $p3: any): any;
+            CreateButtonItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any, $p6: any, $p7: any, $p8: any, $p9: any, $p10: any, $p11: any): any;
+            CreateComboBoxItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any): any;
+            CreateScrollBarItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any, $p6: any, $p7: any): any;
+            CreateProgressBarItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any): any;
+            CreateSliderItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any, $p6: any): any;
+            CreatePopupMenuItem($p0: any, $p1: any, $p2: any, $p3: any): any;
+            CreateWindowFrameItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any): any;
+            constructor($p0?: any): any;
+        }
+        class DepItem extends System.Object {
+            item: any;
+            content: any;
+            isSource: boolean;
+            analysed: boolean;
+            targetPath: string;
+            refCount: number;
+            constructor(): any;
+        }
+        class DependencyQuery extends System.Object {
+            resultList: any;
+            references: any;
+            QueryDependencies($p0: any, $p1: any, $p2?: any): any;
+            QueryReferences($p0: any, $p1: any): any;
+            ReplaceReferences($p0: any): any;
+            constructor(): any;
+        }
+        class FComponent extends FairyEditor.FObject {
+            customExtentionId: string;
+            initName: string;
+            designImage: string;
+            designImageOffsetX: number;
+            designImageOffsetY: number;
+            designImageAlpha: number;
+            designImageLayer: number;
+            designImageForTest: boolean;
+            bgColor: any;
+            bgColorEnabled: boolean;
+            hitTestSource: any;
+            mask: any;
+            reversedMask: boolean;
+            remark: string;
+            baseNotes: string;
+            headerRes: string;
+            footerRes: string;
+            showSound: string;
+            hideSound: string;
+            numChildren: any;
+            children: any;
+            controllers: any;
+            transitions: any;
+            customProperties: any;
+            bounds: any;
+            extention: any;
+            extentionId: any;
+            scrollPane: any;
+            overflow: any;
+            overflow2: any;
+            scroll: any;
+            scrollBarFlags: any;
+            scrollBarDisplay: any;
+            margin: any;
+            marginStr: any;
+            scrollBarMargin: any;
+            scrollBarMarginStr: any;
+            hzScrollBarRes: any;
+            vtScrollBarRes: any;
+            clipSoftnessX: any;
+            clipSoftnessY: any;
+            viewWidth: any;
+            viewHeight: any;
+            opaque: any;
+            text: any;
+            icon: any;
+            childrenRenderOrder: any;
+            apexIndex: any;
+            pageController: any;
+            pageControllerObj: any;
+            scriptData: any;
+            AddChild($p0: any): any;
+            AddChildAt($p0: any, $p1: any): any;
+            RemoveChild($p0: any, $p1?: any): any;
+            RemoveChildAt($p0: any, $p1?: any): any;
+            RemoveChildren($p0?: any, $p1?: any, $p2?: any): any;
+            GetChildAt($p0: any): any;
+            GetChild($p0: any): any;
+            GetChildByPath($p0: any): any;
+            GetChildById($p0: any): any;
+            GetChildIndex($p0: any): any;
+            SetChildIndex($p0: any, $p1: any): any;
+            SwapChildren($p0: any, $p1: any): any;
+            SwapChildrenAt($p0: any, $p1: any): any;
+            AddController($p0: any, $p1?: any): any;
+            GetController($p0: any): any;
+            RemoveController($p0: any): any;
+            UpdateChildrenVisible(): any;
+            UpdateDisplayList($p0?: any): any;
+            GetSnappingPosition($p0: any, $p1: any): any;
+            EnsureBoundsCorrect(): any;
+            SetBoundsChangedFlag(): any;
+            GetBounds(): any;
+            SetBounds($p0: any, $p1: any, $p2: any, $p3: any): any;
+            ApplyController($p0: any): any;
+            ApplyAllControllers(): any;
+            AdjustRadioGroupDepth($p0: any, $p1: any): any;
+            GetCustomProperty($p0: any, $p1: any): any;
+            ApplyCustomProperty($p0: any): any;
+            UpdateOverflow(): any;
+            Write_editMode(): any;
+            ValidateChildren($p0?: any): any;
+            CreateChild($p0: any): any;
+            GetChildrenInfo(): any;
+            GetNextId(): any;
+            IsIdInUse($p0: any): any;
+            ContainsComponent($p0: any): any;
+            NotifyChildReplaced($p0: any, $p1: any): any;
+            constructor($p0: any): any;
+        }
+        class FController extends FairyGUI.EventDispatcher {
+            name: string;
+            autoRadioGroupDepth: boolean;
+            exported: boolean;
+            alias: string;
+            homePageType: string;
+            homePage: string;
+            parent: any;
+            changing: boolean;
+            selectedIndex: any;
+            previsousIndex: any;
+            selectedPage: any;
+            selectedPageId: any;
+            previousPage: any;
+            previousPageId: any;
+            pageCount: any;
+            SetSelectedIndex($p0: any): any;
+            GetPages(): any;
+            GetPageIds($p0?: any): any;
+            GetPageNames($p0?: any): any;
+            HasPageId($p0: any): any;
+            HasPageName($p0: any): any;
+            GetNameById($p0: any, $p1: any): any;
+            GetNamesByIds($p0: any, $p1: any): any;
+            AddPage($p0: any): any;
+            AddPageAt($p0: any, $p1: any): any;
+            RemovePageAt($p0: any): any;
+            SetPages($p0: any): any;
+            SwapPage($p0: any, $p1: any): any;
+            GetActions(): any;
+            AddAction($p0: any): any;
+            RemoveAction($p0: any): any;
+            SwapAction($p0: any, $p1: any): any;
+            RunActions(): any;
+            Read($p0: any): any;
+            Write(): any;
+            Reset(): any;
+            constructor(): any;
+        }
+        class FObject extends FairyGUI.EventDispatcher {
+            _parent: any;
+            _id: string;
+            _width: number;
+            _height: number;
+            _rawWidth: number;
+            _rawHeight: number;
+            _widthEnabled: boolean;
+            _heightEnabled: boolean;
+            _renderDepth: number;
+            _outlineVersion: number;
+            _opened: boolean;
+            _group: any;
+            _sizePercentInGroup: number;
+            _gearLocked: boolean;
+            _internalVisible: boolean;
+            _hasSnapshot: boolean;
+            _treeNode: any;
+            _pivotFromSource: boolean;
+            _pkg: any;
+            _res: any;
+            _objectType: string;
+            _docElement: any;
+            _flags: number;
+            _underConstruct: boolean;
+            sourceWidth: number;
+            sourceHeight: number;
+            initWidth: number;
+            initHeight: number;
+            customData: string;
+            notes: string;
+            static loadingSnapshot: boolean;
+            static MAX_GEAR_INDEX: number;
+            id: any;
+            name: any;
+            objectType: any;
+            pkg: any;
+            docElement: any;
+            touchable: any;
+            touchDisabled: any;
+            grayed: any;
+            enabled: any;
+            resourceURL: any;
+            x: any;
+            y: any;
+            xy: any;
+            xMin: any;
+            xMax: any;
+            yMin: any;
+            yMax: any;
+            height: any;
+            width: any;
+            size: any;
+            minWidth: any;
+            minHeight: any;
+            maxWidth: any;
+            maxHeight: any;
+            actualWidth: any;
+            actualHeight: any;
+            scaleX: any;
+            scaleY: any;
+            aspectLocked: any;
+            aspectRatio: any;
+            skewX: any;
+            skewY: any;
+            pivotX: any;
+            pivotY: any;
+            anchor: any;
+            locked: any;
+            hideByEditor: any;
+            useSourceSize: any;
+            rotation: any;
+            alpha: any;
+            visible: any;
+            internalVisible: any;
+            internalVisible2: any;
+            internalVisible3: any;
+            groupId: any;
+            tooltips: any;
+            filterData: any;
+            filter: any;
+            blendMode: any;
+            relations: any;
+            displayObject: any;
+            parent: any;
+            text: any;
+            icon: any;
+            errorStatus: any;
+            topmost: any;
+            SetXY($p0: any, $p1: any): any;
+            SetTopLeft($p0: any, $p1: any): any;
+            SetSize($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+            SetScale($p0: any, $p1: any): any;
+            SetSkew($p0: any, $p1: any): any;
+            SetPivot($p0: any, $p1: any, $p2: any): any;
+            InGroup($p0: any): any;
+            GetGear($p0: any, $p1?: any): any;
+            UpdateGear($p0: any): any;
+            UpdateGearFromRelations($p0: any, $p1: any, $p2: any): any;
+            SupportGear($p0: any): any;
+            ValidateGears(): any;
+            HasGears(): any;
+            CheckGearController($p0: any, $p1: any): any;
+            CheckGearsController($p0: any): any;
+            AddDisplayLock(): any;
+            ReleaseDisplayLock($p0: any): any;
+            CheckGearDisplay(): any;
+            RemoveFromParent(): any;
+            LocalToGlobal($p0: any): any;
+            GlobalToLocal($p0: any): any;
+            static cast($p0: any): any;
+            HandleXYChanged(): any;
+            HandleSizeChanged(): any;
+            HandleGrayedChanged(): any;
+            HandleAlphaChanged(): any;
+            HandleVisibleChanged(): any;
+            HandleControllerChanged($p0: any): any;
+            GetProperty($p0: any): any;
+            SetProperty($p0: any, $p1: any): any;
+            GetProp($p0: any): any;
+            SetProp($p0: any, $p1: any): any;
+            IsObsolete(): any;
+            Validate($p0?: any): any;
+            GetDetailString(): any;
+            Create(): any;
+            Dispose(): any;
+            Recreate(): any;
+            Read_beforeAdd($p0: any, $p1: any, $p2: any): any;
+            Read_afterAdd($p0: any, $p1: any, $p2: any): any;
+            Write(): any;
+            ReadGears($p0: any): any;
+            WriteGears($p0?: any): any;
+            TakeSnapshot($p0: any): any;
+            ReadSnapshot($p0: any): any;
+            constructor($p0?: any): any;
+        }
+        class FObjectType extends System.Object {
+            static PACKAGE: string;
+            static FOLDER: string;
+            static IMAGE: string;
+            static GRAPH: string;
+            static LIST: string;
+            static LOADER: string;
+            static TEXT: string;
+            static RICHTEXT: string;
+            static INPUTTEXT: string;
+            static GROUP: string;
+            static SWF: string;
+            static MOVIECLIP: string;
+            static COMPONENT: string;
+            static Loader3D: string;
+            static EXT_BUTTON: string;
+            static EXT_LABEL: string;
+            static EXT_COMBOBOX: string;
+            static EXT_PROGRESS_BAR: string;
+            static EXT_SLIDER: string;
+            static EXT_SCROLLBAR: string;
+            static NAME_PREFIX: any;
+            constructor(): any;
+        }
+        class FPackage extends System.Object {
+            opened: any;
+            project: any;
+            id: any;
+            name: any;
+            basePath: any;
+            cacheFolder: any;
+            metaFolder: any;
+            items: any;
+            publishSettings: any;
+            rootItem: any;
+            strings: any;
+            GetBranchRootItem($p0: any): any;
+            BeginBatch(): any;
+            EndBatch(): any;
+            Open(): any;
+            Save(): any;
+            SetChanged(): any;
+            Touch(): any;
+            Dispose(): any;
+            EnsureOpen(): any;
+            FreeUnusedResources($p0: any): any;
+            GetNextId(): any;
+            GetSequenceName($p0: any): any;
+            GetUniqueName($p0: any, $p1: any): any;
+            GetItemListing($p0: any, $p1?: any, $p2?: any, $p3?: any, $p4?: any): any;
+            GetFavoriteItems($p0?: any): any;
+            GetItem($p0: any): any;
+            FindItemByName($p0: any): any;
+            GetItemByPath($p0: any): any;
+            GetItemByName($p0: any, $p1: any): any;
+            GetItemByFileName($p0: any, $p1: any): any;
+            GetItemPath($p0: any, $p1?: any): any;
+            AddItem($p0: any): any;
+            RenameItem($p0: any, $p1: any): any;
+            MoveItem($p0: any, $p1: any): any;
+            DeleteItem($p0: any): any;
+            DuplicateItem($p0: any, $p1: any): any;
+            EnsurePathExists($p0: any, $p1: any): any;
+            GetBranchPath($p0: any): any;
+            CreateBranch($p0: any): any;
+            CreateFolder($p0: any, $p1?: any, $p2?: any): any;
+            CreatePath($p0: any): any;
+            CreateComponentItem($p0: any, $p1: any, $p2: any, $p3?: any, $p4?: any, $p5?: any, $p6?: any): any;
+            CreateFontItem($p0: any, $p1?: any, $p2?: any): any;
+            CreateMovieClipItem($p0: any, $p1?: any, $p2?: any): any;
+            ImportResource($p0: any, $p1: any, $p2: any): any;
+            UpdateResource($p0: any, $p1: any): any;
+            constructor($p0?: any, $p1?: any): any;
+        }
+        class FPackageItem extends System.Object {
+            exported: boolean;
+            favorite: boolean;
+            isError: boolean;
+            owner: any;
+            parent: any;
+            type: any;
+            id: any;
+            path: any;
+            branch: any;
+            isRoot: any;
+            isBranchRoot: any;
+            name: any;
+            file: any;
+            fileName: any;
+            modificationTime: any;
+            sortKey: any;
+            version: any;
+            width: any;
+            height: any;
+            thumbnail: any;
+            children: any;
+            folderAtlas: any;
+            supportAtlas: any;
+            supportResolution: any;
+            title: any;
+            contentHash: any;
+            isDisposed: any;
+            add_onChanged($p0: any): any;
+            remove_onChanged($p0: any): any;
+            add_onAlternativeAdded($p0: any): any;
+            remove_onAlternativeAdded($p0: any): any;
+            MatchName($p0: any): any;
+            GetURL(): any;
+            GetIcon($p0?: any, $p1?: any, $p2?: any): any;
+            CopySettings($p0: any): any;
+            SetFile($p0: any, $p1: any, $p2?: any): any;
+            SetChanged(): any;
+            Touch(): any;
+            SetUptoDate(): any;
+            FileExists(): any;
+            GetAsset(): any;
+            ReadAssetSettings($p0: any): any;
+            OpenWithDefaultApplication(): any;
+            GetBranch($p0: any): any;
+            GetTrunk(): any;
+            GetHighResolution($p0: any): any;
+            GetStdResolution(): any;
+            GetAtlasIndex(): any;
+            SetVar($p0: any, $p1: any): any;
+            AddRef(): any;
+            ReleaseRef(): any;
+            UnloadAsset($p0?: any): any;
+            Dispose(): any;
+            Serialize($p0?: any): any;
+            constructor($p0?: any, $p1?: any, $p2?: any): any;
+        }
+        class FPackageItemType extends System.Object {
+            static FOLDER: string;
+            static IMAGE: string;
+            static SWF: string;
+            static MOVIECLIP: string;
+            static SOUND: string;
+            static COMPONENT: string;
+            static FONT: string;
+            static MISC: string;
+            static ATLAS: string;
+            static SPINE: string;
+            static DRAGONBONES: string;
+            static fileExtensionMap: any;
+            static GetFileType($p0: any): any;
+            constructor(): any;
+        }
+        namespace Framework {
+            namespace Gears {
+                class IGear {
+                }
+            }
+        }
+        class GlobalPublishSettings extends FairyEditor.SettingsBase {
+            path: string;
+            branchPath: string;
+            fileExtension: string;
+            packageCount: number;
+            compressDesc: boolean;
+            binaryFormat: boolean;
+            jpegQuality: number;
+            compressPNG: boolean;
+            codeGeneration: any;
+            includeHighResolution: number;
+            branchProcessing: number;
+            seperatedAtlasForBranch: boolean;
+            atlasSetting: any;
+            include2x: any;
+            include3x: any;
+            include4x: any;
+            constructor($p0?: any): any;
+        }
+        namespace PluginManager {
+            class PluginInfo extends System.Object {
+                name: string;
+                displayName: string;
+                description: string;
+                version: string;
+                author: any;
+                icon: string;
+                main: string;
+                onPublish: any;
+                onPublishStart: any;
+                onPublishEnd: any;
+                onDestroy: any;
+                onRunBatchModeScript: any;
+                constructor(): any;
+            }
+        }
+        class PublishHandler extends System.Object {
+            static CODE_FILE_MARK: string;
+            genCodeHandler: any;
+            pkg: any;
+            project: any;
+            isSuccess: any;
+            publishDescOnly: any;
+            exportPath: any;
+            exportCodePath: any;
+            useAtlas: any;
+            fileName: any;
+            fileExtension: any;
+            genCode: any;
+            items: any;
+            paused: any;
+            ExportBinaryDesc($p0: any): any;
+            ExportDescZip($p0: any): any;
+            ExportResZip($p0: any, $p1: any): any;
+            ExportResFiles($p0: any): any;
+            ClearOldResFiles($p0: any): any;
+            CollectClasses($p0: any, $p1: any, $p2: any): any;
+            SetupCodeFolder($p0: any, $p1: any, $p2?: any): any;
+            ToFilename($p0: any): any;
+            add_onComplete($p0: any): any;
+            remove_onComplete($p0: any): any;
+            IsInList($p0: any): any;
+            GetItemDesc($p0: any): any;
+            GetScriptData($p0: any): any;
+            Run(): any;
+            Exit(): any;
+            constructor($p0?: any, $p1?: any): any;
+        }
+        class ReferenceInfo extends System.Object {
+            ownerPkg: any;
+            pkgId: string;
+            itemId: string;
+            content: any;
+            propKey: string;
+            arrayIndex: number;
+            valueType: any;
+            Update($p0: any): any;
+            constructor(): any;
+        }
+        namespace View {
+            class DocElement extends System.Object {
+                owner: any;
+                isRoot: any;
+                isValid: any;
+                relationsDisabled: any;
+                displayIcon: any;
+                selected: any;
+                gizmo: any;
+                SetProperty($p0: any, $p1: any): any;
+                SetGearProperty($p0: any, $p1: any, $p2: any): any;
+                UpdateGears($p0: any): any;
+                SetRelation($p0: any, $p1: any): any;
+                RemoveRelation($p0: any): any;
+                UpdateRelations($p0: any): any;
+                SetExtensionProperty($p0: any, $p1: any): any;
+                SetChildProperty($p0: any, $p1: any, $p2: any): any;
+                SetVertexPosition($p0: any, $p1: any, $p2: any): any;
+                SetVertexDistance($p0: any, $p1: any): any;
+                SetScriptData($p0: any, $p1: any): any;
+                constructor($p0?: any, $p1?: any, $p2?: any): any;
+            }
+            class Document extends System.Object {
+                panel: any;
+                selectionLayer: any;
+                inspectingTarget: any;
+                inspectingTargets: any;
+                inspectingObjectType: any;
+                packageItem: any;
+                content: any;
+                displayTitle: any;
+                displayIcon: any;
+                history: any;
+                docURL: any;
+                isModified: any;
+                savedVersion: any;
+                openedGroup: any;
+                isPickingObject: any;
+                timelineMode: any;
+                editingTransition: any;
+                head: any;
+                Open($p0: any): any;
+                DiscardChanges(): any;
+                OnEnable(): any;
+                OnDisable(): any;
+                OnDestroy(): any;
+                OnValidate(): any;
+                SetMeta($p0: any, $p1: any): any;
+                OnUpdate(): any;
+                GetInspectingTargetCount($p0: any): any;
+                SetModified($p0?: any): any;
+                Serialize(): any;
+                Save(): any;
+                OnViewSizeChanged(): any;
+                OnViewScaleChanged(): any;
+                OnViewBackgroundChanged(): any;
+                SelectObject($p0: any, $p1?: any, $p2?: any): any;
+                SelectAll(): any;
+                GetSelection(): any;
+                UnselectObject($p0: any): any;
+                UnselectAll(): any;
+                SetSelection($p0: any): any;
+                CopySelection(): any;
+                DeleteSelection(): any;
+                DeleteGroupContent($p0: any): any;
+                MoveSelection($p0: any, $p1: any): any;
+                GlobalToCanvas($p0: any): any;
+                GetCenterPos(): any;
+                Paste($p0?: any, $p1?: any): any;
+                ReplaceSelection($p0: any): any;
+                OpenChild($p0: any): any;
+                StartInlineEdit($p0: any): any;
+                ShowContextMenu(): any;
+                UpdateEditMenu($p0: any): any;
+                InsertObject($p0: any, $p1?: any, $p2?: any): any;
+                RemoveObject($p0: any): any;
+                AdjustDepth($p0: any): any;
+                CreateGroup(): any;
+                DestroyGroup(): any;
+                OpenGroup($p0: any): any;
+                CloseGroup($p0?: any): any;
+                NotifyGroupRemoved($p0: any): any;
+                HandleHotkey($p0: any): any;
+                PickObject($p0: any, $p1: any, $p2?: any, $p3: any, $p4?: any): any;
+                CancelPickObject(): any;
+                EnterTimelineMode($p0: any): any;
+                ExitTimelineMode(): any;
+                RefreshTransition(): any;
+                RefreshInspectors($p0?: any): any;
+                GetOutlineLocks($p0: any): any;
+                SetTransitionProperty($p0: any, $p1: any, $p2: any): any;
+                SetKeyFrameProperty($p0: any, $p1: any, $p2: any): any;
+                SetKeyFrameValue($p0: any, $p1: any): any;
+                SetKeyFramePathPos($p0: any, $p1: any, $p2: any, $p3: any): any;
+                SetKeyFrameControlPointPos($p0: any, $p1: any, $p2: any, $p3: any, $p4: any): any;
+                SetKeyFrameControlPointSmooth($p0: any, $p1: any, $p2: any): any;
+                SetKeyFrame($p0: any, $p1: any, $p2: any): any;
+                AddKeyFrames($p0: any): any;
+                CreateKeyFrame($p0: any, $p1?: any): any;
+                AddKeyFrame($p0: any): any;
+                RemoveKeyFrame($p0: any): any;
+                RemoveKeyFrames($p0: any, $p1: any): any;
+                UpdateTransition($p0: any): any;
+                AddTransition($p0?: any): any;
+                RemoveTransition($p0: any): any;
+                DuplicateTransition($p0: any, $p1?: any): any;
+                UpdateTransitions($p0: any): any;
+                AddController($p0: any): any;
+                UpdateController($p0: any, $p1: any): any;
+                RemoveController($p0: any): any;
+                SwitchPage($p0: any, $p1: any): any;
+                constructor(): any;
+            }
         }
     }
-
+    namespace FairyGUI {
+        class GPathPoint extends System.ValueType {
+            pos: any;
+            control1: any;
+            control2: any;
+            curveType: any;
+            smooth: boolean;
+            constructor($p0?: any, $p1?: any, $p2?: any): any;
+        }
+        namespace Utils {
+            class XML extends System.Object {
+                name: string;
+                text: string;
+                attributes: any;
+                elements: any;
+                static Create($p0: any): any;
+                HasAttribute($p0: any): any;
+                GetAttribute($p0: any, $p1?: any): any;
+                GetAttributeInt($p0: any, $p1?: any): any;
+                GetAttributeFloat($p0: any, $p1?: any): any;
+                GetAttributeBool($p0: any, $p1?: any): any;
+                GetAttributeArray($p0: any, $p1?: any, $p2?: any, $p3?: any, $p4?: any): any;
+                GetAttributeColor($p0: any, $p1: any): any;
+                GetAttributeVector($p0: any): any;
+                SetAttribute($p0: any, $p1: any): any;
+                RemoveAttribute($p0: any): any;
+                GetNode($p0: any): any;
+                Elements($p0?: any): any;
+                GetEnumerator($p0?: any): any;
+                AppendChild($p0: any): any;
+                RemoveChild($p0: any): any;
+                RemoveChildren($p0: any): any;
+                Parse($p0: any): any;
+                Reset(): any;
+                ToXMLString($p0: any): any;
+                constructor($p0?: any): any;
+            }
+        }
+    }
+    namespace System {
+        class Array extends System.Object {
+            LongLength: any;
+            IsFixedSize: any;
+            IsReadOnly: any;
+            IsSynchronized: any;
+            SyncRoot: any;
+            Length: any;
+            Rank: any;
+            static CreateInstance($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+            CopyTo($p0: any, $p1: any): any;
+            Clone(): any;
+            static BinarySearch($p0: any, $p1: any, $p2?: any, $p3?: any, $p4?: any): any;
+            static Copy($p0: any, $p1: any, $p2: any, $p3?: any, $p4?: any): any;
+            GetLongLength($p0: any): any;
+            GetValue($p0: any, $p1?: any, $p2?: any): any;
+            static IndexOf($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+            static LastIndexOf($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+            static Reverse($p0: any, $p1?: any, $p2?: any): any;
+            SetValue($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+            static Sort($p0: any, $p1?: any, $p2?: any, $p3?: any, $p4?: any): any;
+            GetEnumerator(): any;
+            GetLength($p0: any): any;
+            GetLowerBound($p0: any): any;
+            GetUpperBound($p0: any): any;
+            static Clear($p0: any, $p1: any, $p2: any): any;
+            static ConstrainedCopy($p0: any, $p1: any, $p2: any, $p3: any, $p4: any): any;
+            Initialize(): any;
+        }
+        namespace IO {
+            class Directory extends System.Object {
+                static GetParent($p0: any): any;
+                static CreateDirectory($p0: any, $p1?: any): any;
+                static Exists($p0: any): any;
+                static SetCreationTime($p0: any, $p1: any): any;
+                static SetCreationTimeUtc($p0: any, $p1: any): any;
+                static GetCreationTime($p0: any): any;
+                static GetCreationTimeUtc($p0: any): any;
+                static SetLastWriteTime($p0: any, $p1: any): any;
+                static SetLastWriteTimeUtc($p0: any, $p1: any): any;
+                static GetLastWriteTime($p0: any): any;
+                static GetLastWriteTimeUtc($p0: any): any;
+                static SetLastAccessTime($p0: any, $p1: any): any;
+                static SetLastAccessTimeUtc($p0: any, $p1: any): any;
+                static GetLastAccessTime($p0: any): any;
+                static GetLastAccessTimeUtc($p0: any): any;
+                static GetFiles($p0: any, $p1?: any, $p2?: any): any;
+                static GetDirectories($p0: any, $p1?: any, $p2?: any): any;
+                static GetFileSystemEntries($p0: any, $p1?: any, $p2?: any): any;
+                static EnumerateDirectories($p0: any, $p1?: any, $p2?: any): any;
+                static EnumerateFiles($p0: any, $p1?: any, $p2?: any): any;
+                static EnumerateFileSystemEntries($p0: any, $p1?: any, $p2?: any): any;
+                static GetDirectoryRoot($p0: any): any;
+                static GetCurrentDirectory(): any;
+                static SetCurrentDirectory($p0: any): any;
+                static Move($p0: any, $p1: any): any;
+                static Delete($p0: any, $p1?: any): any;
+                static GetLogicalDrives(): any;
+                static GetAccessControl($p0: any, $p1?: any): any;
+                static SetAccessControl($p0: any, $p1: any): any;
+            }
+            class File extends System.Object {
+                static OpenText($p0: any): any;
+                static CreateText($p0: any): any;
+                static AppendText($p0: any): any;
+                static Copy($p0: any, $p1: any, $p2?: any): any;
+                static Create($p0: any, $p1?: any, $p2?: any, $p3?: any): any;
+                static Delete($p0: any): any;
+                static Exists($p0: any): any;
+                static Open($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+                static SetCreationTime($p0: any, $p1: any): any;
+                static SetCreationTimeUtc($p0: any, $p1: any): any;
+                static GetCreationTime($p0: any): any;
+                static GetCreationTimeUtc($p0: any): any;
+                static SetLastAccessTime($p0: any, $p1: any): any;
+                static SetLastAccessTimeUtc($p0: any, $p1: any): any;
+                static GetLastAccessTime($p0: any): any;
+                static GetLastAccessTimeUtc($p0: any): any;
+                static SetLastWriteTime($p0: any, $p1: any): any;
+                static SetLastWriteTimeUtc($p0: any, $p1: any): any;
+                static GetLastWriteTime($p0: any): any;
+                static GetLastWriteTimeUtc($p0: any): any;
+                static GetAttributes($p0: any): any;
+                static SetAttributes($p0: any, $p1: any): any;
+                static OpenRead($p0: any): any;
+                static OpenWrite($p0: any): any;
+                static ReadAllText($p0: any, $p1?: any): any;
+                static WriteAllText($p0: any, $p1: any, $p2?: any): any;
+                static ReadAllBytes($p0: any): any;
+                static WriteAllBytes($p0: any, $p1: any): any;
+                static ReadAllLines($p0: any, $p1?: any): any;
+                static ReadLines($p0: any, $p1?: any): any;
+                static WriteAllLines($p0: any, $p1: any, $p2?: any): any;
+                static AppendAllText($p0: any, $p1: any, $p2?: any): any;
+                static AppendAllLines($p0: any, $p1: any, $p2?: any): any;
+                static Replace($p0: any, $p1: any, $p2: any, $p3?: any): any;
+                static Move($p0: any, $p1: any): any;
+                static Encrypt($p0: any): any;
+                static Decrypt($p0: any): any;
+                static ReadAllTextAsync($p0: any, $p1?: any, $p2?: any): any;
+                static WriteAllTextAsync($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+                static ReadAllBytesAsync($p0: any, $p1?: any): any;
+                static WriteAllBytesAsync($p0: any, $p1: any, $p2?: any): any;
+                static ReadAllLinesAsync($p0: any, $p1?: any, $p2?: any): any;
+                static WriteAllLinesAsync($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+                static AppendAllTextAsync($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+                static AppendAllLinesAsync($p0: any, $p1: any, $p2?: any, $p3?: any): any;
+                static GetAccessControl($p0: any, $p1?: any): any;
+                static SetAccessControl($p0: any, $p1: any): any;
+            }
+            class FileInfo extends System.IO.FileSystemInfo {
+                Length: any;
+                DirectoryName: any;
+                Directory: any;
+                IsReadOnly: any;
+                Name: any;
+                OpenText(): any;
+                CreateText(): any;
+                AppendText(): any;
+                CopyTo($p0: any, $p1?: any): any;
+                Create(): any;
+                Open($p0: any, $p1?: any, $p2?: any): any;
+                OpenRead(): any;
+                OpenWrite(): any;
+                MoveTo($p0: any): any;
+                Replace($p0: any, $p1: any, $p2?: any): any;
+                Decrypt(): any;
+                Encrypt(): any;
+                GetAccessControl($p0?: any): any;
+                SetAccessControl($p0: any): any;
+                constructor($p0?: any): any;
+            }
+            class Path extends System.Object {
+                static AltDirectorySeparatorChar: number;
+                static DirectorySeparatorChar: number;
+                static PathSeparator: number;
+                static VolumeSeparatorChar: number;
+                static ChangeExtension($p0: any, $p1: any): any;
+                static Combine($p0: any, $p1?: any, $p2?: any, $p3?: any): any;
+                static GetDirectoryName($p0: any): any;
+                static GetExtension($p0: any): any;
+                static GetFileName($p0: any): any;
+                static GetFileNameWithoutExtension($p0: any): any;
+                static GetFullPath($p0: any, $p1?: any): any;
+                static GetPathRoot($p0: any): any;
+                static GetTempFileName(): any;
+                static GetTempPath(): any;
+                static HasExtension($p0: any): any;
+                static IsPathRooted($p0: any): any;
+                static GetInvalidFileNameChars(): any;
+                static GetInvalidPathChars(): any;
+                static GetRandomFileName(): any;
+                static GetRelativePath($p0: any, $p1: any): any;
+                static IsPathFullyQualified($p0: any): any;
+            }
+            enum SearchOption { TopDirectoryOnly, AllDirectories }
+        }
+        class String extends System.Object {
+        }
+    }
     namespace UnityEngine {
-        const Application: any;
-
-        class Vector2 {
-            constructor(x: number, y: number);
+        class Application extends System.Object {
+            static isPlaying: any;
+            static isFocused: any;
+            static buildGUID: any;
+            static runInBackground: any;
+            static isBatchMode: any;
+            static dataPath: any;
+            static streamingAssetsPath: any;
+            static persistentDataPath: any;
+            static temporaryCachePath: any;
+            static absoluteURL: any;
+            static unityVersion: any;
+            static version: any;
+            static installerName: any;
+            static identifier: any;
+            static installMode: any;
+            static sandboxType: any;
+            static productName: any;
+            static companyName: any;
+            static cloudProjectId: any;
+            static targetFrameRate: any;
+            static consoleLogPath: any;
+            static backgroundLoadingPriority: any;
+            static genuine: any;
+            static genuineCheckAvailable: any;
+            static platform: any;
+            static isMobilePlatform: any;
+            static isConsolePlatform: any;
+            static systemLanguage: any;
+            static internetReachability: any;
+            static exitCancellationToken: any;
+            static isEditor: any;
+            static Quit($p0?: any): any;
+            static Unload(): any;
+            static CanStreamedLevelBeLoaded($p0: any): any;
+            static IsPlaying($p0: any): any;
+            static HasProLicense(): any;
+            static RequestAdvertisingIdentifierAsync($p0: any): any;
+            static OpenURL($p0: any): any;
+            static GetStackTraceLogType($p0: any): any;
+            static SetStackTraceLogType($p0: any, $p1: any): any;
+            static RequestUserAuthorization($p0: any): any;
+            static HasUserAuthorization($p0: any): any;
+            static add_lowMemory($p0: any): any;
+            static remove_lowMemory($p0: any): any;
+            static add_memoryUsageChanged($p0: any): any;
+            static remove_memoryUsageChanged($p0: any): any;
+            static add_logMessageReceived($p0: any): any;
+            static remove_logMessageReceived($p0: any): any;
+            static add_logMessageReceivedThreaded($p0: any): any;
+            static remove_logMessageReceivedThreaded($p0: any): any;
+            static add_onBeforeRender($p0: any): any;
+            static remove_onBeforeRender($p0: any): any;
+            static add_focusChanged($p0: any): any;
+            static remove_focusChanged($p0: any): any;
+            static add_deepLinkActivated($p0: any): any;
+            static remove_deepLinkActivated($p0: any): any;
+            static add_wantsToQuit($p0: any): any;
+            static remove_wantsToQuit($p0: any): any;
+            static add_quitting($p0: any): any;
+            static remove_quitting($p0: any): any;
+            static add_unloading($p0: any): any;
+            static remove_unloading($p0: any): any;
+            constructor(): any;
+        }
+        class Vector2 extends System.ValueType {
             x: number;
             y: number;
-        }
-    }
-
-    namespace FairyEditor {
-        const App: any;
-        const ComponentTemplates: any;
-        const FObjectType: any;
-        const FPackageItemType: any;
-
-        type FComponent = any;
-        type FObject = any;
-        type FPackage = any;
-        type FPackageItem = any;
-
-        class GlobalPublishSettings {
-            [key: string]: any;
-        }
-
-        class PublishHandler {
-            constructor(...args: any[]);
-            [key: string]: any;
-        }
-
-        namespace PluginManager {
-            type PluginInfo = any;
-        }
-
-        namespace View {
-            type Document = any;
+            static kEpsilon: number;
+            static kEpsilonNormalSqrt: number;
+            normalized: any;
+            magnitude: any;
+            sqrMagnitude: any;
+            static zero: any;
+            static one: any;
+            static up: any;
+            static down: any;
+            static left: any;
+            static right: any;
+            static positiveInfinity: any;
+            static negativeInfinity: any;
+            get_Item($p0: any): any;
+            set_Item($p0: any, $p1: any): any;
+            Set($p0: any, $p1: any): any;
+            static Lerp($p0: any, $p1: any, $p2: any): any;
+            static LerpUnclamped($p0: any, $p1: any, $p2: any): any;
+            static MoveTowards($p0: any, $p1: any, $p2: any): any;
+            static Scale($p0: any, $p1: any): any;
+            Scale($p0: any): any;
+            Normalize(): any;
+            ToString($p0?: any, $p1?: any): any;
+            Equals($p0: any): any;
+            static Reflect($p0: any, $p1: any): any;
+            static Perpendicular($p0: any): any;
+            static Dot($p0: any, $p1: any): any;
+            static Angle($p0: any, $p1: any): any;
+            static SignedAngle($p0: any, $p1: any): any;
+            static Distance($p0: any, $p1: any): any;
+            static ClampMagnitude($p0: any, $p1: any): any;
+            static SqrMagnitude($p0: any): any;
+            SqrMagnitude(): any;
+            static Min($p0: any, $p1: any): any;
+            static Max($p0: any, $p1: any): any;
+            static SmoothDamp($p0: any, $p1: any, $p2: any, $p3: any, $p4?: any, $p5?: any): any;
+            static op_Addition($p0: any, $p1: any): any;
+            static op_Subtraction($p0: any, $p1: any): any;
+            static op_Multiply($p0: any, $p1: any): any;
+            static op_Division($p0: any, $p1: any): any;
+            static op_UnaryNegation($p0: any): any;
+            static op_Equality($p0: any, $p1: any): any;
+            static op_Inequality($p0: any, $p1: any): any;
+            static op_Implicit($p0: any): any;
+            constructor($p0?: any, $p1?: any): any;
+            static Equals($p0: any, $p1: any): any;
         }
     }
 }

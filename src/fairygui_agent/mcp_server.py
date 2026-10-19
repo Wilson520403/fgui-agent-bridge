@@ -611,6 +611,40 @@ def fgui_replace_object_resource(resource_url: str, object_id: str | None = None
 
 
 @mcp.tool()
+def fgui_query_references(resource_url: str, max_items: int | None = None, skip_package_open: bool = False) -> dict[str, Any]:
+    """查询全工程里哪些位置引用了目标资源（只读，0.8.10+）。
+
+    走编辑器原生 DependencyQuery，返回的每条引用精确到「哪个包的哪个资源的哪个属性槽」：
+    packageId / itemId / propKey / arrayIndex / valueType。改资源引用前先跑它，能直接回答
+    「换掉这张图会影响哪些节点」，也可作为 replace_object_resource 的影响面预览。
+
+    只读：不会保存、不会标记文档修改。max_items 限制返回条数（默认 200，上限 2000），
+    截断时 truncated=true 且 totalCount 仍为真实总数，不会静默丢弃。
+    skip_package_open=True 跳过「预先打开未打开的包」，更快但可能少算未打开包里的引用；
+    默认会先打开，代价记录在响应的 packages 字段里。
+    """
+    params: dict[str, Any] = {"url": resource_url, "skipPackageOpen": skip_package_open}
+    if max_items is not None:
+        params["maxItems"] = max_items
+    return _client.call("query_references", params)
+
+
+@mcp.tool()
+def fgui_query_dependencies(resource_url: str, seek_level: str = "samePackage", max_items: int | None = None, skip_package_open: bool = False) -> dict[str, Any]:
+    """查询目标资源依赖了哪些资源（只读，0.8.10+）。
+
+    走编辑器原生 DependencyQuery。seek_level 取 selection / samePackageButNotExported /
+    samePackage（默认）/ all，决定依赖搜索范围；响应会回报实际生效的 seekLevel。
+
+    只读：不会保存、不会标记文档修改。max_items、skip_package_open 同 fgui_query_references。
+    """
+    params: dict[str, Any] = {"url": resource_url, "seekLevel": seek_level, "skipPackageOpen": skip_package_open}
+    if max_items is not None:
+        params["maxItems"] = max_items
+    return _client.call("query_dependencies", params)
+
+
+@mcp.tool()
 def fgui_get_text_style(object_id: str | None = None, object_path: str | None = None, object_name: str | None = None) -> dict[str, Any]:
     """读取 TextField/RichText 的统一文本样式。"""
     return _client.call("get_text_style", {"target": _target(object_id, object_path, object_name)})

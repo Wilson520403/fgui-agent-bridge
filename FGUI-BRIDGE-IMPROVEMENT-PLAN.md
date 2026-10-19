@@ -22,6 +22,12 @@
 | Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API 已实现；自动同步关键帧、专用验证及截图未完成。 |
 | Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
 | Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。 |
+| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。P8-2 写侧（`replace_references`）与 P8-3 ~ P8-7 规划完成未实现。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
+
+> **重排说明（2026-10-19）：** 本轮据此新增 Phase 8，并在 §7.1 给出按"能否清偿既有技术债"
+> 重排的当前实际待办；Phase 6（Lanhu 工作流）顺延。证据、边界与 API 依据见
+> `docs/fgui-editor-api-capability-map.md`，能力差集可用
+> `python3 scripts/extract_editor_api.py --list-untouched plugin/main.ts` 复现。
 
 ### 核查证据与验收边界
 
@@ -619,6 +625,224 @@ list_controllers   # 附加的只读 Action
 
 ---
 
+## Phase 8：编辑器原生能力复用（2026-10-19 逆向分析新增）
+
+**状态：P8-0、P8-1 已落地（0.8.9，模拟宿主 118/118、Python 31/31、tsc 0 error，**并已在 FairyGUI Editor 6.1.4 真机复验**）；P8-2 只读部分已落地（0.8.10，模拟宿主 129/129、Python 33/33、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-2-live.json`）；P8-2 写侧与 P8-3 ~ P8-7 规划完成，实现未开始。** 本阶段由 FairyGUI Editor 逆向分析得出，证据、
+能力差集与 API 依据见 `docs/fgui-editor-api-capability-map.md`。
+
+### 背景
+
+FairyGUI Editor 通过 Puerts 把内部 C# API 绑定给插件 JS，并把绑定结果**以声明文件明文放在编辑器包内**：
+
+```text
+Contents/Resources/Data/StreamingAssets/Scripts/Puerts/editor.d.ts   21708 行
+```
+
+其中 FairyEditor 命名空间有 184 个类型 / 2222 个成员。`plugin/main.ts` 目前实际只引用
+**21 个**（FairyEditor 根命名空间 150 类中的 21 类），129 个类型完全未触及。这意味着大量"计划里标为未完成"的能力，
+编辑器原生就有入口，不需要自造。
+
+能力差集可复现：
+
+```bash
+python3 scripts/extract_editor_api.py --list-untouched plugin/main.ts
+```
+
+> 声明清单只对 **6.1.4** 有效；升级 FairyGUI Editor 后必须重新提取并 diff。
+> 声明 ≠ 运行时可用（`GetGear` 返回空接口 `IGear` 即是反例），新增 Action 仍需真机验收。
+
+### P8-0 写入路径归位（最先做，后续新增能力的前提）
+
+Phase 4 真机已暴露两个同根问题：`FRelations.Reset()+AddItem` 绕过文档模型导致
+save 静默失败、`GetGear` 返回空接口。根因是**直接改 F\* 对象模型而不是走文档模型层**。
+
+编辑器自带的文档模型中介层只有 21 个方法，但覆盖全部写入口：
+
+```csharp
+DocElement.SetProperty / SetGearProperty / UpdateGears
+DocElement.SetRelation / RemoveRelation / UpdateRelations
+DocElement.SetExtensionProperty / SetChildProperty
+DocElement.SetVertexPosition / SetVertexDistance / SetScriptData
+```
+
+工作项：
+
+- [x] 逐个审计现有 Action 的写入路径：属性写入已改为优先走 `DocElement.SetProperty`（与
+      `FObject.SetProperty` 签名一致），对象模型保留回退；`opaque` 维持成员写入（文档模型无入口）；
+      布局成员、Transition 条目等既有路径经 0.8.8 的 save → XML → external reload 梯子已实证可持久化，
+      本轮不改（详见下方「本轮实际发现」）。
+- [x] 写入路径回报：所有经 `writeVerification` 的写 Action 返回 `writePath`
+      （`document-model` / `object-model`），绕过文档模型成为可观测事实。
+- [x] 在 `save:true` 前置断言「内存已变但文档未进入修改状态」，以
+      `persistence_failed`（`stage: "modified"`）在 `doc.Save()` **之前**失败关闭；
+      幂等写入不触发该检查（目标值与现值相同时文档保持未修改是正确的）。
+- [x] 回归测试：模拟宿主新增 6 项（文档模型优先 / 失败回退 / 静默保存 fail-closed / 幂等写入不误报 /
+      无 docElement 时的路径回报 / writePath 不得跨 action 继承），总数 112 → **118 全过**。
+- [x] **真机复验（2026-10-19，Editor 6.1.4）**：10 条写 Action 的 `writePath` 全部与实际写入层
+      一致，`set_property --external-reload` 得 `strength:reload`。证据：
+      `tests/reports/p8-0-p8-1-live.json`。复验中发现并修复了本轮引入的两个缺陷：
+      ①`writePath` 谎报（未声明的写路径继承上一个 action 的值，详见「本轮实际发现」）；
+      ②`replace_object_resource` 漏报（Image 走 `Document.ReplaceSelection` 属文档模型，
+      Loader 走 `FLoader.url` 属对象模型，已分别声明）。
+
+#### 本轮实际发现（0.8.9）
+
+审计 49 个 Action 的写入路径后，最重要的结论是：**Bridge 过去对所有写 Action
+统一手工调用 `doc.SetModified(true)`**。那不是可选项而是补丁——它只骗过
+"要不要保存"这个开关，文档内部状态与序列化结果仍然可能不一致，而这种不一致
+往往要到 external reload 才暴露，表现为"内存已改、磁盘没改"。
+
+`DocElement.SetProperty` 与 `FObject.SetProperty` 签名完全一致
+（`editor.d.ts` L20114 / L17537），所以属性写入换层是零风险的签名级替换；
+但 `opaque` 只存在于 `FComponent` 成员、文档模型没有入口，保留成员写入。
+
+**真机复验暴露的第二个缺陷（已修）：**`writePath` 会**谎报**。`lastWritePath` 原本只在
+`setWritableProperty`/`writeObjectProperty` 里赋值，而 `set_text_style`、List/Group 布局成员、
+`FController`、`FTransitions` 这些走直接成员赋值的路径从不赋值——它们会报出上一个 action
+留下的值。实测 `set_text_style` 紧跟在 `set_property` 之后时，会把成员赋值报成
+`document-model`。修复：①每个请求入口 `beginWrite()` 重置为 `null`；②每条写路径显式声明
+写入层；③四条验证链（对象 / Controller / Transition / 包资源）统一回报 `writePath`；
+④补 mock host 回归用例钉住。**教训：诊断字段一旦靠"上一次的值"兜底，它就会变成谎报——
+宁可报 `null`（unknown），也不能给出一个看起来可信的错误答案。**
+
+布局成员（`assignLayoutMember`）与 Transition 条目仍是对象模型写入，本轮**未改**：
+它们的持久化已被 0.8.6~0.8.8 的 save → 磁盘 XML → external reload 梯子实证过，
+换层属于无证据的改动，风险大于收益。它们现在会通过 `writePath` 字段被显式暴露，
+后续若出问题可以据此定位。
+
+### P8-1 编译期类型校验（工程性前置，零运行时成本）
+
+`plugin/types/editor.d.ts` 目前是 1476 字节手写 stub，注释写明"用 any 是为了避免复制
+FairyGUI 生成的大体积声明文件"。代价是成员名拼错编译照过、运行时才静默失败。
+
+工作项：
+
+- [x] 扩展 `scripts/extract_editor_api.py --emit-stub`，按 `main.ts` 实际引用的 29 个类型
+      生成精简 stub（1039 行），随插件一起版本控制；
+- [x] 成员名、静态性、参数个数（含重载与可选参数 `?`）、继承关系均与真实声明一致；
+      参数/返回类型除基本类型外擦成 `any` 以避免拖入标准库依赖树；
+- [x] 接线到 `plugin/tsconfig.json`（`types/editor.d.ts` 已是唯一声明源），现有 `main.ts`
+      对着真实 API **0 error**；已实测能抓出三类此前完全放过的错误：
+      成员名拼错（`Did you mean 'SetProperty'?`）、参数个数错误、静态/实例误用。
+- [x] 收敛过程中发现的 16 处报错**全部确认是生成器缺陷而非 main.ts 问题**
+      （重载折叠、枚举体在下一行、可选参数标记丢失），已修生成器而非放宽 main.ts。
+
+### P8-2 资源引用图与替换语义（解决 §1.1）
+
+Bridge 目前完全没有引用图 API，而编辑器有完整的：
+
+```csharp
+DependencyQuery.QueryDependencies / QueryReferences / ReplaceReferences
+ReferenceInfo { ownerPkg, pkgId, itemId, content, propKey, arrayIndex, valueType }
+```
+
+`propKey` / `arrayIndex` 精确到"哪个对象的哪个属性槽"，正是 §1.1 缺的部分。
+
+- [x] 新增 `query_references`、`query_dependencies`（只读，0.8.10）：走编辑器原生
+      `DependencyQuery`，用 `(project, url, seekLevel)` 重载避开从 JS 构造 C# 泛型 List；
+      `seek_level` 接受 `selection`/`samePackageButNotExported`/`samePackage`（默认）/`all`，
+      分隔符写法不敏感，响应回报实际生效的 seekLevel 与代码值；
+- [x] 只读语义在插件、CLI、MCP 三层同时成立（无 `save`/`external_reload` 参数、
+      不进 publish 封锁表），回归用例钉住；`max_items` 默认 200/上限 2000，
+      截断显式回报 `truncated` + 真实 `totalCount`，取不到的名字与资源一律 `null`，
+      单个资源描述失败只退化为最小身份信息，不拖垮整条查询；
+- [x] 项目级查询默认先打开未打开的包（否则会得到一个看起来完整、实际少算的结果），
+      代价记录在 `packages` 字段，`skip_package_open` 为显式且可见的跳过开关；
+- [x] **真机 6.1.4 复验**（证据 `tests/reports/p8-2-live.json`）：实测推翻了第一版的输出假设——
+      `ReferenceInfo` 的 `ownerPkg`/`pkgId`/`itemId` 指的是**被引用的资源**而非引用方，
+      真正回答「谁引用了它」的是 `content`（`FairyGUI.Utils.XML` 元素节点）的
+      `attributes.id/name`。输出结构已据此改为 `referencedItem` / `slot` / `owner` / `attributes`；
+      顺带修掉 `XML.attributes`（C# 字典，只能 `GetEnumerator`）、`ToXMLString()` 不可用，
+      以及「未找到指定 FairyGUI 资源」被归成 `editor_rejected` 的分类缺陷；
+- [ ] **仍未复验**：多包工程中未打开的包是否会被少算（本隔离工程只有一个已打开的包，
+      `packages.opened` 恒为 0，真机触发不了该分支）；
+- [ ] 新增 `replace_references`（全工程替换语义，先出预览再执行）；预览直接复用
+      `query_references` 的结果；
+- [ ] 与既有 `replace_object_resource`（单对象覆盖）并存，参数语义明确区分。
+
+### P8-3 关键帧与动画（解决 Phase 5 未完成项）
+
+```csharp
+Document.SetKeyFrameProperty / SetKeyFrameValue / SetKeyFramePathPos / SetKeyFrameControlPointSmooth
+Document.CreateKeyFrame / AddKeyFrames / AddKeyFrame / RemoveKeyFrame(s) / DuplicateTransition
+FTransitions.TakeSnapshot / ReadSnapshot / ClearSnapshot   // 编辑器自用的关键帧跟随机制
+AniData { fps, speed, repeatDelay, swing, frameList, spriteList }
+```
+
+- [ ] 新增 `add_keyframes`、`set_keyframe`、`duplicate_transition`；
+- [ ] `verify_transition`：检查 target 存在性、关键帧是否超出对象范围（Phase 5 长期未完成项）；
+- [ ] MovieClip 补齐帧尺寸、透明边界、FPS、循环参数报告；
+- [ ] 评估用 `FTransitions.TakeSnapshot` 替代 Bridge 自造的 before 快照。
+
+### P8-4 预览与截图（解决 Phase 7 的 Bridge 侧）
+
+编辑器已有离屏渲染与预览运行时，不需要截整个应用窗口：
+
+```csharp
+FairyGUI.CaptureCamera.Capture(target: DisplayObject, texture: RenderTexture, contentHeight, offset)
+FairyGUI.CaptureCamera.CreateRenderTexture(width, height, stencilSupport)
+TestView { Start, Stop, Reload, PlayTransition, ShowTooltips }
+PreviewView { Show }
+```
+
+> `UnityEngine.ScreenCapture` **未**在声明中暴露，`CaptureCamera` 才是正确入口。
+
+- [ ] 新增 `render_component`：指定 target/尺寸输出 PNG（支持指定 Controller page、Transition frame）；
+- [ ] 新增 `preview_run`：驱动 `TestView` 做交互预览；
+- [ ] 基于渲染图生成 before/after 对比，不再依赖 Computer Use 截屏。
+
+### P8-5 发布与图集配置
+
+```csharp
+PublishSettings { genCode, codePath, branchPath, atlasList, excludedList, useGlobalAtlasSettings }
+PackSettings   { pot, mof, padding, rotation, minWidth, minHeight, maxWidth, maxHeight, square, multiPage }
+AtlasSettings  { name, compression, extractAlpha, packSettings }
+PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, ClearOldResFiles, CollectClasses }
+```
+
+- [ ] 新增 `set_publish_settings`（按包设置图集、代码生成、分支排除）；
+- [ ] `analyze_atlas_fit`：**按真实 `PackSettings` 约束**判断大图能否入图集，
+      替换当前硬编码的 `LARGE_IMAGE_LONG_SIDE_MIN` 猜测（Phase 5 未完成项）；
+- [ ] 暴露 `PublishHandler` 的分步导出能力，便于"只导描述/只导资源"。
+
+### P8-6 分支（完全空白的能力域）
+
+```csharp
+FProject { activeBranch, allBranches, CreateBranch, RenameBranch, RemoveBranch, ScanBranches }
+FPackage { GetBranchRootItem, CreateBranch, GetBranchPath }
+FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, GetStdResolution }
+```
+
+- [ ] 新增 `list_branches`、`create_branch`、`switch_branch`；
+- [ ] 让 `list_items` / `get_tree` / 写操作能按分支限定范围。
+
+### P8-7 其他可直接复用域（单点成本低，收益立竿见影）
+
+| 领域 | 编辑器原生入口 | 建议 Action |
+| --- | --- | --- |
+| 资源审计 | `FindUnusedResource`、`FindDuplicateResource`、`FullSearch`、`ReferenceView`、`AssetSizeUtil` | `find_unused`、`find_duplicate`、`full_text_search` |
+| i18n | `ImportStringsHandler.Parse/Import`、`ExportStringsHandler.Parse/Export`、`I18nSettings` | `import_strings`、`export_strings`、`list_langs` |
+| 原生撤销栈 | `ActionHistory`、`ObjectSnapshot.Take/Load` | 评估用编辑器原生栈替代 `agentUndoStack`，`ObjectSnapshot` 可复用为 `verify_document` 快照格式 |
+| 组件原语 | `Document.CreateGroup/DestroyGroup`、`CopySelection/Paste`、`AdjustDepth` | `create_group`、`duplicate_object`、`adjust_depth` |
+| 可见性 | `ConsoleView.Log/LogError/LogWarning` | 把 Agent 操作与错误回显到**用户可见的编辑器控制台** |
+| 自定义属性 | `ComExtention`、`ComProperty`、`CustomProps`、`FProject.RegisterComExtension` | 自定义组件属性读写 |
+| 事件驱动 | `App.On/Off/Dispatch`、`App.add_onProjectOpened/onValidate` | 评估替代部分轮询 |
+
+> Phase 0 记录的夹具缺口（"Bridge 无创建 List/Group/Controller/Loader 节点的 Action"）
+> 由 P8-7 的 `Document.CreateGroup` 与 `FComponent.CreateChild` 直接解决。
+
+### P8-0 ~ P8-7 的执行顺序
+
+| 批次 | 内容 | 理由 |
+| --- | --- | --- |
+| 1 | P8-0 + P8-1 | 先把写入路径纠正到文档模型层并获得编译期保护，否则新 Action 会复制现有坑 |
+| 2 | P8-2 | 直接清偿 §1.1 的技术债，是计划里最明确的一条 |
+| 3 | P8-4 + P8-5 | 分别解锁 Phase 7 与 Phase 5 的硬骨头 |
+| 4 | P8-3 + P8-6 | 动画深入与新能力域 |
+| 5 | P8-7 批量 | 审计 / i18n / 原生撤销栈 / 可见性 |
+
+---
+
 ## 5. 工程实现规范
 
 ### 5.1 修改范围
@@ -711,6 +935,10 @@ Bridge 改进应在独立仓库完成：
 
 ## 7. 优先级排序
 
+> 下述 P0/P1/P2 为 2026-09-20 规划时按"本次 UI 拼装"的 Computer Use 频次排定。
+> 截至 0.8.8，第 1~5 项 P0 与 P1 的 List/Group/Relation 已完成（见上表）。
+> **当前实际待办以 §7.1 为准**，它基于 2026-10-19 的编辑器逆向分析，按"能否清偿既有技术债"重排。
+
 ### P0：必须优先完成
 
 1. 写入后持久化回读；
@@ -735,6 +963,23 @@ Bridge 改进应在独立仓库完成：
 3. 一键发布后 Unity refresh；
 4. 多设计稿批量导入和差异报告；
 5. 资源使用关系图和未引用资源扫描。
+
+### 7.1 当前实际待办（2026-10-19 重排）
+
+| 序 | 事项 | 对应 | 为什么排这个位置 |
+| --- | --- | --- | --- |
+| 1 | ~~写入路径归位到 `Document`/`DocElement`~~ **0.8.9 已完成** | P8-0 | 正确性前提。不先修，后面每个新 Action 都会复制 Phase 4 踩过的静默 save 失败 |
+| 2 | ~~用真实声明生成类型 stub，接入编译期校验~~ **0.8.9 已完成** | P8-1 | 成本极低，且是 1 和后续所有项的安全网 |
+| 3 | 引用图（只读，**0.8.10 已完成**）→ 真机复验 → 全工程替换语义 | P8-2 | 直接清偿 §1.1 这条挂了两轮的技术债；只读部分已落地，写侧替换仍待 `replace_references` |
+| 4 | 离屏渲染截图 + 交互预览 | P8-4 | 解锁 Phase 7；`CaptureCamera` 已有原生实现，不必再依赖 Computer Use 截屏 |
+| 5 | 图集与发布配置（按真实 `PackSettings` 给建议） | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测 |
+| 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备 |
+| 7 | 分支能力 | P8-6 | 新增域，多端/多版本项目价值高 |
+| 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影 |
+| 9 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 8 项提供可靠写能力后再做，否则返工 |
+
+**Phase 6 顺延到第 9 位**是本轮重排的主要变化：Lanhu 工作流的价值取决于 Bridge 写能力
+与验证能力的可靠性，在 P8-0 落地前先做映射工作流，等于把不稳定的能力放大到批量场景。
 
 ---
 

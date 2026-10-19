@@ -27,7 +27,35 @@ const tests=[];
 let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
-let controllers;
+let controllers,refRegistry,depRegistry;
+// 真机实测：ReferenceInfo.content 是 FairyGUI.Utils.XML 元素节点，其 attributes
+// 是 C# 字典（JSON.stringify 得 {}），只能靠 GetEnumerator/MoveNext/Current 取。
+// 夹具照这个形态建模，否则测试会通过一个真实环境不存在的假象。
+function makeXmlNode(tag,attributes){
+ const pairs=Object.entries(attributes);
+ let index=0;
+ return {name:tag,text:'',
+  attributes:{
+   get Count(){return pairs.length},
+   GetEnumerator(){return {MoveNext(){if(index>=pairs.length)return false;index++;return true;},get Current(){const [k,v]=pairs[index-1];return {key:k,value:v};}};},
+   GetAttribute(k){const hit=pairs.find(p=>p[0]===k);return hit?hit[1]:null;}
+  }};
+}
+function makeDependencyQuery(){
+ return {
+  resultList:{Count:0,get_Item:()=>null},
+  references:{Count:0,get_Item:()=>null},
+  QueryReferences(project,url){
+   const refs=refRegistry[url]||[];
+   this.references={Count:refs.length,get_Item:i=>Object.assign({ownerPkg:pkg,pkgId:pkg.id},refs[i])};
+  },
+  QueryDependencies(project,url,level){
+   const entry=depRegistry[url];
+   const list=(entry&&entry[level])||[];
+   this.resultList={Count:list.length,get_Item:i=>list[i]};
+  }
+ };
+}
 function makeTransitionItem(targetId,type,frame){
  const it={targetId,type,frame,label:'',tween:false,easeType:'Quad',repeat:0,yoyo:false,usePath:false,pathData:'',customEaseData:'',value:{f1:0,f2:0,b1:true,b2:true,b3:false,i:0,s:'',s2:'',iu:null},prevItem:null,nextItem:null,_path:[],
   pathPoints:{get Count(){return it._path.length},get_Item:i=>it._path[i],set_Item(i,v){it._path[i]=v;}},
@@ -183,7 +211,35 @@ function setup() {
  const mc={id:'mc1',name:'loop.jta',type:'movieclip',title:'loop',path:'/',file:'/pkg/mc.jta',width:64,height:64,exported:true,folderAtlas:'',owner:pkg,
   GetURL:()=>'ui://fixture0mc1',SetChanged(){},UnloadAsset(){mc._asset=null;},GetAsset(){if(!(mc.file in files))return null;mc._asset=mc._asset||{file:mc.file,animation:{frameList:{Count:0,get_Item:()=>null},fps:12,speed:1,repeatDelay:0,swing:false,frameCount:0}};return mc._asset;}};
  packageItems.push(mc);resources['ui://fixture0mc1']=mc;files['/pkg/mc.jta']='JTA';
+ // 引用方所属的资源：对象 id 后缀 n3_fix01 / n4_fix01 里的 fix01 要能解析到它，
+ // 而 n4_ghost 解析不到——这正是真机上「解析成功才回报」的判定依据。
+ const ownerItem={id:'fix01',name:'BridgeFixture.xml',type:'component',title:'BridgeFixture',path:'/',file:'/pkg/BridgeFixture.xml',width:400,height:300,exported:true,folderAtlas:'',owner:pkg,
+  GetURL:()=>'ui://fixture0fix01',SetChanged(){},EnsureOpen(){},GetAsset:()=>null,UnloadAsset(){}};
+ packageItems.push(ownerItem);resources['ui://fixture0fix01']=ownerItem;
  files['/pkg/package.xml']=serializePackageXml();
+ // red 被两个属性槽引用：一个宿主对象在已打开的包里（名字可解析），一个 id 后缀
+ // 解析不到所属资源（必须报 null，不许编）。
+ refRegistry={
+  'ui://fixture0red':[
+   {itemId:'mc1',propKey:'src',arrayIndex:0,valueType:1,
+    content:makeXmlNode('image',{id:'n3_fix01',name:'picture',src:'red',xy:'10,20'})},
+   {itemId:'ghost1',propKey:'pages',arrayIndex:2,valueType:0,
+    content:makeXmlNode('list',{id:'n4_ghost',name:'listItems',pages:'0,1,2'})}
+  ],
+  'ui://fixture0blue':[]
+ };
+ // 一个依赖项的 GetURL 会抛错：describeItem 失败时必须退回最小身份信息，
+ // 不能让整条只读查询因为一个没加载完的资源失败。
+ const brokenDep={id:'brk',name:'broken.png',isSource:false,analysed:true,targetPath:'/',refCount:1,content:null};
+ Object.defineProperty(brokenDep,'GetURL',{get(){throw Error('asset not loaded');}});
+ const redDep={item:resources['ui://fixture0red'],isSource:false,analysed:true,targetPath:'/',refCount:1,content:null};
+ depRegistry={
+  'ui://fixture0panel':{
+   2:[redDep],
+   3:[Object.assign({},redDep,{isSource:true}),redDep,Object.assign({},redDep,{item:brokenDep})]
+  },
+  'ui://fixture0red':{3:[]}
+ };
  const docView={
   CloseDocuments(url){ if(closeMode==='plural-throw'||closeMode==='none')throw Error('invalid arguments ... or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocuments');closeAndReload(); },
   CloseDocument(url){ if(closeMode==='none')throw Error('or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocument');closeAndReload(); },
@@ -191,7 +247,7 @@ function setup() {
  };
  const app={activeDoc:null,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
   GetItemByURL:url=>resources[url] || null,GetPackage:()=>pkg,GetPackageByName:()=>pkg,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,SetChanged(){},Save(){}},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  ctx.getActiveDocument=()=>doc;
@@ -468,7 +524,160 @@ test('set_controller reload proves the controller survives reopen',()=>{const r=
 test('list_controllers returns the component controller set',()=>{const r=ctx.handleCommand({action:'list_controllers',params:{}});assert.equal(r.controllers.length,1);assert.equal(r.controllers[0].name,'c1');assert.equal(r.controllers[0].pageNames,'page0,page1');});
 test('Phase 4 write actions are refused without a save-safe reload combo',()=>{addListObject();rejects(()=>ctx.handleCommand({action:'set_list_layout',params:{target:{id:'list1'},lineGap:8,externalReload:true}}),'invalid_argument','input');});
 
-// externalReloadVerified stays false on purpose: this suite proves the reload
+// ---- P8-0: 写入路径归位到编辑器文档模型层（DocElement） ----
+// 6.1.4 实测绕过文档模型会让文档状态与序列化结果不一致，save 可能静默成功却什么都没写。
+// 这些用例钉住三件事：优先走文档模型、失败可回退、绕过时 fail-closed。
+test('set_property prefers the document model and reports writePath',()=>{const o=objects[2];const seen=[];o.docElement={SetProperty(p,v){seen.push([p,v]);o[p]=v;}};const r=set('text1','x',42);assert.equal(r.writePath,'document-model');assert.deepEqual(seen,[['x',42]]);assert.equal(o.x,42);assert.equal(r.persisted,true);});
+test('a rejected document-model write falls back to the object model',()=>{const o=objects[2];o.docElement={SetProperty(){throw Error('doc element rejected')}};const r=set('text1','x',24);assert.equal(r.writePath,'object-model');assert.equal(o.x,24);assert.equal(r.persisted,true);});
+test('a write that never marks the document dirty fails closed before save',()=>{doc.SetModified=()=>{};rejects(()=>set('text1','x',11),'persistence_failed','modified');});
+test('an idempotent replace is not mistaken for a document-model bypass',()=>{const r=replace('image1');const disk=files['fixture.xml'];const r2=replace('image1');assert.equal(r2.ok,true);assert.equal(r2.saved,true);assert.equal(files['fixture.xml'],disk);});
+test('writes without a document element still report the object-model path',()=>{const r=set('text1','x',13);assert.equal(r.writePath,'object-model');assert.equal(r.persisted,true);});
+// 真机复验发现的缺陷：writePath 早先只在 set_property 路径里赋值，其余写路径
+// 继承上一个 action 的值，于是 set_text_style 会报出 document-model —— 谎报。
+test('writePath is declared per action and never inherited from the previous one',()=>{
+  const o=objects[2];
+  // 模拟宿主默认不给 docElement，set_relation 会落到对象模型回退；这里显式补上
+  // 文档模型入口，才能观察到两条路径各自的声明。
+  o.docElement={
+    SetProperty(p,v){o[p]=v;},
+    UpdateRelations(xml){
+      o.relations.Reset();
+      if(!xml)return;
+      for(let i=0;i<xml.elements.Count;i++){
+        const e=xml.elements.get_Item(i);
+        if(e.name!=='relation')continue;
+        const pair=String(e.GetAttribute('sidePair')||'');
+        if(!pair)continue;
+        const tid=String(e.GetAttribute('target')||'');
+        o.relations.AddItem(objects.find(x=>x.id===tid)||null,pair);
+      }
+    },
+    SetRelation(){}
+  };
+  assert.equal(set('text1','x',41).writePath,'document-model');
+  assert.equal(text().writePath,'object-model');          // 成员赋值，不得继承上一条
+  assert.equal(setRel('text1',[{sidePair:'width-width,height-height'}]).writePath,'document-model');
+  assert.equal(text().writePath,'object-model');          // 同样不得被上一条污染
+  delete o.docElement;
+  assert.equal(set('text1','x',42).writePath,'object-model');
+});
+
+// ---- P8-2: 资源引用图（只读） ----
+// 编辑器原生的 DependencyQuery 能给出 propKey / arrayIndex 这种「哪个对象的哪个
+// 属性槽」的精度。这些用例钉住四件事：槽位精度不丢、只读动作真的不写、截断必须
+// 显式上报、单个资源描述失败不得拖垮整条查询。
+const refs=(extra={})=>ctx.handleCommand({action:'query_references',params:{url:'ui://fixture0red',...extra}});
+const deps=(extra={})=>ctx.handleCommand({action:'query_dependencies',params:{url:'ui://fixture0panel',...extra}});
+test('query_references reports the exact property slot that holds the reference',()=>{
+  const r=refs();
+  assert.equal(r.readOnly,true);
+  assert.equal(r.totalCount,2);
+  const first=r.references[0];
+  // referencedItem 是「被引用的资源」——ReferenceInfo 自身的身份字段指的就是它，
+  // 早先把它当成引用方，会让 agent 读出「Red 引用了它自己」。
+  assert.equal(first.referencedItem.packageId,'fixture0');
+  assert.equal(first.referencedItem.packageName,'Fixture');
+  assert.equal(first.referencedItem.itemId,'mc1');
+  assert.equal(first.referencedItem.itemName,'loop.jta');
+  assert.equal(first.slot.element,'image');
+  assert.equal(first.slot.propKey,'src');
+  assert.equal(first.slot.arrayIndex,0);
+  assert.equal(first.slot.valueTypeCode,1);
+  assert.equal(first.slot.valueType,'url');
+  // 真正的引用方在 content（XML 元素节点）里
+  assert.equal(first.owner.objectId,'n3_fix01');
+  assert.equal(first.owner.objectName,'picture');
+  assert.equal(first.owner.itemId,'fix01');
+  assert.equal(first.owner.itemName,'BridgeFixture.xml');
+  assert.equal(first.attributes.src,'red');
+  assert.equal(first.attributes.xy,'10,20');
+});
+test('query_references reports a null owner item when the id suffix resolves to nothing',()=>{
+  const second=refs().references[1];
+  assert.equal(second.referencedItem.itemId,'ghost1');
+  assert.equal(second.referencedItem.itemName,null);      // 包里没有这个 item，不许编一个名字
+  assert.equal(second.slot.element,'list');
+  assert.equal(second.slot.propKey,'pages');
+  assert.equal(second.slot.arrayIndex,2);
+  assert.equal(second.slot.valueType,'id');
+  assert.equal(second.owner.objectId,'n4_ghost');
+  assert.equal(second.owner.itemId,null);                 // fix01 之外的猜测一律不回报
+  assert.equal(second.attributes.pages,'0,1,2');
+});
+test('An unreferenced resource returns an empty list, not a missing result',()=>{
+  const r=ctx.handleCommand({action:'query_references',params:{url:'ui://fixture0blue'}});
+  assert.equal(r.totalCount,0);
+  assert.equal(r.references.length,0);
+  assert.equal(r.truncated,false);
+});
+test('query_dependencies echoes the resolved seekLevel instead of assuming the default',()=>{
+  const byDefault=deps();
+  assert.equal(byDefault.seekLevel,'samePackage');
+  assert.equal(byDefault.seekLevelCode,2);
+  assert.equal(byDefault.totalCount,1);
+  const all=deps({seekLevel:'all'});
+  assert.equal(all.seekLevel,'all');
+  assert.equal(all.seekLevelCode,3);
+  assert.equal(all.totalCount,3);
+  assert.equal(all.dependencies[0].isSource,true);
+  assert.equal(deps({seekLevel:'same_package'}).seekLevelCode,2);   // 分隔符写法不敏感
+  assert.equal(deps({seekLevel:3}).seekLevel,'all');                // 数值原样映射到名字
+});
+test('An unknown seekLevel and an out-of-range code are rejected before querying',()=>{
+  rejects(()=>deps({seekLevel:'everything'}),'invalid_argument','input');
+  rejects(()=>deps({seekLevel:9}),'invalid_argument','input');
+  rejects(()=>deps({maxItems:0}),'invalid_argument','input');
+  rejects(()=>deps({maxItems:99999}),'invalid_argument','input');
+});
+test('Truncation is reported explicitly, never silently dropped',()=>{
+  const r=refs({maxItems:1});
+  assert.equal(r.totalCount,2);
+  assert.equal(r.references.length,1);
+  assert.equal(r.truncated,true);
+  assert.equal(refs().truncated,false);
+  assert.equal(deps({seekLevel:'all',maxItems:2}).truncated,true);
+});
+test('A dependency item that cannot be described degrades to a minimal identity',()=>{
+  const all=deps({seekLevel:'all'});
+  const broken=all.dependencies[2].item;
+  assert.equal(broken.id,'brk');
+  assert.equal(broken.name,'broken.png');
+  assert.equal(broken.url,null);              // 取不到就报 null，不报一段假文本
+  assert.equal(all.dependencies[0].item.id,'red');    // 同一次查询里其他项照常返回
+});
+test('Reference queries never touch the document or the disk',()=>{
+  const before=files['fixture.xml'];
+  const r=refs({maxItems:1});
+  const d=deps({seekLevel:'all'});
+  assert.equal(r.readOnly,true);
+  assert.equal(d.readOnly,true);
+  assert.equal(doc.isModified,false);
+  assert.equal(files['fixture.xml'],before);
+  assert.equal(pkg.changed,undefined);
+});
+test('An unresolvable resource is rejected before any query runs',()=>{
+  assert.throws(()=>ctx.handleCommand({action:'query_references',params:{url:'ui://nope'}}),/未找到/);
+  assert.throws(()=>ctx.handleCommand({action:'query_dependencies',params:{url:'ui://nope'}}),/未找到/);
+});
+test('A project-wide query opens closed packages instead of silently undercounting',()=>{
+  pkg.opened=false;
+  const r=refs();
+  assert.equal(pkg.opened,true);
+  assert.equal(r.packages.opened,1);
+  assert.equal(r.packages.skipped,false);
+  assert.equal(r.packages.packageCount,1);
+  const already=refs();                     // 已经打开的不重复计数
+  assert.equal(already.packages.opened,0);
+});
+test('skipPackageOpen is an explicit opt-out that is reported as skipped',()=>{
+  pkg.opened=false;
+  const r=refs({skipPackageOpen:true});
+  assert.equal(r.packages.skipped,true);
+  assert.equal(r.packages.opened,0);
+  assert.equal(pkg.opened,false);            // 代价可见，漏算风险由调用方自行承担
+});
+
+
 // verification *logic* against a mocked host, never Editor acceptance.
 (async()=>{
 for(const {name,run} of tests){try{setup();await run();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:e.stack});}}

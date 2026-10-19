@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-2-live",
+  "bridgeVersion": "0.8.10",
+  "editorVersion": "6.1.4",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture）",
+  "verifiedAt": "2026-10-19",
+  "liveEditorVerified": true,
+  "environment": {
+    "note": "每次改插件都要 pkill 编辑器并用 editor_launcher.wake(open_project=True) 重开工程，否则加载的仍是旧 main.js",
+    "syncGuard": "同步前做过双向比对：工程快照只有 0.8.9 的旧版本号与旧 capabilities 行，没有任何仓库缺失的实现，才单向同步 0.8.10"
+  },
+
+  "apiFindings": [
+    {
+      "id": "P8-2-L1",
+      "severity": "high",
+      "title": "ReferenceInfo 的身份字段指的是「被引用的资源」，不是引用方",
+      "detail": "QueryReferences 返回的每条 ReferenceInfo，ownerPkg/pkgId/itemId 三者都指向被查询的资源本身。查 ui://...p93m3（BridgeTestButton）时，两条引用的 itemId 都是 p93m3。",
+      "consequence": "第一版输出把它标成 packageId/itemId/itemName，agent 会读成「BridgeTestButton 引用了它自己」——一个看起来完整、实际自相矛盾的答案。",
+      "fix": "输出结构改为 referencedItem / slot / owner / attributes 四段：referencedItem 明确是被引用资源，owner 才是引用方。0.8.10 未发布过旧结构，无兼容负担。"
+    },
+    {
+      "id": "P8-2-L2",
+      "severity": "high",
+      "title": "真正回答「谁引用了它」的是 ReferenceInfo.content",
+      "detail": "content 是 FairyGUI.Utils.XML 的元素节点（真机实测 ctor = FairyGUI.Utils.XML, FairyGUI），name 是元素标签（component/list/image/loader），attributes 里带宿主对象的 id 与 name。",
+      "evidence": "n3_fix01/btnMain 的 <component ... src=\"p93m3\" fileName=\"BridgeTestButton.xml\" xy=\"40,130\"/>；n4_fix01/listItems 的 <list ... defaultItem=\"ui://qsezbqtwp93m3\" .../>",
+      "fix": "owner.objectId / owner.objectName 取自 attributes.id / attributes.name，完整属性表一并回报便于调用方复核"
+    },
+    {
+      "id": "P8-2-L3",
+      "severity": "medium",
+      "title": "XML.attributes 是 C# 字典，JSON 化与 Keys 都不可用",
+      "detail": "JSON.stringify(xml.attributes) 得到 {}；attributes.Keys 上调 get_Item 抛 TypeError，按下标遍历拿到的是单个字符。唯一可用的是 GetEnumerator() + MoveNext() + Current（pair.key / pair.value）。",
+      "fix": "xmlAttributes() 只走枚举器；枚举失败返回空字典，不返回看起来像属性表的假数据"
+    },
+    {
+      "id": "P8-2-L4",
+      "severity": "low",
+      "title": "XML.ToXMLString() 在 Puerts 下不可用",
+      "detail": "调用抛 Error: invalid arguments to ToXMLString or the overload is striped by unity（与 CloseDocuments/CloseDocument 同类的重载剥离问题）。",
+      "fix": "不依赖 ToXMLString，改为回报元素名 + 完整属性表"
+    },
+    {
+      "id": "P8-2-L5",
+      "severity": "high",
+      "title": "「未找到指定 FairyGUI 资源/包」被错误归类为 editor_rejected",
+      "detail": "completeRequestError 的 code 映射只匹配「未找到对象」和「未找到资源引用」，resolveItem/resolvePackage 抛的是「未找到指定 FairyGUI 资源…」，落到默认 editor_rejected。",
+      "consequence": "调用方无法区分「编辑器拒绝执行」与「目标根本不存在」。",
+      "fix": "映射补上「未找到指定」；真机复验 references ui://nonexistent 现返回 target_not_found"
+    }
+  ],
+
+  "readOnlyVerified": {
+    "method": "打开 BridgeFixture 文档后，对 4 个资源各跑 references + dependencies --seek-level all",
+    "documentModifiedAfter": false,
+    "assetXmlHashUnchanged": true,
+    "gitDirtyAssetsAfter": 0,
+    "note": "只读动作没有触碰文档、包清单或磁盘 XML"
+  },
+
+  "referenceGraphSamples": [
+    {
+      "target": "BridgeTestButton (ui://qsezbqtwp93m3)",
+      "totalCount": 2,
+      "rows": [
+        { "owner": "BridgeFixture/btnMain", "objectId": "n3_fix01", "slot": "component.src", "valueType": "id", "attributes": { "id": "n3_fix01", "name": "btnMain", "src": "p93m3", "fileName": "BridgeTestButton.xml", "xy": "40,130" } },
+        { "owner": "BridgeFixture/listItems", "objectId": "n4_fix01", "slot": "list.defaultItem", "valueType": "url", "attributes": { "id": "n4_fix01", "name": "listItems", "xy": "440,130", "size": "320,240", "overflow": "scroll", "colGap": "8", "defaultItem": "ui://qsezbqtwp93m3", "align": "none", "vAlign": "none", "autoClearItems": "true" } }
+      ]
+    },
+    {
+      "target": "Red (ui://qsezbqtwp93m1)",
+      "totalCount": 2,
+      "rows": [
+        { "owner": "BridgeFixture/btnMain", "objectId": "n3_fix01", "slot": "image.src", "valueType": "id" },
+        { "owner": "BridgeFixture/loaderItem", "objectId": "n1_fix01", "slot": "loader.url", "valueType": "url" }
+      ]
+    },
+    {
+      "target": "Blue (ui://qsezbqtwp93m2)",
+      "totalCount": 4,
+      "note": "四条 image.src + loader.url，覆盖引用图里同一资源多处槽位的情形"
+    }
+  ],
+
+  "ownerIdResolution": {
+    "rule": "对象 id 形如 n3_fix01，后缀是所属资源 id",
+    "verified": "n3_fix01 与 n4_fix01 均解析到 BridgeFixture(fix01)；模拟宿主中 n4_ghost 解析不到，按规则报 null 而非猜测",
+    "caveat": "解析只做查表（GetItem(pkgId, 后缀)），查不到即 null；本工程样本未覆盖跨包 owner 的 id 后缀冲突场景"
+  },
+
+  "dependencySeekLevels": {
+    "target": "BridgeFixture",
+    "samePackage": { "code": 2, "total": 3, "items": ["Blue", "Red", "BridgeTestButton"], "default": true },
+    "all": { "code": 3, "total": 3, "items": ["Blue", "Red", "BridgeTestButton"], "note": "本工程只有一个包，all 与 samePackage 结果相同" },
+    "selection": { "code": 0, "total": 0, "note": "selection 语义是「当前选中项」，非选中查询返回空" },
+    "samePackageButNotExported": { "code": 1, "total": 0, "note": "包内资源全部 exported，故返回空" },
+    "conclusion": "对非选中查询只有 samePackage/all 有实际产出；默认取 samePackage 是安全的"
+  },
+
+  "packageOpening": {
+    "observed": { "skipped": false, "opened": 0, "packageCount": 1 },
+    "note": "隔离工程只有 Package1 且启动时已打开，EnsureOpen 无事可做",
+    "limitation": "「未打开的包会被少算」这一分支真机未能触发，只有模拟宿主覆盖；需在多包工程（其中某个包未打开）上复验才能确认 DependencyQuery 是否自行打开",
+    "optOut": "skip_package_open / skipPackageOpen 显式跳过并在响应中标记 skipped"
+  },
+
+  "errorPaths": [
+    { "case": "references ui://nonexistent", "code": "target_not_found", "note": "修复 P8-2-L5 后复验" },
+    { "case": "query_dependencies seekLevel=bogus", "code": "invalid_argument", "stage": "input", "details": { "allowed": ["selection", "samePackageButNotExported", "samePackage", "all"] } },
+    { "case": "query_dependencies seekLevel=9", "code": "invalid_argument", "stage": "input" },
+    { "case": "query_references maxItems=0 / 99999", "code": "invalid_argument", "stage": "input" }
+  ],
+
+  "writePathRegression": {
+    "why": "0.8.10 在 0.8.9 写路径代码之上加了新 Action，需证明没有回归",
+    "cases": [
+      { "action": "set_property", "target": "n0_fix01", "property": "scaleX", "value": 1.5, "save": true, "externalReload": true, "persisted": true, "strength": "reload", "writePath": "document-model", "closeStrategy": "CloseDocuments" },
+      { "action": "set_property", "target": "n0_fix01", "property": "scaleX", "value": 1, "save": true, "externalReload": true, "persisted": true, "strength": "reload", "writePath": "document-model", "note": "还原默认值" }
+    ],
+    "fixtureRestored": "1 → 1.5 → 1 全程 external reload 后，git status --porcelain sample/assets 为空：跟踪的夹具 XML 字节级回到初始状态"
+  },
+
+  "notVerified": [
+    "多包工程中未打开的包是否会被少算（需真实多包工程复验 skipPackageOpen 分支）",
+    "跨包引用时 owner id 后缀与目标包 id 同名冲突的情形",
+    "ReplaceReferences 写侧语义（本轮只做只读；replace_references 尚未实现）",
+    "Windows 平台行为"
+  ],
+
+  "boundary": "本报告只覆盖 0.8.10 的 P8-2 只读部分与 0.8.9 写路径抽样回归。API 形态结论基于 FairyGUI Editor 6.1.4 的 editor.d.ts 声明 + 本次实测；升级编辑器后必须重新提取并复跑。"
+}
