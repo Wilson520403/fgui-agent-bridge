@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "suite": "p9-1-text-style-live",
+  "capturedAt": "2026-10-20T17:04:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.20",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600 的 n2_fix01 / txtLabel）",
+  "question": "P9-1 要给 set_text_style 补 bold / stroke / shadow。规划里写「XML 侧属性名必须先实测确认再写进 VERIFIED_TEXT_KEYS，按 FGUI 惯例应是 stroke / strokeColor / shadow / shadowColor，但不能靠猜」。实测结论是什么？",
+  "verdict": "规划的推断有一半是错的，已按实测更正。**描边宽度属性是 strokeSize，不是 stroke**；投影偏移是 shadowOffset=\"x,y\"，不是 shadow；描边色 strokeColor 与投影色 shadowColor 与规划一致；bold/italic/underline 是同名布尔属性、false 时整个属性消失。stroke 与 shadow 两个布尔位是内存里的「启用开关」，本身不落盘：描边只有在开关打开时才会序列化 strokeSize/strokeColor，投影只有在开关打开时才会序列化 shadowOffset/shadowColor——所以「只给参数不给开关」会静默不落盘，Bridge 必须自动开开关。另外 shadow 开关的 setter 会把偏移重置成 (1,1)，所以顺序必须是先开关后偏移。",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app（com.fairygui.FairyGUIEditor 6.1.4）",
+    "platform": "macOS (Apple Silicon)",
+    "fixture": "sample/assets/Package1/BridgeFixture.xml 的 n2_fix01（txtLabel，纯文本无描边无投影）",
+    "prerequisiteEvidence": "tests/reports/p9-0-p9-1-probe-live.json（逐属性归因的活体探针）"
+  },
+  "request": {
+    "action": "set_text_style",
+    "params": {
+      "target": { "id": "n2_fix01" },
+      "style": {
+        "bold": true,
+        "italic": true,
+        "strokeSize": 2,
+        "strokeColor": "#FF0000",
+        "shadowX": 1,
+        "shadowY": 2,
+        "shadowColor": "#00FF00"
+      },
+      "save": true,
+      "verify": true,
+      "externalReload": true
+    }
+  },
+  "result": {
+    "ok": true,
+    "strength": "reload",
+    "persisted": true,
+    "writePath": "object-model",
+    "verification": {
+      "editorReadback": true,
+      "xmlReadback": true,
+      "externalReload": true,
+      "reload": { "performed": true, "closeStrategy": "CloseDocuments" },
+      "xml": {
+        "bold": true,
+        "italic": true,
+        "underline": false,
+        "strokeSize": 2,
+        "strokeColor": "#FF0000",
+        "shadowX": 1,
+        "shadowY": 2,
+        "shadowColor": "#00FF00",
+        "shadow": true
+      }
+    }
+  },
+  "diskEvidence": {
+    "file": "sample/assets/Package1/BridgeFixture.xml",
+    "diffAgainstBaseline": [
+      "-    <text id=\"n2_fix01\" name=\"txtLabel\" xy=\"200,48\" size=\"202,44\" fontSize=\"32\" color=\"#ffffff\" text=\"Fixture Label\"/>",
+      "+    <text id=\"n2_fix01\" name=\"txtLabel\" xy=\"200,48\" size=\"209,44\" fontSize=\"32\" color=\"#ffffff\" bold=\"true\" italic=\"true\" strokeColor=\"#ff0000\" strokeSize=\"2\" shadowColor=\"#00ff00\" shadowOffset=\"1,2\" text=\"Fixture Label\"/>"
+    ],
+    "notes": [
+      "属性名以此处为准：strokeSize / strokeColor / shadowOffset / shadowColor / bold / italic。",
+      "size 从 202x44 变成 209x44：autoSize=both 时编辑器按加粗后的文字重算宽度，不是写入失败。",
+      "underline 未出现：false 时属性整个省略（与 bold=false 行为一致）。"
+    ]
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "claim": "只写描边参数不写描边开关，参数不会落盘",
+      "evidence": "首轮真机实现只写 {bold, italic, strokeSize, strokeColor, shadowX, shadowY, shadowColor}，落盘 XML 里 bold/italic/shadowColor/shadowOffset 都在，唯独 strokeSize=\"2\" 与 strokeColor=\"#ff0000\" 缺失，验证以 persistence_failed（stage=xml）失败。补上「先打开描边开关再写参数」后复测全绿。",
+      "impact": "描边与投影是「开关 + 参数」结构；Bridge 在收到描边参数时自动打开描边开关，否则用户会拿到「接口返回成功但值没落盘」。"
+    },
+    {
+      "id": "F2",
+      "claim": "shadow 开关的 setter 会把偏移重置成 (1,1)",
+      "evidence": "先写 textFormat.shadowOffset=[3,4] 再写 shadow=true → 运行时偏移变成 (1,1)，XML 落 shadowOffset=\"1,1\"；先写 shadow=true 再写偏移 [1,2] → XML 落 shadowOffset=\"1,2\"。",
+      "impact": "写侧顺序固定为「先开关后偏移」，否则用户给的偏移会被静默改写。"
+    },
+    {
+      "id": "F3",
+      "claim": "描边宽度的缺省是 1（不是 0），且写成 0 后属性仍留在 XML 里",
+      "evidence": "从未设置过描边的文本运行时 strokeSize=1 且 XML 无该属性；写 strokeSize=0 后 XML 保留 strokeSize=\"0\"，描边色也残留。",
+      "impact": "XML 回读把缺省解析为 1；「置 0 关闭描边」在 XML 上表现为显式的 0，不是属性消失。"
+    },
+    {
+      "id": "F4",
+      "claim": "描边宽度在编辑器里有两个名字：FTextField.strokeSize 与 FairyGUI.TextFormat.outline 是同一份存储",
+      "evidence": "写 strokeSize=3 + strokeColor=#FF0000 后读 textFormat 得到 outline=3、outlineColor=RGBA(1,0,0,1)。",
+      "impact": "实现走 FTextField 成员（声明面完整、可编译期校验），不去写只读 getter 返回的 textFormat 对象。"
+    },
+    {
+      "id": "F5",
+      "claim": "关闭描边/投影用「宽度置 0」表达，不要引入独立的开关参数",
+      "evidence": "stroke=false 时编辑器行为未测（探针未覆盖），而 strokeSize=0 的行为已测（写 0、落 0）。",
+      "impact": "公开参数面只保留 strokeSize/strokeColor/shadowX/shadowY/shadowColor 与 bold/italic/underline；shadow 开关由 Bridge 自动管理。"
+    }
+  ],
+  "negativePaths": [
+    { "case": "shadow=false 与偏移同时给", "code": "invalid_argument", "message": "shadow=false 会把投影偏移清零，不能与 shadowX/shadowY 同时指定", "stage": "input" },
+    { "case": "bold 传字符串", "code": "invalid_argument", "message": "bold 必须是布尔值", "stage": "input" },
+    { "case": "strokeSize 传字符串", "code": "invalid_argument", "message": "strokeSize 必须是数字", "stage": "input" },
+    { "case": "未知样式键", "code": "unsupported_property", "message": "不支持验证属性：typo", "stage": "input" }
+  ],
+  "unverified": [
+    "本次未验证 rich text（GRichTextField）与 InputTextField 的样式面差异。",
+    "本次未验证双色投影：FGUI 只支持单层 shadow，另一层需拆成描边或图片。",
+    "本次未在真实业务工程上复验。"
+  ]
+}

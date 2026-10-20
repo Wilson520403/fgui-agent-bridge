@@ -1074,6 +1074,35 @@ def fgui_set_controller(
 
 
 @mcp.tool()
+def fgui_insert_text(
+    text: str = "",
+    x: float = 0,
+    y: float = 0,
+    name: str | None = None,
+    style: dict[str, Any] | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """在当前文档根组件下创建文本对象（0.8.20+）；结构操作不能由 Agent 属性事务栈撤销。
+
+    文本是 FGUI 的裸节点、不是包资源，所以只能用 insert_text 造，不能用 insert_object。
+    style 支持：font / fontSize / color / align / vAlign / autoSize / letterSpacing / lineGap /
+    width / height / bold / italic / underline / strokeSize / strokeColor / shadowX / shadowY / shadowColor。
+    其中 width/height 会自动把 autoSize 切成 none（否则编辑器在保存时按文字自然尺寸重算，写进去的尺寸会被改写）。
+    投影偏移（shadowX/shadowY）会自动打开投影开关：偏移不伴随开关时编辑器不会落盘。
+
+    save=True 保存后默认比对磁盘 XML；external_reload=True 会在保存后关闭并重新打开文档再比对，需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
+    params: dict[str, Any] = {"text": text, "x": x, "y": y, "save": save, "verify": verify, "externalReload": external_reload}
+    if name:
+        params["name"] = name
+    if style:
+        params["style"] = style
+    return _client.call("insert_text", params)
+
+
+@mcp.tool()
 def fgui_insert_object(
     url: str,
     x: float = 0,

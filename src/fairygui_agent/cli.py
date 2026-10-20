@@ -362,6 +362,16 @@ def build_parser() -> argparse.ArgumentParser:
     insert_parser.add_argument("--no-verify", action="store_true")
     insert_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
 
+    insert_text_parser = subparsers.add_parser("insert-text", help="在当前文档根组件下创建文本对象")
+    insert_text_parser.add_argument("--text", default="", help="文本内容")
+    insert_text_parser.add_argument("--x", type=float, default=0)
+    insert_text_parser.add_argument("--y", type=float, default=0)
+    insert_text_parser.add_argument("--name")
+    insert_text_parser.add_argument("--style", default="{}", help="文本样式 JSON 对象：font/fontSize/color/align/vAlign/autoSize/letterSpacing/lineGap/width/height/bold/italic/underline/strokeSize/strokeColor/shadowX/shadowY/shadowColor")
+    insert_text_parser.add_argument("--save", action="store_true")
+    insert_text_parser.add_argument("--no-verify", action="store_true")
+    insert_text_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+
     remove_parser = subparsers.add_parser("remove", help="删除对象；保存前可用 discard 放弃修改")
     _add_target_arguments(remove_parser)
     remove_parser.add_argument("--save", action="store_true")
@@ -837,6 +847,14 @@ def main() -> int:
                 params["name"] = args.name
             if args.insert_index is not None:
                 params["insertIndex"] = args.insert_index
+        elif args.command == "insert-text":
+            action = "insert_text"
+            params = {"text": args.text, "x": args.x, "y": args.y, "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+            if args.name:
+                params["name"] = args.name
+            style = load_json_value(args.style)
+            if style:
+                params["style"] = style
         elif args.command == "remove":
             action = "remove_object"
             params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}

@@ -991,7 +991,7 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 
 ## Phase 9：设计稿还原实测暴露的原语缺口（2026-10-20 新增）
 
-**状态：全部未实现。** 本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
+**状态：P9-0 与 P9-1 已于 0.8.20 落地并真机验收**（证据 `tests/reports/p9-0-p9-1-probe-live.json`、`p9-0-insert-text-live.json`、`p9-1-text-style-live.json`）；P9-2 ~ P9-6 仍未实现。本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
 （2560×1440 4×，逻辑 640×360）→ `Package1/SettingRoutine`，62 个对象（46 图片 + 16 文本），
 像素一致 91.16%。过程中每一处"做不下去"都记下了当时的报错原文与绕路方案。
 
@@ -1044,6 +1044,17 @@ FObject.NewObject(FPackage, type, missingInfo, flags) // 另一条构造路径
 **验收标准。** `insert_text --x --y --text --font-size --color` 在空白组件里建出一个文本，
 保存重开后位置/文案/样式不变，且不依赖任何组件资源。
 
+**结论（0.8.20 落地，真机 6.1.4 验收）。** 规划的路径**可行但缺一步**：
+`CreateChild(xml)` 单独调用会返回游离对象（objectType=text 但 id/name 全空、不进 displayList、
+save 后磁盘逐字不变），必须再调 `AddChild` 才进文档并落盘。另外四处与规划假设不同：
+① `CreateChild` 会**丢弃传入 XML 的全部属性**（`XML.Create`+`SetAttribute` 与 `new XML(字符串)`
+两种构造实测一致），属性必须在建完后往对象上补写，这些补写能落盘；
+② 新节点**没有 DocElement**，但序列化走 displayList，对象模型写入照样落盘（与 P8-0 不矛盾：
+新建与修改是两条路）；③ `font` 为空时写 `fontSize` 会在编辑器侧抛 NullReferenceException，
+必须先写 font（Bridge 自动补 `UIDefault`）；④ `autoSize` 缺省 both，保存时编辑器按文字自然尺寸
+重算，要精确尺寸必须先写 `autoSize=none`（Bridge 自动做）。
+`id` 由编辑器生成且只读。实现落在 `insert_text` Action + `fgui_insert_text` / `insert-text`。
+
 ### P9-1 `set_text_style` 补 `bold` / `stroke` / `shadow`
 
 **现象。** 当前白名单只有 `font/fontSize/color/align/vAlign/autoSize/letterSpacing/lineGap`。
@@ -1077,6 +1088,21 @@ XML 侧属性名**必须先实测确认**再写进 `VERIFIED_TEXT_KEYS`：按 FG
 
 **验收标准。** 对一个文本设置 `bold`+`stroke`+`shadow` 后，磁盘 XML 出现对应属性且
 external reload 后仍在；`get_text_style` 能原样读回。
+
+**结论（0.8.20 落地，真机 6.1.4 验收）：本节上文的属性名推断有一半是错的，已按实测更正。**
+
+| 语义 | 规划里写的 | **实测真名** | 备注 |
+| --- | --- | --- | --- |
+| 描边宽度 | `stroke` | **`strokeSize`** | `stroke` 只是内存里的启用布尔位，不落盘 |
+| 描边颜色 | `strokeColor` | `strokeColor` | 与规划一致 |
+| 投影偏移 | `shadow` | **`shadowOffset="x,y"`** | Bridge 侧拆成 `shadowX`/`shadowY` |
+| 投影颜色 | `shadowColor` | `shadowColor` | 与规划一致 |
+| 字重 | — | `bold`/`italic`/`underline` | false 时属性整个消失 |
+
+外加两条实测约束（都写进了实现）：**描边与投影都是「开关 + 参数」结构**——编辑器只在开关打开时
+才序列化 `strokeSize`/`strokeColor`/`shadowOffset`/`shadowColor`，只给参数不给开关会静默不落盘
+（首轮真机实现就因此以 `persistence_failed` 失败，补开关后复测全绿）；**`shadow` 开关的 setter
+会把偏移重置成 (1,1)**，所以顺序固定为「先开关后偏移」。Bridge 在收到描边/投影参数时自动开开关。
 
 ### P9-2 实例子对象写回（override 语义）
 
@@ -1319,7 +1345,7 @@ Bridge 改进应在独立仓库完成：
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备。**0.8.15 只读 `verify_transition` 与 0.8.16 写侧 `add_keyframes`/`set_keyframe`/`duplicate_transition` 均已落地并真机验收（模拟宿主 212/212，证据 `tests/reports/p8-3-keyframes-live.json`）** |
 | 7 | ~~分支能力~~ **0.8.18 已完成** | P8-6 | 新增域，多端/多版本项目价值高。`list_branches` / `create_branch` / `switch_branch` 与分支寻址读写均已落地并真机验收（模拟宿主 230/230，证据 `tests/reports/p8-6-branches-live.json`）；剩余仅 `RenameBranch` / `RemoveBranch` / 分支发布 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影。**0.8.19 已完成审计切片 `find_unused` / `find_duplicate`（免 Pro 授权，真机证据 `tests/reports/p8-7-audit-live.json`）**；i18n / 原生撤销栈 / 控制台可见性 / 全文搜索待做 |
-| 9 | `insert_text` + 文本样式补全（`bold`/`stroke`/`shadow`） | P9-0 / P9-1 | 2026-10-20 实拼的**第一阻塞**：没有文本原语，16 个文本全被做成 Button 组件；没有描边/投影，还原度卡在 91%。编辑器原生入口齐备（`FComponent.CreateChild`、`TextFormat`），成本主要在探针验证 |
+| 9 | ~~`insert_text` + 文本样式补全（`bold`/`stroke`/`shadow`）~~ **0.8.20 已完成** | P9-0 / P9-1 | 活体探针钉死了三件规划里没写对的事：`CreateChild` 缺 `AddChild` 不落盘、描边宽度属性是 `strokeSize` 不是 `stroke`、投影偏移是 `shadowOffset="x,y"`。已实现 `insert_text` 与 `set_text_style` 扩展（模拟宿主 248/248，真机 6.1.4 验收 `strength=reload`，证据 `tests/reports/p9-0-insert-text-live.json`、`p9-1-text-style-live.json`） |
 | 10 | 实例子对象写回 / 组件实例换资源 / 包资源增删 | P9-2 / P9-3 / P9-4 | 决定"组件能不能被参数化"。不做，每个文案变体都要单独建一个组件类型；不做增删，任何试错都会在工程里留垃圾 |
 | 11 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 10 项提供可靠写能力后再做，否则返工 |
 

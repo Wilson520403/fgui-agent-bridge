@@ -9,7 +9,7 @@
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：63，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：64，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -37,7 +37,7 @@
 | `fgui_query_references` / `fgui_query_dependencies` | `resource_url`、`max_items?`、`skip_package_open?` / 另加 `seek_level?` | 只读引用图：谁引用了这个资源 / 这个资源依赖了谁，精确到 packageId/itemId/propKey/arrayIndex/valueType；`seek_level` 取 `selection`/`samePackageButNotExported`/`samePackage`（默认）/`all`，`max_items` 默认 200、上限 2000 |
 | `fgui_find_unused` | `packages?`、`types?`、`include_branches?`、`skip_exported?`、`max_items?` | 只读资源审计：按引用图找出零引用资源，返回包、路径、文件大小与图片尺寸；导出资源默认列出并标记 `exported`，`skip_exported=true` 可排除；`max_items` 默认 500、上限 5000 |
 | `fgui_find_duplicate` | `packages?`、`types?`、`include_branches?`、`max_groups?`、`max_items_per_group?` | 只读资源审计：按文件内容 MD5 + 字节数分组，返回每组条目、浪费字节数；`max_groups` 默认 100、上限 1000，`max_items_per_group` 默认 50、上限 500 |
-| `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读 |
+| `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读；0.8.20 起 style 支持 `bold`/`italic`/`underline`（布尔）、`strokeSize`（数值）、`strokeColor`、`shadowX`/`shadowY`（投影偏移）、`shadowColor` |
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态；expected 含 children 时执行递归对象树比对 |
 | `fgui_set_list_layout` | target、`fields`（布局字段集）、save?、verify?、external_reload? | 修改 List 布局：`layout`/`selectionMode`/`lineGap`/`columnGap`/`defaultItem`/`autoItemSize`/`align`/`vAlign`/`selectionController`/`foldInvisibleItems`/`clearOnPublish`/`scrollItemToViewOnClick`/`overflow`/`margin` |
 | `fgui_set_group_layout` | target、`fields`、save?、verify?、external_reload? | 修改 Group 布局：`advanced`/`layout`/`lineGap`/`columnGap`/`excludeInvisibles`/`mainGridMinSize`/`mainGridIndex`/`autoSizeDisabled`/`collapsed` |
@@ -45,6 +45,7 @@
 | `fgui_set_gear_display` | target、`controller`（null/空清除）、`pages?`、save?、verify?、external_reload? | 设置 gearDisplay 联动的控制器与可见页面 |
 | `fgui_list_controllers` / `fgui_set_controller` | 无 / `name`、pages/add_pages/selected_index/selected_page/exported/auto_radio_group_depth/home_page、create?、remove?、save?、verify?、external_reload? | 列出或创建/修改/删除当前组件 Controller |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
+| `fgui_insert_text` | text、x、y、name?、style?、save?、verify?、external_reload? | 0.8.20 新增：在当前文档根组件下创建文本对象（FGUI 的文本是裸节点，insert_object 插不进来） |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
 | `fgui_verify_transition` | `name?`、`check_bounds?` | 只读校验 Transition 的目标、关键帧值、嵌套引用与 XY 范围；不保存、不置脏 |
 | `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name`，均支持 `save?`、`verify?`、`external_reload?` | 声明式创建、完整替换或删除 Transition |

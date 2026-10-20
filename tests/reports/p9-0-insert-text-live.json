@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "suite": "p9-0-insert-text-live",
+  "capturedAt": "2026-10-20T17:02:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.20",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600）",
+  "question": "P9-0 规划里的实现路径是「FairyGUI.Utils.XML.Create 造 <text> 节点 → FComponent.CreateChild 挂进文档」。这条路径在 6.1.4 上能不能真的造出一个可保存、可重开、属性齐全的文本对象？",
+  "verdict": "能，但规划里缺了关键一步且假设错了两处。① CreateChild 单独调用会返回游离对象：objectType=text 但 id/name 全空、不进 displayList、save 后磁盘逐字不变——必须再调 AddChild 才会进文档并落盘；② CreateChild 会丢弃传入 XML 的全部属性（用 XML.Create+SetAttribute 与 new XML(字符串) 两种构造方式实测一致），属性必须在建完之后往对象上补写，这些补写能落盘；③ 新节点没有 DocElement，但序列化走 displayList，对象模型写入照样落盘——与 P8-0「既有节点优先走 DocElement」不矛盾，新建与修改是两条路；④ font 为空时写 fontSize 会在编辑器侧抛 NullReferenceException，必须先写 font（Bridge 自动补编辑器默认字体 UIDefault）；⑤ autoSize 缺省 both，保存时编辑器按文字自然尺寸重算，要精确尺寸必须先写 autoSize=none（Bridge 自动做）；⑥ id 由编辑器生成且只读，Bridge 只能回读。",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app（com.fairygui.FairyGUIEditor 6.1.4）",
+    "platform": "macOS (Apple Silicon)",
+    "fixture": "sample/assets/Package1/BridgeFixture.xml（基线 md5 996f003bed3518c5800378002ab50d08）",
+    "prerequisiteEvidence": "tests/reports/p9-0-p9-1-probe-live.json（一次性 p9_probe 探针，探针已撤回）"
+  },
+  "request": {
+    "action": "insert_text",
+    "params": {
+      "text": "Hello Bridge",
+      "x": 40,
+      "y": 520,
+      "name": "liveText",
+      "style": {
+        "fontSize": 28,
+        "color": "#FFCC00",
+        "bold": true,
+        "strokeSize": 2,
+        "strokeColor": "#FF0000",
+        "shadowX": 1,
+        "shadowY": 2,
+        "shadowColor": "#00FF00",
+        "width": 180,
+        "height": 44,
+        "align": "center"
+      },
+      "save": true,
+      "verify": true,
+      "externalReload": true
+    }
+  },
+  "result": {
+    "ok": true,
+    "strength": "reload",
+    "persisted": true,
+    "inserted": {
+      "id": "n8_eld1",
+      "name": "liveText",
+      "nameRequested": "liveText",
+      "nameAdjusted": false,
+      "type": "text",
+      "applied": {
+        "name": "assigned",
+        "font": "defaulted:UIDefault",
+        "fontSize": "assigned",
+        "autoSize": "assigned",
+        "width": "assigned",
+        "height": "assigned",
+        "align": "assigned",
+        "bold": "assigned",
+        "stroke": "assigned",
+        "strokeSize": "assigned",
+        "strokeColor": "assigned",
+        "shadow": "assigned",
+        "shadowX": "assigned",
+        "shadowY": "assigned",
+        "shadowColor": "assigned",
+        "color": "assigned",
+        "text": "assigned",
+        "x": "assigned",
+        "y": "assigned"
+      }
+    },
+    "verification": {
+      "editorReadback": true,
+      "xmlReadback": true,
+      "externalReload": true,
+      "reload": { "performed": true, "closeStrategy": "CloseDocuments" }
+    }
+  },
+  "diskEvidence": {
+    "file": "sample/assets/Package1/BridgeFixture.xml",
+    "diffAgainstBaseline": [
+      "+    <text id=\"n8_eld1\" name=\"liveText\" xy=\"40,520\" size=\"180,44\" font=\"UIDefault\" fontSize=\"28\" color=\"#ffcc00\" align=\"center\" autoSize=\"none\" bold=\"true\" strokeColor=\"#ff0000\" strokeSize=\"2\" shadowColor=\"#00ff00\" shadowOffset=\"1,2\" text=\"Hello Bridge\"/>"
+    ],
+    "note": "size=\"180,44\" 与请求一致——因为 Bridge 在写尺寸前先写了 autoSize=\"none\"，否则编辑器会在保存时按文字自然尺寸重算。"
+  },
+  "negativePaths": [
+    {
+      "case": "父节点不是当前文档根组件",
+      "request": { "action": "insert_text", "params": { "target": { "id": "n2_fix01" }, "text": "x", "save": true } },
+      "response": { "ok": false, "code": "invalid_argument", "message": "insert_text 只支持在当前文档的根组件下创建文本" },
+      "assertion": "在创建节点之前拒绝，未留下半成品"
+    }
+  ],
+  "unverified": [
+    "本次未在真实业务工程上复验，只在 sample 隔离工程验证。",
+    "本次未验证同名节点冲突时编辑器是否自动改名（响应里已预留 inserted.nameAdjusted 字段，本次为 false）。",
+    "本次未验证新节点是否进编辑器原生撤销栈（ActionHistory）；按既有约定，结构创建不进 Agent 属性事务栈。",
+    "本次未验证嵌套组件实例内部建文本（该场景会写另一个包文件，当前显式不支持）。"
+  ]
+}

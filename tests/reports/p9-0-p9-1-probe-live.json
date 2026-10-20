@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "suite": "p9-0-p9-1-primitive-probe",
+  "capturedAt": "2026-10-20T16:36:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.19（含未提交的一次性 p9_probe 探针 Action，已撤回）",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600）",
+  "question": "P9-0 insert_text 与 P9-1 set_text_style 补 bold/stroke/shadow 的实现依据是什么？规划文档里写的是「编辑器原生入口齐备，按 FGUI 惯例应是 stroke/strokeColor/shadow/shadowColor，但不能靠猜」。",
+  "verdict": "两条都能做，但**规划里的属性名猜错了**，且 insert_text 缺一步必需的 AddChild。① 描边宽度属性是 strokeSize（不是 stroke），投影偏移是 shadowOffset=\"x,y\"（不是 shadow）；描边色 strokeColor、投影色 shadowColor 与规划一致。stroke/shadow 两个布尔开关不落盘，只是内存里的启用态。② 文本对象可以原生创建：FComponent.CreateChild(xml) 返回 FObject 后必须再调 AddChild，才会进 displayList 并随 save 落盘；CreateChild 会**丢弃传入 XML 的全部属性**（id/name/xy/size/text 全丢），必须在建完之后往对象上补写属性，这些补写能落盘。③ 新节点没有 DocElement（不是文档模型层），但因为序列化走 displayList，对象模型写入照样落盘——与 P8-0「既有节点要走 DocElement」不矛盾，是新建与修改两条不同的路。",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app（com.fairygui.FairyGUIEditor）",
+    "platform": "macOS (Apple Silicon)",
+    "probeHarness": "临时 p9_probe Action + CLI `call p9_probe`，探针结束后从 plugin/main.ts 撤回",
+    "fixture": "sample/assets/Package1/BridgeFixture.xml 的 n2_fix01(txtLabel) 与新建节点",
+    "controlGroup": "先跑「什么都不改、只保存」对照组：doc.Save() 成功、文件被重写但内容逐字不变（md5 一致），确认保存链路本身通，后续差异才可归因于写入动作"
+  },
+  "findings": [
+    {
+      "id": "A1",
+      "claim": "文本样式的运行时承载对象是 FairyEditor.FTextField，权威写面来自编辑器包内的真实声明（app 内 editor.d.ts 共 21708 行 / 184 类），仓库内 plugin/types/editor.d.ts 只有 28 个类，是裁剪版",
+      "evidence": "app 内 editor.d.ts:18019 起 FTextField 声明列出 font/fontSize/color/align/verticalAlign/leading/letterSpacing/underline/bold/italic/strike/stroke/strokeColor/strokeSize/shadowY/shadowX/shadow/shadowColor/outlineSoftness/underlaySoftness/faceDilate/autoSize/singleLine/text，以及只读的 textFormat",
+      "impact": "P9-1 的写面以 FTextField 成员为准；仓库内 types/editor.d.ts 需要补 FTextField 声明，否则 tsc 抓不到成员名错误（P8-1 建立的编译期安全网有缺口）"
+    },
+    {
+      "id": "A2",
+      "claim": "bold / italic / underline 落盘为同名布尔属性，false 时整个属性消失",
+      "evidence": "写 bold=true → XML 出现 bold=\"true\"；再写 bold=false → diff 显示 bold 属性被移除。italic=true → italic=\"true\"；underline=false → 无 underline 属性",
+      "impact": "P9-1 写侧只需按真值写入，编辑器序列化层已负责默认值省略；不需要 Bridge 自己判断「要不要写默认值」"
+    },
+    {
+      "id": "A3",
+      "claim": "描边宽度属性名是 strokeSize，不是规划里写的 stroke；stroke 是内存里的启用布尔位，不落盘",
+      "evidence": "写 strokeSize=3 + strokeColor=#FF0000 → XML 出现 strokeSize=\"3\" strokeColor=\"#ff0000\"，没有 stroke 属性；运行时 FTextField.stroke=true 仅为启用态",
+      "impact": "**规划文档 P9-1 的属性名推断是错的**（把 FGUI 惯例的 stroke 当成属性名）。实现必须用 strokeSize，否则写进去的属性编辑器读不出来"
+    },
+    {
+      "id": "A4",
+      "claim": "FTextField.strokeSize / strokeColor 与 FairyGUI.TextFormat.outline / outlineColor 是同一份存储",
+      "evidence": "写 strokeSize=3 + strokeColor=#FF0000 后读 textFormat：outline=3、outlineColor=RGBA(1,0,0,1)，与写入值一致",
+      "impact": "两条写法等价；实现选 FTextField 成员（声明面更全、可编译期校验），不要去写 textFormat 的只读 getter 返回对象"
+    },
+    {
+      "id": "A5",
+      "claim": "投影偏移落盘为 shadowOffset=\"x,y\" 字符串；投影色落盘为 shadowColor",
+      "evidence": "写 shadow=true + shadowColor=#00FF00 + textFormat.shadowOffset=[1,2] → XML 出现 shadowColor=\"#00ff00\" shadowOffset=\"1,2\"",
+      "impact": "验证要按字符串比（\"1,2\"），不能按对象比；Bridge 侧参数用 {x,y} 或 [x,y] 皆可，落盘形态由编辑器决定"
+    },
+    {
+      "id": "A6",
+      "claim": "shadow 开关与偏移有顺序耦合：写 shadow 会把偏移重置为 (1,1)，写 shadow=false 会把偏移清零",
+      "evidence": "先写 textFormat.shadowOffset=[3,4] → 运行时偏移 (3,4) 但 XML 无 shadow 属性（shadow 仍为 false）；随后只写 shadow=true → 运行时偏移被改成 (1,1)，XML 落 shadowOffset=\"1,1\"；再写 shadow=false → shadowColor 与 shadowOffset 双双从 XML 消失且偏移归零",
+      "impact": "**实现必须先写 shadow=true 再写偏移**，否则用户给的偏移会被静默改写成 (1,1)。这是「写了但不是用户写的值」的典型坑，必须在实现里固定顺序"
+    },
+    {
+      "id": "A7",
+      "claim": "shadow 偏移只有开关为 true 才会落盘，单独设偏移无效",
+      "evidence": "仅写 textFormat.shadowOffset=[3,4]（shadow 保持 false）→ 保存成功但 XML 逐字不变",
+      "impact": "P9-1 写侧若接受 shadowOffset，必须自动把 shadow 置 true，否则用户以为写成功了"
+    },
+    {
+      "id": "A8",
+      "claim": "描边宽度归零不会清掉属性，strokeSize=\"0\" 会留在 XML 里，strokeColor 也残留",
+      "evidence": "写 strokeSize=0 → XML 保留 strokeSize=\"0\" 与 strokeColor=\"#ff0000\"；对照之下 bold=false 的属性被整个移除",
+      "impact": "回读校验不能假设「值等于默认值就该没有属性」；XML 层比对要按属性存在性断言，别做等价归一"
+    },
+    {
+      "id": "A9",
+      "claim": "autoSize 会让编辑器在保存时重算文本尺寸，调用方给的 width/height 会被改写",
+      "evidence": "新节点默认 autoSize=both：先设 width=160/height=40，读回是 75x19（文案自然尺寸）；把 autoSize 设为 none 后再设 160x40，原样保留，落盘 size=\"160,40\"。已有节点上写 bold=true 也让 size 从 202x44 变成 209x44",
+      "impact": "insert_text 必须先写 autoSize=\"none\" 再写尺寸，否则新建文本的尺寸会在保存时被改写——调用方拿到的值和落盘的值不一致"
+    },
+    {
+      "id": "A10",
+      "claim": "文本样式写入后跨文档重载仍存活",
+      "evidence": "写规范态（bold/italic/strokeSize=2/strokeColor=#FF0000/shadow=true/shadowColor=#00FF00/偏移 2,3）→ XML 出现 bold=\"true\" italic=\"true\" strokeColor=\"#ff0000\" strokeSize=\"2\" shadowColor=\"#00ff00\" shadowOffset=\"2,3\"；随后关闭并重开文档（external reload），读回 bold/italic/stroke/strokeColor/shadow/shadowColor 全部一致",
+      "impact": "P9-1 具备走既有「save/verify/external_reload」写验证梯子（strength=reload）的条件"
+    },
+    {
+      "id": "B1",
+      "claim": "FComponent.CreateChild(xml) 单独调用会得到游离对象：返回 text 对象但 id/name 全空、不进 displayList、不落盘",
+      "evidence": "CreateChild 返回 objectType=text，但 id=\"\" name=\"\" x=0 y=0 width=0 height=0 text=\"\"；childCount 前后都是 8；save 成功但磁盘 XML 逐字不变；该对象 docElement 为 null",
+      "impact": "只调 CreateChild 是 P8-0 那种「返回 ok、磁盘没变」的静默失败变体，必须由 Bridge 显式补 AddChild 并做落盘回读"
+    },
+    {
+      "id": "B2",
+      "claim": "CreateChild + AddChild 后节点进 displayList 且随 save 落盘",
+      "evidence": "CreateChild → AddChild → childCount 8→9，磁盘 XML 新增一行 <text id=\"n8_t439\" name=\"n8\" xy=\"0,0\" size=\"0,0\" fontSize=\"12\" text=\"\"/>；重载后 get_tree 仍能读到该节点",
+      "impact": "**insert_text 的核心路径确定**：CreateChild → AddChild → 补写属性 → SetModified → Save"
+    },
+    {
+      "id": "B3",
+      "claim": "CreateChild 会丢弃传入 XML 的全部属性，两种构造方式都一样",
+      "evidence": "变体一用 XML.Create(\"text\") + SetAttribute(id/name/xy/size/fontSize/text)，变体二用 new XML('<text id=\"n9_pe8d\" name=\"probeParsed\" xy=\"321,123\" .../>') 解析字符串；两者结果相同：id 被换成编辑器自造的 n9_qnc2、name 变成 n9、xy=0,0、size=0,0、fontSize=12、text 空",
+      "impact": "属性必须建完之后补写；id 由编辑器生成且**只读**（FObject.id 无 setter），Bridge 只能回读不能指定"
+    },
+    {
+      "id": "B4",
+      "claim": "建完之后补写对象属性能落盘",
+      "evidence": "CreateChild+AddChild 后写 name=probeText、xy=(321,123)、text=\"Hello Bridge\"、fontSize=28、color=#FFCC00 → 磁盘 XML 新增 <text id=\"n10_li1c\" name=\"probeText\" xy=\"321,123\" size=\"168,39\" fontSize=\"28\" color=\"#ffcc00\" text=\"Hello Bridge\"/>",
+      "impact": "P9-0 不需要「先造 XML 再整体插入」，可以分步：先建节点、再逐项写属性、最后落盘校验"
+    },
+    {
+      "id": "B5",
+      "claim": "新建节点没有 DocElement，但它照样落盘",
+      "evidence": "新节点 docElementPresent=false（属性补写后仍为 false），而磁盘 XML 里有完整节点；get_tree 重载后能读到 name/xy/size/text",
+      "impact": "序列化来源是 displayList，不是文档模型树；与 P8-0「既有节点要优先走 DocElement」并不矛盾——新建与修改是两条不同的路，实现要按 docElementFor(obj) 有无自动分流"
+    },
+    {
+      "id": "B6",
+      "claim": "新节点 font 为空时写 fontSize 会抛 NullReferenceException（值仍写入但异常是真异常）",
+      "evidence": "先写 fontSize → C# 异常：FairyGUI.FontManager.GetFont → FairyEditor.FTextField.ApplyFormat → set_fontSize（Object reference not set）；改为先写 font=\"UIDefault\" 再写 fontSize=28 → 无异常，落盘 font=\"UIDefault\" fontSize=\"28\"",
+      "impact": "**实现顺序必须是 font → fontSize**；否则每次建文本都会在编辑器侧抛异常"
+    },
+    {
+      "id": "B7",
+      "claim": "编辑器包内的声明文件比仓库内 types/editor.d.ts 完整得多，是这类问题的权威依据",
+      "evidence": "app 内 Contents/Resources/Data/StreamingAssets/Scripts/Puerts/editor.d.ts 共 21708 行，含 FairyGUI.TextFormat（12855）、FairyGUI.GTextField（13298）、FairyEditor.FTextField（18019）、FairyEditor.CopyHandler（21205）等；仓库内 plugin/types/editor.d.ts 只有 28 个类",
+      "impact": "扩展能力前先查 app 内声明，不要只看仓库内的裁剪版 types；仓库 types 需要随实现补齐"
+    },
+    {
+      "id": "B8",
+      "claim": "C# 反射在 6.1.4 上被裁剪，成员枚举只能靠候选名探测",
+      "evidence": "obj.GetType().GetFields()/GetProperties()/GetMethods() 全部返回 0 成员；Object.keys(C# 对象) 返回空数组；改用候选名逐个探测才命中 strokeSize、shadowX/shadowY、textFormat",
+      "impact": "探针写法必须是「已知候选名逐个探测」，不能用反射遍历——这会直接影响后续 P9-2/P9-3 探针的写法"
+    }
+  ],
+  "implementationConsequences": [
+    "P9-0 insert_text：CreateChild → AddChild → 先 font 再 fontSize → autoSize=none → 其余属性 → SetModified → Save → 落盘回读 + external reload 校验；id 由编辑器生成，只回读不指定。",
+    "P9-1 set_text_style：写面用 FTextField 成员；bold/italic/underline 布尔；strokeSize 数值 + strokeColor 颜色；shadow 开关 + shadowX/shadowY 偏移（先开关后偏移）；shadowColor 颜色。",
+    "P9-1 顺带确认可修的既有缺口：单行文本 height 不可写的问题在 autoSize=none 时不再出现（新节点 autoSize=none 后 width/height 原样保留），Bridge 可在需要精确尺寸时自动切 autoSize=none 并回报。",
+    "规划文档 P9-1 里的属性名推断（stroke/strokeColor/shadow/shadowColor）需按本报告更正为 strokeSize/strokeColor/shadowOffset+shadow/shadowColor。"
+  ],
+  "unverified": [
+    "本次未验证新节点是否进编辑器原生撤销栈（ActionHistory）与 Agent 撤销栈的关系；按既有约定，结构创建不进 Agent 属性事务栈。",
+    "本次未验证同名节点冲突时编辑器是否自动改名（探针期间无重名样本）。",
+    "本次未验证 rich text（GRichTextField）与 InputTextField 的样式面差异。",
+    "本次只覆盖 sample 隔离工程的 BridgeFixture；未在真实业务工程上复验。"
+  ]
+}

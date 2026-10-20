@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.19";
+const BRIDGE_VERSION = "0.8.20";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -1447,7 +1447,19 @@ function targetSummary(obj: any, target: any): any {
 }
 
 // Verification is deliberately limited to properties with a known serialized meaning.
-const VERIFIED_TEXT_KEYS = ["font", "fontSize", "color", "align", "vAlign", "autoSize", "lineGap", "letterSpacing", "width", "height", "x", "y"];
+// 文本样式键的 XML 形态是 6.1.4 真机实测钉住的（tests/reports/p9-0-p9-1-probe-live.json）：
+//   描边宽度 → strokeSize（**不是** stroke：stroke 只是内存里的启用布尔位，不落盘）
+//   描边颜色 → strokeColor
+//   投影偏移 → shadowOffset="x,y"（Bridge 侧拆成 shadowX / shadowY）
+//   投影颜色 → shadowColor
+//   bold/italic/underline → 同名布尔属性，false 时属性整个消失
+const VERIFIED_TEXT_KEYS = ["font", "fontSize", "color", "align", "vAlign", "autoSize", "lineGap", "letterSpacing",
+    "width", "height", "x", "y",
+    "bold", "italic", "underline",
+    "strokeSize", "strokeColor",
+    "shadowX", "shadowY", "shadowColor",
+    // shadow 是内存里的启用开关，不直接落盘：XML 侧由 shadowOffset 是否非零派生。
+    "shadow"];
 // Whitelist properties whose serialized attribute and default are pinned, so
 // set_property can be covered by the same write verification semantics.
 const VERIFIED_GENERIC_KEYS = ["scaleX", "scaleY", "rotation", "alpha", "visible", "touchable", "grayed", "text", "icon"];
@@ -1466,8 +1478,8 @@ function validateExpectationsMap(flat: any, specPath: string): any {
         if (VERIFIED_KEYS.indexOf(key) < 0)
             verificationError("unsupported_property", `不支持验证属性：${key}`, { stage: "input", property: key, node: specPath });
         const value = flat[key];
-        if (value !== null && typeof value !== "string" && typeof value !== "number")
-            verificationError("invalid_argument", `expected.${key} 必须是字符串、数字或 null`, { stage: "input", node: specPath });
+        if (value !== null && typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean")
+            verificationError("invalid_argument", `expected.${key} 必须是字符串、数字、布尔或 null`, { stage: "input", node: specPath });
         if (typeof value === "number" && !Number.isFinite(value))
             verificationError("invalid_argument", `expected.${key} 必须是有限数字`, { stage: "input", node: specPath });
         result[key] = key === "color" ? normalizedColor(value, "color") : value;
@@ -1496,7 +1508,12 @@ function verifiedObjectValues(obj: any): any {
     const aliases: any = { vAlign: "verticalAlign", lineGap: "leading" };
     for (const key of VERIFIED_TEXT_KEYS) {
         const property = aliases[key] || key;
-        value[key] = key === "color" ? colorHex(obj.color) : (obj[property] === undefined ? null : safeValue(obj[property]));
+        if (key === "color" || key === "strokeColor" || key === "shadowColor")
+            value[key] = colorHex(obj[property]);
+        else if (key === "bold" || key === "italic" || key === "underline")
+            value[key] = obj[property] === undefined ? null : Boolean(obj[property]);
+        else
+            value[key] = obj[property] === undefined ? null : safeValue(obj[property]);
     }
     // An unspecified/default font is represented by the empty string in XML.
     if (value.font === null) value.font = "";
@@ -1622,6 +1639,26 @@ function xmlNodeValues(item: any, node: any): any {
     if (value.color !== null) value.color = normalizedColor(value.color, "XML color");
     for (const key of ["fontSize", "letterSpacing", "lineGap"])
         if (value[key] !== null) value[key] = Number(value[key]);
+    // 0.8.20：字重与描边/投影的 XML 形态由真机 6.1.4 钉死
+    // （tests/reports/p9-0-p9-1-probe-live.json A2/A3/A5/A8）：
+    //   描边宽度是 strokeSize（不是 stroke）；投影偏移是 shadowOffset="x,y"；
+    //   布尔字重为 false 时属性整个不存在；描边宽度的缺省是 1（不是 0）。
+    for (const key of ["bold", "italic", "underline"]) {
+        const raw = attr(key);
+        value[key] = raw === null ? false : raw === "true";
+    }
+    const strokeSize = attr("strokeSize");
+    value.strokeSize = strokeSize === null ? 1 : Number(strokeSize);
+    const strokeColor = attr("strokeColor");
+    value.strokeColor = strokeColor === null ? "#000000" : normalizedColor(strokeColor, "XML strokeColor");
+    const shadowOffset = attr("shadowOffset");
+    const offset = shadowOffset ? shadowOffset.split(",").map(Number) : [];
+    value.shadowX = offset.length > 0 && !isNaN(offset[0]) ? offset[0] : 0;
+    value.shadowY = offset.length > 1 && !isNaN(offset[1]) ? offset[1] : 0;
+    const shadowColor = attr("shadowColor");
+    value.shadowColor = shadowColor === null ? "#000000" : normalizedColor(shadowColor, "XML shadowColor");
+    // 投影开关不落盘：编辑器只在启用时写 shadowOffset，所以由它反推。
+    value.shadow = shadowOffset !== null && shadowOffset !== "0,0";
     const scale = (attr("scale") || "1,1").split(",").map(Number);
     value.scaleX = scale[0];
     value.scaleY = scale.length > 1 ? scale[1] : scale[0];
@@ -3523,6 +3560,13 @@ function textStyle(obj: any): any {
     if (obj.color !== undefined) value.color = colorHex(obj.color);
     if (obj.strokeColor !== undefined) value.strokeColor = colorHex(obj.strokeColor);
     if (obj.shadowColor !== undefined) value.shadowColor = colorHex(obj.shadowColor);
+    // 0.8.20：补齐字重与描边/投影的可读面（真机 6.1.4 实测的成员名）。
+    if (obj.bold !== undefined) value.bold = Boolean(obj.bold);
+    if (obj.italic !== undefined) value.italic = Boolean(obj.italic);
+    if (obj.underline !== undefined) value.underline = Boolean(obj.underline);
+    if (obj.strokeSize !== undefined) value.strokeSize = Number(obj.strokeSize);
+    if (obj.shadowX !== undefined) value.shadowX = Number(obj.shadowX);
+    if (obj.shadowY !== undefined) value.shadowY = Number(obj.shadowY);
     return value;
 }
 
@@ -3534,6 +3578,128 @@ function getTextStyle(params: any): any {
     return { ok: true, target: targetSummary(obj, params.target), style: textStyle(obj) };
 }
 
+// 0.8.20：文本对象原语。FGUI 的文本是 displayList 里的裸节点、
+// 不是包资源，insert_object 插不进来。实现依据真机 6.1.4 探针
+// （tests/reports/p9-0-p9-1-probe-live.json B1~B6）：
+//   ① CreateChild(xml) 单独调用会得到游离对象——不进 displayList、不落盘；
+//      必须再 AddChild 才会进文档并随 save 落盘；
+//   ② CreateChild 会丢弃 XML 上的全部属性（id/name/xy/size/text 全丢），
+//      属性必须在建完之后往对象上补写，这些补写能落盘；
+//   ③ 新节点没有 DocElement，但序列化走 displayList，对象模型写入照样落盘；
+//   ④ font 为空时写 fontSize 会抛 NullReferenceException → 必须先写 font；
+//   ⑤ autoSize 默认 both，保存时编辑器会重算尺寸 → 要精确尺寸必须先写 autoSize=none。
+function insertText(params: any): any {
+
+            // 0.8.20：文本对象原语。FGUI 的文本是 displayList 里的裸节点、
+            // 不是包资源，insert_object 插不进来。实现依据真机 6.1.4 探针
+            // （tests/reports/p9-0-p9-1-probe-live.json B1~B6）：
+            //   ① CreateChild(xml) 单独调用会得到游离对象——不进 displayList、不落盘；
+            //      必须再 AddChild 才会进文档并随 save 落盘；
+            //   ② CreateChild 会丢弃 XML 上的全部属性（id/name/xy/size/text 全丢），
+            //      属性必须在建完之后往对象上补写，这些补写能落盘；
+            //   ③ 新节点没有 DocElement，但序列化走 displayList，对象模型写入照样落盘；
+            //   ④ font 为空时写 fontSize 会抛 NullReferenceException → 必须先写 font；
+            //   ⑤ autoSize 默认 both，保存时编辑器会重算尺寸 → 要精确尺寸必须先写 autoSize=none。
+            const doc = getActiveDocument();
+            validateReloadOptions(params, { path: "root" });
+            if (params.target) {
+                const requested = resolveObject(doc, params.target);
+                if (requested !== doc.content)
+                    verificationError("invalid_argument", "insert_text 只支持在当前文档的根组件下创建文本", { stage: "input", target: targetSummary(requested, params.target) });
+            }
+            const parent: any = doc.content;
+            if (!parent || typeof parent.CreateChild !== "function" || typeof parent.AddChild !== "function")
+                verificationError("invalid_argument", "当前文档根节点不是可容纳子节点的组件", { stage: "input" });
+            const style: any = params.style && typeof params.style === "object" ? params.style : {};
+            const x = Number(params.x || 0);
+            const y = Number(params.y || 0);
+            const XmlType = (CS as any).FairyGUI.Utils.XML;
+            const xml = XmlType.Create("text");
+            let obj: any = null;
+            try { obj = parent.CreateChild(xml); }
+            catch (error) { verificationError("editor_rejected", "创建文本节点失败", { stage: "editor", reason: String(error) }); }
+            if (!obj) verificationError("editor_rejected", "创建文本节点失败", { stage: "editor" });
+            try { parent.AddChild(obj); }
+            catch (error) { verificationError("editor_rejected", "把文本节点加入文档失败", { stage: "editor", reason: String(error) }); }
+
+            const applied: any = {};
+            const setMember = (key: string, value: any): void => {
+                try {
+                    if (key === "color" || key === "strokeColor" || key === "shadowColor") obj[key] = unityColor(value, key);
+                    else if (key === "bold" || key === "italic" || key === "underline" || key === "stroke" || key === "shadow") obj[key] = Boolean(value);
+                    else if (key === "strokeSize" || key === "shadowX" || key === "shadowY" || key === "fontSize" || key === "width" || key === "height" || key === "letterSpacing" || key === "lineGap") obj[key] = Number(value);
+                    else obj[key] = value;
+                    applied[key] = "assigned";
+                } catch (error) {
+                    applied[key] = "error: " + String(error);
+                    verificationError("editor_rejected", `写入文本属性失败：${key}`, { stage: "editor", key, reason: String(error) });
+                }
+            };
+            // 顺序即约束（见文件头注释 ④⑤ 与 A6/A7）。
+            const nameRequested = params.name === undefined ? null : String(params.name);
+            if (nameRequested !== null) setMember("name", nameRequested);
+            const fontRequested = style.font === undefined ? null : String(style.font);
+            if (fontRequested !== null) setMember("font", fontRequested);
+            else if (style.fontSize !== undefined) {
+                // 新节点 font 为空，直接写 fontSize 会在编辑器侧抛 NPE；补上编辑器默认字体。
+                setMember("font", "UIDefault");
+                applied.font = "defaulted:UIDefault";
+            }
+            if (style.fontSize !== undefined) setMember("fontSize", style.fontSize);
+            if (style.width !== undefined || style.height !== undefined) {
+                setMember("autoSize", "none");
+                if (style.width !== undefined) setMember("width", style.width);
+                if (style.height !== undefined) setMember("height", style.height);
+            } else if (style.autoSize !== undefined) setMember("autoSize", style.autoSize);
+            if (style.align !== undefined) setMember("align", style.align);
+            if (style.vAlign !== undefined) setMember("vAlign", style.vAlign);
+            if (style.letterSpacing !== undefined) setMember("letterSpacing", style.letterSpacing);
+            if (style.lineGap !== undefined) setMember("lineGap", style.lineGap);
+            if (style.bold !== undefined) setMember("bold", style.bold);
+            if (style.italic !== undefined) setMember("italic", style.italic);
+            if (style.underline !== undefined) setMember("underline", style.underline);
+            if (style.strokeSize !== undefined) {
+                setMember("stroke", Number(style.strokeSize) > 0);
+                setMember("strokeSize", style.strokeSize);
+            }
+            if (style.strokeColor !== undefined) setMember("strokeColor", style.strokeColor);
+            if (style.shadowX !== undefined || style.shadowY !== undefined) {
+                setMember("shadow", true);
+                if (style.shadowX !== undefined) setMember("shadowX", style.shadowX);
+                if (style.shadowY !== undefined) setMember("shadowY", style.shadowY);
+            } else if (style.shadow !== undefined) setMember("shadow", style.shadow);
+            if (style.shadowColor !== undefined) setMember("shadowColor", style.shadowColor);
+            if (style.color !== undefined) setMember("color", style.color);
+            if (params.text !== undefined) setMember("text", String(params.text));
+            setMember("x", x);
+            setMember("y", y);
+
+            lastWritePath = WRITE_PATH_MODEL;
+            doc.SetModified(true);
+            try { doc.RefreshInspectors(); } catch (_) { }
+            // 结构创建不进 Agent 属性事务栈：已有属性快照对新节点没有意义。
+            clearAgentHistory();
+
+            const nameActual = String(obj.name || "");
+            const expected: any = { id: obj.id, name: nameActual, type: "text", x, y };
+            if (params.text !== undefined) expected.text = String(params.text);
+            for (const key of ["font", "fontSize", "color", "align", "vAlign", "autoSize", "letterSpacing", "lineGap",
+                "width", "height", "bold", "italic", "underline", "strokeSize", "strokeColor", "shadowX", "shadowY", "shadowColor"])
+                if (style[key] !== undefined) expected[key] = style[key];
+            const after = Object.assign({ x, y, width: obj.width, height: obj.height, text: obj.text }, textStyle(obj));
+            const result = writeVerification(doc, obj, {}, after, params, expected);
+            result.inserted = {
+                id: obj.id,
+                name: nameActual,
+                nameRequested,
+                // 编辑器在重名时可能自行改名，这里显式回报实际值而不是默默改掉请求。
+                nameAdjusted: nameRequested !== null && nameActual !== nameRequested,
+                type: "text",
+                applied
+            };
+    return result;
+}
+
 function setTextStyle(params: any): any {
     const doc = getActiveDocument();
     const obj: any = resolveObject(doc, params.target);
@@ -3543,11 +3709,15 @@ function setTextStyle(params: any): any {
     const style = validateExpectations(params.style);
     for (const key of Object.keys(style)) {
         if (VERIFIED_TEXT_KEYS.indexOf(key) < 0) verificationError("unsupported_property", `不支持文本样式：${key}`, { stage: "input" });
-        if (["fontSize", "lineGap", "letterSpacing", "width", "height", "x", "y"].indexOf(key) >= 0) {
+        if (["fontSize", "lineGap", "letterSpacing", "width", "height", "x", "y", "strokeSize", "shadowX", "shadowY"].indexOf(key) >= 0) {
             if (typeof style[key] !== "number") verificationError("invalid_argument", `${key} 必须是数字`, { stage: "input" });
-            numberValue(style[key], key, ["fontSize", "width", "height"].indexOf(key) >= 0 ? 0 : -10000, 10000);
+            numberValue(style[key], key, ["fontSize", "width", "height", "strokeSize"].indexOf(key) >= 0 ? 0 : -10000, 10000);
+        } else if (["bold", "italic", "underline", "shadow"].indexOf(key) >= 0) {
+            if (typeof style[key] !== "boolean") verificationError("invalid_argument", `${key} 必须是布尔值`, { stage: "input" });
         } else if (typeof style[key] !== "string") verificationError("invalid_argument", `${key} 必须是字符串`, { stage: "input" });
     }
+    if (style.shadow === false && (style.shadowX !== undefined || style.shadowY !== undefined))
+        verificationError("invalid_argument", "shadow=false 会把投影偏移清零，不能与 shadowX/shadowY 同时指定", { stage: "input" });
     const enums: any = { align: ["left", "center", "right"], vAlign: ["top", "middle", "bottom"], autoSize: ["none", "both", "height", "shrink"] };
     for (const key of Object.keys(enums)) if (style[key] !== undefined && enums[key].indexOf(style[key]) < 0)
         verificationError("invalid_argument", `${key} 枚举值无效`, { stage: "input" });
@@ -3559,10 +3729,31 @@ function setTextStyle(params: any): any {
     const before = textStyle(obj);
     const aliases: any = { vAlign: "verticalAlign", lineGap: "leading" };
     lastWritePath = WRITE_PATH_MODEL;
-    for (const key of Object.keys(style)) obj[aliases[key] || key] = key === "color" ? unityColor(style[key], "color") : style[key];
+    // 真机 6.1.4 实测的顺序约束（tests/reports/p9-0-p9-1-probe-live.json A6/A7）：
+    //   ① shadow 开关的 setter 会把偏移重置成 (1,1) → 必须先写开关再写偏移；
+    //   ② 只写偏移而 shadow 为 false 时编辑器不序列化 shadowOffset → 给了偏移就自动开投影。
+    const wantsOffset = style.shadowX !== undefined || style.shadowY !== undefined;
+    if (style.shadow !== undefined) (obj as any).shadow = Boolean(style.shadow);
+    else if (wantsOffset) (obj as any).shadow = true;
+    // 描边与投影同构：编辑器只在开关打开时才序列化 strokeSize/strokeColor
+    // （真机 6.1.4 实测：只写 strokeSize 而描边未启用，磁盘上不会出现该属性——
+    //  见 tests/reports/p9-0-p9-1-probe-live.json A3 与 p9-0-insert-text-live.json）。
+    // 所以给了描边参数就先把描边打开，再写宽度与颜色。
+    if (style.strokeSize !== undefined || style.strokeColor !== undefined) (obj as any).stroke = true;
+    for (const key of Object.keys(style)) {
+        if (key === "shadow") continue;
+        const value = style[key];
+        if (key === "shadowX" || key === "shadowY") (obj as any)[key] = Number(value);
+        else if (key === "bold" || key === "italic" || key === "underline") (obj as any)[key] = Boolean(value);
+        else (obj as any)[aliases[key] || key] = (key === "color" || key === "strokeColor" || key === "shadowColor")
+            ? unityColor(value, key)
+            : value;
+    }
     doc.SetModified(true);
     doc.RefreshInspectors();
     const expected = Object.assign({ id: obj.id, type }, style);
+    // shadow 是内存里的启用态，不落盘，不进 XML 断言。
+    delete expected.shadow;
     return writeVerification(doc, obj, before, textStyle(obj), params, expected);
 }
 
@@ -8224,6 +8415,9 @@ function handleCommand(request: AgentRequest): any {
                 expected.resourceURL = String(item.GetURL());
             return writeVerification(doc, obj, null, describeObject(obj, 0, 1), params, expected);
         }
+
+        case "insert_text":
+            return insertText(params);
 
         case "remove_object": {
             const doc = getActiveDocument();

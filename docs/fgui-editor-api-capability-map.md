@@ -455,6 +455,43 @@ Bridge 自己维护了 `agentUndoStack` / `agentRedoStack`。编辑器有原生�
 
 ---
 
+## 4.5 文本原语与文本样式：0.8.20 的实测结论（2026-10-20）
+
+证据：`tests/reports/p9-0-p9-1-probe-live.json`（一次性探针）、`p9-0-insert-text-live.json`、`p9-1-text-style-live.json`。
+
+**文本对象（displayList 里的裸节点）**
+
+| 能力 | 编辑器入口 | 实测结论 |
+| --- | --- | --- |
+| 建文本 | `FComponent.CreateChild(xml)` + `AddChild(obj)` | 只调 `CreateChild` 得到游离对象：不进 displayList、save 后磁盘逐字不变。**必须再 `AddChild`** |
+| 属性来源 | 建完后往对象上补写 | `CreateChild` 会**丢弃 XML 上的全部属性**（两种构造方式实测一致）；补写能落盘 |
+| 文档模型 | 新节点 `docElement` 为 null | 序列化走 displayList，所以对象模型写入照样落盘——与 P0-C「既有节点走 DocElement」是两条路 |
+| 字体 | `FTextField.font` | font 为空时写 `fontSize` 抛 NullReferenceException（`FontManager.GetFont`），必须先写 font |
+| 尺寸 | `autoSize` | 缺省 both，保存时按文字自然尺寸重算；要精确尺寸先写 `autoSize=none` |
+| id | `FComponent.GetNextId()` / `FObject.id` | id 由编辑器生成且**只读**，调用方只能回读 |
+
+**文本样式（FairyEditor.FTextField）**
+
+| 语义 | 成员 | 落盘属性 |
+| --- | --- | --- |
+| 字重 | `bold` / `italic` / `underline` | 同名布尔属性，false 时整个属性消失 |
+| 描边 | `stroke`（开关）/ `strokeSize`（宽度）/ `strokeColor` | `strokeSize` / `strokeColor`——**宽度是 `strokeSize` 不是 `stroke`** |
+| 投影 | `shadow`（开关）/ `shadowX` / `shadowY` / `shadowColor` | `shadowOffset="x,y"` / `shadowColor` |
+| 等价关系 | `FTextField.strokeSize` ≡ `FairyGUI.TextFormat.outline` | 同一份存储（`textFormat` 是只读 getter） |
+
+两条必须记住的耦合：**描边与投影都是「开关 + 参数」**，编辑器只在开关打开时序列化参数；
+**`shadow` 开关的 setter 会把偏移重置成 (1,1)**，所以写序必须「先开关后偏移」。
+
+**两个取证方法上的坑**
+
+- 仓库内 `plugin/types/editor.d.ts` 是**裁剪版**（28 个类）；完整声明在编辑器包内
+  `Contents/Resources/Data/StreamingAssets/Scripts/Puerts/editor.d.ts`（21708 行 / 184 类），
+  `FairyEditor.FTextField` 在其 18019 行起。扩展能力前先查完整声明，别只看裁剪版。
+- 6.1.4 上 C# 反射被裁剪：`obj.GetType().GetFields()/GetProperties()/GetMethods()` 全部返回 0 成员，
+  `Object.keys(C# 对象)` 返回空数组。**枚举成员只能靠「已知候选名逐个探测」**。
+
+---
+
 ## 5. 建议的落地顺序
 
 | 批次 | 内容 | 理由 |

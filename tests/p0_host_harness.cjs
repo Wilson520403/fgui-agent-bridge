@@ -28,11 +28,15 @@ class XML {
   GetAttribute(k) { return this.data.attrs[k] ?? null; }
   GetNode(k) { const n=this.data.children.find(n=>n.name===k);return n ? new XML(n):null; }
   get elements() { const a=this.data.children;return {Count:a.length,get_Item:i=>new XML(a[i])}; }
+  // 0.8.20 insert_text：造一个空的 <text> 元素。真机上 CreateChild 会丢弃它上面的
+  // 全部属性，夹具同此语义（属性一律在建完之后补写）。
+  static Create(tag) { return new XML({name:String(tag),attrs:{},children:[]}); }
 }
 function Color(r,g,b,a) { Object.assign(this,{r,g,b,a}); }
 const results=[];
 const tests=[];
 let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
+let createdCount,created;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
 let branches,branchRoots,branchItems,branchDirectories;
@@ -424,6 +428,7 @@ function attachLayoutMembers(o){
 }
 function setup() {
  files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
+ createdCount=0;created=[];
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
  transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
  branches=[];branchRoots={};branchItems=[];branchDirectories=new Set(['/pkg']);
@@ -436,6 +441,9 @@ function setup() {
  resources['ui://fixture0panel']={id:'panel',owner:{id:'fixture0'},type:'component',width:100,height:50,GetURL:()=>'ui://fixture0panel'};
  objects=[{id:'image1',name:'picture',objectType:'image',resourceURL:'ui://fixture0red',width:64,height:64,x:10,y:20}, {id:'loader1',name:'icon',objectType:'loader',url:'ui://fixture0red',width:64,height:64,x:80,y:20}, {id:'text1',name:'title',objectType:'text',font:'',fontSize:24,color:new Color(1,1,1,1),align:'center',verticalAlign:'middle',leading:4,letterSpacing:1,autoSize:'none',width:240,height:60,x:0,y:100}];
  for(const o of objects)Object.assign(o,{scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}});
+ // 文本样式成员（真机 6.1.4 实测的成员名，见 tests/reports/p9-0-p9-1-probe-live.json）：
+ // strokeSize 的缺省是 1，描边/投影色缺省是黑，投影偏移缺省 0,0。
+ for(const o of objects)if(o.objectType==='text')Object.assign(o,{bold:false,italic:false,underline:false,stroke:false,strokeSize:1,strokeColor:new Color(0,0,0,1),shadow:false,shadowX:0,shadowY:0,shadowColor:new Color(0,0,0,1)});
  objects.forEach(attachLayoutMembers);
  // A nested component child: its own serialized file is out of scope for this
  // document's XML stage, which is exactly what the tree verification must skip.
@@ -510,6 +518,13 @@ function setup() {
 function makeDoc(){
  const content={id:'root',name:'root',objectType:'component',resourceURL:'ui://fixture0component',transitions:makeTransitionsCollection(transitions),x:0,y:0,width:400,height:300,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
   get numChildren(){return objects.length},GetChildAt:i=>objects[i],GetChild:n=>objects.find(o=>o.name===n)||null,
+  // 0.8.20 insert_text 的宿主面：CreateChild 只造游离对象（不进 displayList、
+  // 不落盘），必须再 AddChild 才进文档——真机 6.1.4 实测（p9-0-p9-1-probe-live.json B1/B2）。
+  CreateChild(xml){const n=++createdCount;const o={id:`n${n}_mock`,name:`n${n}`,objectType:'text',font:'',fontSize:12,color:new Color(1,1,1,1),align:'left',verticalAlign:'top',leading:0,letterSpacing:0,autoSize:'both',width:0,height:0,x:0,y:0,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
+   bold:false,italic:false,underline:false,stroke:false,strokeSize:1,strokeColor:new Color(0,0,0,1),shadow:false,shadowX:0,shadowY:0,shadowColor:new Color(0,0,0,1),
+   docElement:null,_created:true,GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
+   attachLayoutMembers(o);created.push(o);return o;},
+  AddChild(o){objects.push(o);return o;},
   get controllers(){return {Count:controllers.length,get_Item:i=>controllers[i]}},
   GetController:n=>controllers.find(c=>c.name===n)||null,
   AddController(c){controllers.push(c);return c;},
@@ -599,7 +614,11 @@ function reloadFromDisk(){
   if(n.name==='image'){o.objectType='image';o.resourceURL='ui://fixture0'+a.src;}
   if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;}
   if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
-  if(n.name==='text'){Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none'});}
+  if(n.name==='text'){const off=(a.shadowOffset||'0,0').split(',').map(Number);
+   Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none',
+    bold:a.bold==='true',italic:a.italic==='true',underline:a.underline==='true',
+    stroke:a.strokeSize!==undefined&&Number(a.strokeSize)>0,strokeSize:a.strokeSize!==undefined?Number(a.strokeSize):1,strokeColor:hexToColor(a.strokeColor||'#000000'),
+    shadow:!!a.shadowOffset&&a.shadowOffset!=='0,0',shadowX:off[0]||0,shadowY:off[1]||0,shadowColor:hexToColor(a.shadowColor||'#000000')});}
   if(n.name==='list'){Object.assign(o,{objectType:'list',layout:a.layout||'column',selectionMode:a.selectionMode||'single',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),defaultItem:a.defaultItem||'',autoResizeItem:a.autoItemSize==='true',align:a.align||'none',verticalAlign:a.vAlign||'none',selectionController:a.selectionController||'',foldInvisibleItems:a.foldInvisibleItems==='true',clearOnPublish:a.autoClearItems==='true',scrollItemToViewOnClick:a.scrollItemToViewOnClick==='true',overflow:a.overflow||'visible',marginStr:a.margin||'0,0,0,0',numChildren:0,GetChildAt:()=>null});}
   if(n.name==='group'){Object.assign(o,{objectType:'group',advanced:a.advanced==='true',layout:a.layout||'',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),excludeInvisibles:a.excludeInvisibles==='true',mainGridMinSize:Number(a.gridMinSize||0),mainGridIndex:Number(a.gridIndex||0),autoSizeDisabled:a.autoSizeDisabled==='true',collapsed:a.collapsed==='true'});}
   attachLayoutMembers(o);
@@ -639,7 +658,17 @@ function serialize() {
  if(o.objectType==='image')a.src=o.resourceURL.slice('ui://fixture0'.length);
  if(o.objectType==='component')a.src=o.resourceURL.slice('ui://fixture0'.length);
  if(o.objectType==='loader')a.url=o.url;
- if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);}
+ if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);
+  // 新建节点的 autoSize 缺省是 both（真机 6.1.4 实测），所以 autoSize=none 要显式写出；
+  // 已有节点的缺省是 none，按缺省省略。
+  if(o._created&&o.autoSize&&o.autoSize!=='both')a.autoSize=o.autoSize;
+  // 0.8.20：字重与描边/投影（属性名由真机 6.1.4 钉死，见 p9-0-p9-1-probe-live.json）
+  if(o.bold)a.bold='true';
+  if(o.italic)a.italic='true';
+  if(o.underline)a.underline='true';
+  if(o.strokeSize!==undefined&&Number(o.strokeSize)!==1){a.strokeSize=String(o.strokeSize);if(o.strokeColor)a.strokeColor=ctx.colorHex(o.strokeColor);}
+  if(o.shadow&&(Number(o.shadowX)||Number(o.shadowY))){a.shadowOffset=`${Number(o.shadowX)||0},${Number(o.shadowY)||0}`;if(o.shadowColor)a.shadowColor=ctx.colorHex(o.shadowColor);}
+ }
  if(o.objectType==='list'){
   if(o.layout&&o.layout!=='column')a.layout=o.layout;
   if(o.selectionMode&&o.selectionMode!=='single')a.selectionMode=o.selectionMode;
@@ -696,6 +725,65 @@ test('No expected value is a snapshot, not verification',()=>{const r=ctx.verify
 test('Editor-only verification does not claim persistence',()=>{const r=ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24},readXml:false});assert.equal(r.persisted,false);});
 test('Unknown property rejected before partial text mutation',()=>{rejects(()=>text({style:{fontSize:40,typo:8}}),'unsupported_property','input');assert.equal(objects[2].fontSize,24);});
 test('Invalid text numeric type rejected before mutation',()=>{rejects(()=>text({style:{fontSize:'40'}}),'invalid_argument','input');assert.equal(objects[2].fontSize,24);});
+// ---- 0.8.20：文本样式补全（bold/italic/underline/strokeSize/shadowOffset）与 insert_text ----
+// 属性名不是猜的：描边宽度是 strokeSize、投影偏移是 shadowOffset="x,y"，
+// 依据 tests/reports/p9-0-p9-1-probe-live.json（真机 6.1.4）。
+test('bold/italic/underline are written as XML attributes and dropped when false',()=>{
+ const r=ctx.setTextStyle({target:{id:'text1'},style:{bold:true,italic:true,underline:true},save:true});
+ assert.equal(r.persisted,true);
+ assert.equal(r.verification.xml.bold,true);
+ assert.equal(r.verification.xml.italic,true);
+ assert.equal(r.verification.xml.underline,true);
+ assert.match(files['fixture.xml'],/bold="true"/);
+ ctx.setTextStyle({target:{id:'text1'},style:{bold:false},save:true});
+ assert.doesNotMatch(files['fixture.xml'],/bold="true"/);
+});
+test('stroke width and color persist under the real attribute names',()=>{
+ const r=ctx.setTextStyle({target:{id:'text1'},style:{strokeSize:3,strokeColor:'#FF0000'},save:true});
+ assert.equal(r.persisted,true);
+ assert.equal(r.verification.xml.strokeSize,3);
+ assert.equal(r.verification.xml.strokeColor,'#FF0000');
+ assert.match(files['fixture.xml'],/strokeSize="3"/);
+});
+test('shadow offset persists as "x,y" and implies the shadow switch',()=>{
+ const r=ctx.setTextStyle({target:{id:'text1'},style:{shadowX:1,shadowY:2,shadowColor:'#00FF00'},save:true});
+ assert.equal(r.persisted,true);
+ assert.equal(r.verification.xml.shadowX,1);
+ assert.equal(r.verification.xml.shadowY,2);
+ assert.match(files['fixture.xml'],/shadowOffset="1,2"/);
+ assert.equal(objects[2].shadow,true);
+});
+test('shadow=false with an offset is rejected before any mutation',()=>{
+ rejects(()=>ctx.setTextStyle({target:{id:'text1'},style:{shadow:false,shadowX:1},save:true}),'invalid_argument','input');
+ assert.equal(objects[2].shadowX,0);
+});
+test('non-boolean bold is rejected before mutation',()=>{
+ rejects(()=>ctx.setTextStyle({target:{id:'text1'},style:{bold:'yes'},save:true}),'invalid_argument','input');
+ assert.equal(objects[2].bold,false);
+});
+test('insert_text creates a text node that lands in the display list and the XML',()=>{
+ const before=objects.length;
+ const r=ctx.insertText({text:'Hello',x:12,y:24,name:'greeting',style:{fontSize:28,color:'#FFCC00',width:160,height:40},save:true});
+ assert.equal(r.persisted,true);
+ assert.equal(objects.length,before+1);
+ assert.equal(r.inserted.name,'greeting');
+ assert.match(files['fixture.xml'],/name="greeting"/);
+ assert.match(files['fixture.xml'],/text="Hello"/);
+ assert.match(files['fixture.xml'],/fontSize="28"/);
+});
+test('insert_text turns autoSize off when explicit dimensions are given',()=>{
+ ctx.insertText({text:'Sized',x:0,y:0,style:{width:200,height:50},save:true});
+ assert.match(files['fixture.xml'],/autoSize="none"/);
+});
+test('insert_text writes the new-style attributes too',()=>{
+ ctx.insertText({text:'Styled',x:0,y:0,style:{bold:true,strokeSize:2,strokeColor:'#FF0000',shadowX:1,shadowY:1},save:true});
+ assert.match(files['fixture.xml'],/bold="true"/);
+ assert.match(files['fixture.xml'],/strokeSize="2"/);
+ assert.match(files['fixture.xml'],/shadowOffset="1,1"/);
+});
+test('insert_text refuses a non-root parent',()=>{
+ rejects(()=>ctx.insertText({target:{id:'text1'},text:'x',save:true}),'invalid_argument','input');
+});
 test('Missing XML fails closed',()=>{delete files['fixture.xml'];rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24}}),'persistence_failed','xml');});
 test('Malformed XML fails closed',()=>{files['fixture.xml']='<broken';rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24}}),'persistence_failed','xml');});
 test('XML missing target fails closed',()=>{files['fixture.xml']='<component><displayList/></component>';rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24}}),'persistence_failed','xml');});
