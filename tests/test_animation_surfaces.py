@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fairygui_agent import mcp_server
-from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, PUBLISH_SETTINGS_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, BridgeClient, BridgeError
+from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, LAYOUT_CAPABILITIES, PUBLISH_SETTINGS_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, TRANSITION_KEYFRAME_CAPABILITIES, TRANSITION_VERIFY_CAPABILITIES, BridgeClient, BridgeError
 from fairygui_agent.cli import build_parser
 
 
@@ -79,6 +79,46 @@ class McpAnimationSurfaceTests(unittest.TestCase):
         self.assertEqual(fake.calls[1][1]["operation"], "status")
         self.assertEqual(fake.calls[1][1]["target"]["documentUrl"], "ui://packagecomponent")
 
+    def test_verify_transition_maps_read_only_parameters(self) -> None:
+        fake = FakeClient()
+        with patch.object(mcp_server, "_client", fake):
+            mcp_server.fgui_verify_transition()
+            mcp_server.fgui_verify_transition("fade", check_bounds=False)
+        self.assertEqual(fake.calls[0], ("verify_transition", {"checkBounds": True}, None))
+        self.assertEqual(fake.calls[1], ("verify_transition", {"checkBounds": False, "name": "fade"}, None))
+
+    def test_keyframe_write_parameter_mapping(self) -> None:
+        fake = FakeClient()
+        with patch.object(mcp_server, "_client", fake):
+            mcp_server.fgui_add_keyframes("fade", [{"targetId": "n1", "type": "Alpha", "frame": 10}])
+            mcp_server.fgui_set_keyframe("fade", {"label": "mid"}, item_index=1)
+            mcp_server.fgui_set_keyframe("fade", {"frame": 12}, target_id="n1", track_type="Alpha", frame=10)
+            mcp_server.fgui_duplicate_transition("fade", new_name="fadeCopy")
+        self.assertEqual(
+            fake.calls[0],
+            (
+                "add_keyframes",
+                {"name": "fade", "keyframes": [{"targetId": "n1", "type": "Alpha", "frame": 10}], "save": False, "verify": True, "externalReload": False},
+                None,
+            ),
+        )
+        self.assertEqual(fake.calls[1][1], {"name": "fade", "changes": {"label": "mid"}, "itemIndex": 1, "save": False, "verify": True, "externalReload": False})
+        self.assertEqual(
+            fake.calls[2][1],
+            {"name": "fade", "changes": {"frame": 12}, "type": "Alpha", "frame": 10, "targetId": "n1", "save": False, "verify": True, "externalReload": False},
+        )
+        self.assertEqual(fake.calls[3][1], {"name": "fade", "newName": "fadeCopy", "save": False, "verify": True, "externalReload": False})
+
+    def test_keyframe_input_validation_rejects_ambiguous_or_empty_requests(self) -> None:
+        with self.assertRaisesRegex(ValueError, "keyframes 不能为空"):
+            mcp_server.fgui_add_keyframes("fade", [])
+        with self.assertRaisesRegex(ValueError, "changes 至少需要一个字段"):
+            mcp_server.fgui_set_keyframe("fade", {}, item_index=0)
+        with self.assertRaisesRegex(ValueError, "不能与"):
+            mcp_server.fgui_set_keyframe("fade", {"label": "x"}, item_index=0, target_id="n1", track_type="Alpha", frame=0)
+        with self.assertRaisesRegex(ValueError, "必须提供 item_index"):
+            mcp_server.fgui_set_keyframe("fade", {"label": "x"})
+
     def test_legacy_plugin_only_fails_when_animation_action_is_used(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             client = BridgeClient.__new__(BridgeClient)
@@ -147,11 +187,16 @@ class CliAnimationSurfaceTests(unittest.TestCase):
             ["remove-movieclip", "ui://packageitem", "--force"],
             ["transitions"],
             ["get-transition", "fade"],
+            ["verify-transition", "fade", "--no-bounds"],
             ["upsert-transition", json.dumps({"name": "fade", "items": []})],
             ["remove-transition", "fade"],
             ["add-transition-item", "fade", json.dumps({"type": "Alpha"})],
             ["update-transition-item", "fade", "0", json.dumps({"label": "start"})],
             ["remove-transition-item", "fade", "0"],
+            ["add-keyframes", "fade", json.dumps([{"type": "Alpha", "frame": 10}])],
+            ["set-keyframe", "fade", json.dumps({"label": "mid"}), "--item-index", "1"],
+            ["set-keyframe", "fade", json.dumps({"frame": 12}), "--target-id", "n1", "--type", "Alpha", "--frame", "10"],
+            ["duplicate-transition", "fade", "--new-name", "fadeCopy"],
             ["preview-transition", "status", "fade"],
             ["preview-movieclip", "status", "--id", "n0"],
         ]
@@ -180,8 +225,71 @@ class CapabilityConsistencyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")
         tool_names = [name for name in vars(mcp_server) if name.startswith("fgui_")]
-        self.assertEqual(len(tool_names), 53)
-        self.assertIn("MCP 工具数：53", documented)
+        self.assertEqual(len(tool_names), 57)
+        self.assertIn("MCP 工具数：57", documented)
+
+    def test_transition_verify_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        for action in TRANSITION_VERIFY_CAPABILITIES:
+            self.assertIn(f'"{action}"', plugin)
+            self.assertIn(f'case "{action}"', plugin)
+            self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+        # 只读校验不能混进 0.8.1 的动画能力集，否则旧插件的缺失提示会报错最低版本。
+        self.assertEqual(TRANSITION_VERIFY_CAPABILITIES & ANIMATION_CAPABILITIES, frozenset())
+
+    def test_keyframe_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        for action in TRANSITION_KEYFRAME_CAPABILITIES:
+            self.assertIn(f'"{action}"', plugin)
+            self.assertIn(f'case "{action}"', plugin)
+            self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+        # 写侧能力不能并进 0.8.1 动画集或 0.8.15 只读校验集：
+        # 否则旧插件的缺失提示会把最低版本说错。
+        self.assertEqual(TRANSITION_KEYFRAME_CAPABILITIES & ANIMATION_CAPABILITIES, frozenset())
+        self.assertEqual(TRANSITION_KEYFRAME_CAPABILITIES & TRANSITION_VERIFY_CAPABILITIES, frozenset())
+
+    def test_keyframe_writes_are_blocked_during_publish(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        blocked = plugin.split("actionsBlockedDuringPublish:")[1].split("};")[0]
+        for action in TRANSITION_KEYFRAME_CAPABILITIES:
+            self.assertIn(f"{action}: true", blocked)
+
+    def test_keyframe_writes_enter_the_timeline_and_restore_the_playhead(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        timeline = plugin.split("function withTransitionTimeline(")[1].split("function applyKeyFrameValue(")[0]
+        self.assertIn("doc.EnterTimelineMode(transitionName)", timeline)
+        self.assertIn("doc.head = previousHead", timeline)
+        self.assertIn("doc.ExitTimelineMode()", timeline)
+        for action in ("addKeyFrames", "setKeyframe", "duplicateTransition"):
+            body = plugin.split(f"function {action}(")[1].split("\nfunction ")[0]
+            self.assertIn("withTransitionTimeline(doc", body, action)
+
+    def test_duplicate_transition_renames_after_the_runtime_quirk(self) -> None:
+        # 6.1.4 实测 DuplicateTransition 忽略第二个参数，副本名落成 null；
+        # 实现必须复制后经文档模型改名，不能相信声明里的 newInstanceName。
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        body = plugin.split("function duplicateTransition(")[1].split("\nfunction ")[0]
+        self.assertIn("doc.DuplicateTransition(sourceName)", body)
+        self.assertIn('doc.SetTransitionProperty(copy, "name", requestedName)', body)
+
+    def test_verify_transition_is_read_only_in_every_layer(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        body = plugin.split("function verifyTransition(")[1].split("function validateTransitionTarget")[0]
+        self.assertIn("readOnly: true", body)
+        self.assertNotIn("SetModified", body)
+        self.assertNotIn("doc.Save(", body)
+        signature = inspect.signature(mcp_server.fgui_verify_transition)
+        self.assertNotIn("save", signature.parameters)
+        self.assertNotIn("external_reload", signature.parameters)
+        parsed = build_parser().parse_args(["verify-transition", "fade"])
+        self.assertFalse(hasattr(parsed, "save"))
+        self.assertFalse(hasattr(parsed, "external_reload"))
 
     def test_reference_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
         root = Path(__file__).resolve().parents[1]

@@ -1,0 +1,379 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-3-keyframes-live",
+  "capturedAt": "2026-10-20T10:58:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.16",
+  "protocolVersion": "1.0",
+  "project": "sample (Package1 / BridgeFixture)",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app (bundle com.fairygui.FairyGUIEditor)",
+    "editorBundleShortVersion": "6.1.4",
+    "runFromAppTranslocation": true,
+    "launchProcedure": "osascript quit → open -a ~/Downloads/FairyGUI-Editor.app /tmp/fgui-p8-3-probe/sample.fairy → 等待心跳 → 置前台",
+    "pluginSnapshot": "从仓库 sample 复制隔离工程后，经 scripts/sync_to_project.py --project /tmp/fgui-p8-3-probe/sample.fairy --apply 同步 0.8.16 插件并重开工程",
+    "heartbeat": "重开后首轮 status 即 online=true、pluginVersion=0.8.16、versionMatch=true、heartbeatAge≈0.46s"
+  },
+  "baseline": {
+    "source": "仓库 sample/（验收前后 md5 未变）",
+    "baselineMd5": "996f003bed3518c5800378002ab50d08",
+    "probeAfterAcceptanceMd5": "7cdef46a66089eb52c4c07814efac0f2",
+    "repoSampleUnchanged": true,
+    "fixtureTransition": "transFade：Alpha 0→1 (n0_fix01) 与 XY 120,20→120,40 (n1_fix01)，两个合成端点均在第 30 帧，maxFrame=30"
+  },
+  "summary": {
+    "action": "add_keyframes / set_keyframe / duplicate_transition（写侧）",
+    "result": "已真机验证并通过",
+    "mockHost": {
+      "passed": 212,
+      "total": 212
+    },
+    "python": {
+      "passed": 50,
+      "total": 50
+    },
+    "typescript": {
+      "errors": 0
+    },
+    "liveChecks": 16,
+    "liveFailures": 0
+  },
+  "checks": [
+    {
+      "id": "capability",
+      "command": "fgui-agent status",
+      "expected": "插件上报 add_keyframes / set_keyframe / duplicate_transition / verify_transition",
+      "actual": {
+        "online": true,
+        "pluginVersion": "0.8.16",
+        "versionMatch": true,
+        "heartbeatAgeSeconds": 0.57,
+        "capabilityListLength": 55,
+        "hasAddKeyframes": true,
+        "hasSetKeyframe": true,
+        "hasDuplicateTransition": true,
+        "hasVerifyTransition": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "add-keyframes",
+      "command": "fgui-agent add-keyframes transFade '[{\"targetId\":\"n0_fix01\",\"type\":\"Rotation\",\"frame\":10,\"label\":\"mid\",\"value\":45}]' --save --external-reload",
+      "requestId": "1792464778989-5ad8f0d1",
+      "expected": "创建 Rotation@10，保存后关闭重开文档仍存在",
+      "actual": {
+        "operation": "keyframes_added",
+        "created": {
+          "targetId": "n0_fix01",
+          "type": "Rotation",
+          "frame": 10,
+          "label": "mid",
+          "value": 45,
+          "tween": null
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "documentModified": false,
+        "writePath": "object-model",
+        "itemCount": 3,
+        "closeStrategy": "CloseDocuments"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "set-keyframe-move",
+      "command": "fgui-agent set-keyframe transFade '{\"frame\":12,\"label\":\"mid2\",\"value\":90}' --target-id n0_fix01 --type Rotation --frame 10 --save --external-reload",
+      "requestId": "1792464787962-01fdfa52",
+      "expected": "按 targetId/type/frame 定位公开关键帧，改帧号/标签/值并持久化",
+      "actual": {
+        "operation": "keyframe_updated",
+        "itemIndex": 2,
+        "syntheticEndpoint": false,
+        "item": {
+          "targetId": "n0_fix01",
+          "type": "Rotation",
+          "frame": 12,
+          "label": "mid2",
+          "value": 90,
+          "tween": null
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "documentModified": false,
+        "itemCount": 3
+      },
+      "status": "pass"
+    },
+    {
+      "id": "add-alpha-into-tween",
+      "command": "fgui-agent add-keyframes transFade '[{\"targetId\":\"n0_fix01\",\"type\":\"Alpha\",\"frame\":10,\"label\":\"split\"}]' --save",
+      "requestId": "1792464793227-7a2a352d",
+      "expected": "把 Alpha 关键帧插入已有 Tween，成为隐藏的合成端点",
+      "actual": {
+        "operation": "keyframes_added",
+        "created": {
+          "targetId": "n0_fix01",
+          "type": "Alpha",
+          "frame": 10,
+          "label": "split",
+          "value": 1,
+          "tween": null
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "disk",
+        "documentModified": false,
+        "itemCount": 4,
+        "observed": "该帧未出现在 get_transition 的公开条目中；下一步按 targetId/type/frame 定位时返回 syntheticEndpoint=true"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "set-hidden-endpoint",
+      "command": "fgui-agent set-keyframe transFade '{\"label\":\"split2\",\"value\":0.4}' --target-id n0_fix01 --type Alpha --frame 10 --save --external-reload",
+      "requestId": "1792464802646-f84cea4c",
+      "expected": "按三元组定位隐藏 Tween 端点并写标签/端点值，重开后保持",
+      "actual": {
+        "operation": "keyframe_updated",
+        "itemIndex": null,
+        "syntheticEndpoint": true,
+        "item": {
+          "targetId": "n0_fix01",
+          "type": "Alpha",
+          "frame": 10,
+          "label": "split2",
+          "value": 0.4000000059604645,
+          "tween": null
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "documentModified": false,
+        "xml": "<item time=\"0\" type=\"Alpha\" target=\"n0_fix01\" tween=\"true\" startValue=\"0\" endValue=\"0.4\" duration=\"10\" label2=\"split2\"/>；原第 30 帧端点落为普通关键帧 <item time=\"30\" ... value=\"1\"/>"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "duplicate-transition",
+      "command": "fgui-agent duplicate-transition transFade --new-name transCopy --save --external-reload",
+      "requestId": "1792464814853-88efd08c",
+      "expected": "复制整条 Transition 并改名为 transCopy，重开后两份都存在",
+      "actual": {
+        "operation": "duplicated",
+        "source": "transFade",
+        "duplicate": "transCopy",
+        "duplicatePublicItemCount": 4,
+        "structureNormalized": false,
+        "transitionCount": 2,
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "documentModified": false
+      },
+      "status": "pass"
+    },
+    {
+      "id": "tween-enable-on-endpoint-rejected",
+      "command": "fgui-agent set-keyframe transFade '{\"tween\":true}' --target-id n0_fix01 --type Alpha --frame 10",
+      "requestId": "1792464823826-bc78176c",
+      "expected": "6.1.4 限制：对合成端点开启 Tween 失败并整步回滚",
+      "actual": {
+        "ok": false,
+        "code": "editor_rejected",
+        "message": "该关键帧没有可用的 Tween 端点，无法建立 Tween；请先确保下一个关键帧可作为端点，或使用 upsert_transition"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "rollback-restores-state",
+      "command": "fgui-agent get-transition transFade",
+      "requestId": "1792464828426-93021336",
+      "expected": "失败请求回滚后 Tween 结构与磁盘不变",
+      "actual": {
+        "itemCount": 4,
+        "tween": "Alpha@0 duration=10 startValue=0 endValue=0.4（label2=split2）",
+        "plainKeyframes": [
+          "Rotation@12 mid2=90",
+          "Alpha@30=1"
+        ],
+        "diskUnchanged": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "write-after-rollback",
+      "command": "fgui-agent add-keyframes transFade '[{\"targetId\":\"n0_fix01\",\"type\":\"Rotation\",\"frame\":24,\"label\":\"post-rollback\",\"value\":180}]' --save",
+      "requestId": "1792464833375-2338b8ac",
+      "expected": "回滚重建 Transition 后再写入仍然生效（不再写进过期 editingTransition）",
+      "actual": {
+        "operation": "keyframes_added",
+        "created": {
+          "targetId": "n0_fix01",
+          "type": "Rotation",
+          "frame": 24,
+          "label": "post-rollback",
+          "value": 180,
+          "tween": null
+        },
+        "itemCount": 5,
+        "saved": true,
+        "persisted": true,
+        "strength": "disk",
+        "documentModified": false,
+        "note": "修复前同一序列会返回成功但 itemCount 不变；本轮为真机回归验证"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "collision-rejected",
+      "command": "fgui-agent add-keyframes transFade '[{\"targetId\":\"n0_fix01\",\"type\":\"Alpha\",\"frame\":0}]'",
+      "requestId": "1792464841141-d6d99a8b",
+      "expected": "既有轨道同帧冲突在第一次写入前拒绝",
+      "actual": {
+        "ok": false,
+        "message": "关键帧已存在：Alpha@0 (n0_fix01)",
+        "itemCountUnchanged": 5
+      },
+      "status": "pass"
+    },
+    {
+      "id": "duplicate-name-rejected",
+      "command": "fgui-agent duplicate-transition transFade --new-name transCopy",
+      "requestId": "1792464841243-3129de38",
+      "expected": "新名称与现有 Transition 重名时拒绝",
+      "actual": {
+        "ok": false,
+        "message": "Transition 已存在：transCopy",
+        "transitionCountUnchanged": 2
+      },
+      "status": "pass"
+    },
+    {
+      "id": "tween-on-plain-track-rejected",
+      "command": "fgui-agent set-keyframe transFade '{\"tween\":true}' --target-id n0_fix01 --type Rotation --frame 12",
+      "requestId": "1792464841453-b9768676",
+      "expected": "普通轨道上的关键帧不能凭空开启 Tween",
+      "actual": {
+        "ok": false,
+        "message": "该关键帧不在 Tween 关系中，无法直接开启 Tween；请使用 upsert_transition 定义新的起止点"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "missing-keyframe-rejected",
+      "command": "fgui-agent set-keyframe transFade '{\"label\":\"x\"}' --target-id n0_fix01 --type Rotation --frame 99",
+      "requestId": "1792464841667-87bb8474",
+      "expected": "定位不存在的关键帧时报错且不改文档",
+      "actual": {
+        "ok": false,
+        "message": "未找到关键帧：Rotation@99 (n0_fix01)；请提供 itemIndex 或正确的 targetId/type/frame（含 Tween 端点）"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "verify-transition-after-writes",
+      "command": "fgui-agent verify-transition",
+      "requestId": "1792464853353-33cd9cb3",
+      "expected": "写后两份 Transition 均 valid=true、clean=true，只读不置脏",
+      "actual": {
+        "readOnly": true,
+        "documentModified": false,
+        "transitionCount": 2,
+        "itemCount": 9,
+        "errorCount": 0,
+        "warningCount": 0,
+        "valid": true,
+        "clean": true,
+        "details": {
+          "transFade": {
+            "itemCount": 5,
+            "targets": 5,
+            "values": 7,
+            "boundsChecked": 2,
+            "valid": true,
+            "clean": true
+          },
+          "transCopy": {
+            "itemCount": 4,
+            "targets": 4,
+            "values": 6,
+            "boundsChecked": 2,
+            "valid": true,
+            "clean": true
+          }
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "editor-restart-persistence",
+      "command": "osascript quit → open -a FairyGUI-Editor.app /tmp/fgui-p8-3-probe/sample.fairy → fgui-agent transitions",
+      "requestId": "1792464882154-7d4ad50f",
+      "expected": "完整退出并重启编辑器后，两份 Transition 与全部写入值仍在",
+      "actual": {
+        "online": true,
+        "pluginVersion": "0.8.16",
+        "versionMatch": true,
+        "transFade": {
+          "maxFrame": 30,
+          "publicItems": [
+            "Alpha@0 tween end=0.4",
+            "XY@0 tween end={x:120,y:40}",
+            "Rotation@12 label=mid2 value=90",
+            "Rotation@24 label=post-rollback value=180",
+            "Alpha@30 value=1"
+          ]
+        },
+        "transCopy": {
+          "maxFrame": 30,
+          "publicItems": [
+            "Alpha@0 tween end=0.4",
+            "XY@0 tween end={x:120,y:40}",
+            "Rotation@12 label=mid2 value=90",
+            "Alpha@30 value=1"
+          ]
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "repo-sample-untouched",
+      "command": "md5 sample/assets/Package1/BridgeFixture.xml",
+      "expected": "验收只改隔离副本，仓库夹具保持基线",
+      "actual": {
+        "baselineMd5": "996f003bed3518c5800378002ab50d08",
+        "afterMd5": "996f003bed3518c5800378002ab50d08",
+        "probeMd5": "7cdef46a66089eb52c4c07814efac0f2"
+      },
+      "status": "pass"
+    }
+  ],
+  "limitations": [
+    "6.1.4 上对合成端点执行 tween=true 会通过预检但在 SetKeyFrameProperty 后 item.nextItem 为 null，Action 报「没有可用的 Tween 端点」并整步回滚；延长 Tween 请用 upsert_transition 重建。",
+    "写验证只断言 <transition> 名称与公开条目数；属性级持久化由 get_transition 在 external reload 与完整重启后回读确认，未做 XML 属性级断言。",
+    "公开条目数不包含被折叠的合成端点；XML 中 Tween 以单个 <item tween=\"true\" ... label2=...> 表示，端点标签写在 label2。",
+    "本轮夹具为单包单组件，未覆盖跨包/多文档同时写入；三个 Action 均进 Agent 动画撤销栈，但 full restart 后的 undo 栈不在本轮范围内。"
+  ],
+  "artifacts": [
+    "/tmp/p816-final/01-add.json",
+    "/tmp/p816-final/02-set.json",
+    "/tmp/p816-final/03-add-alpha.json",
+    "/tmp/p816-final/04-set-endpoint.json",
+    "/tmp/p816-final/05-duplicate.json",
+    "/tmp/p816-final/06-tween-endpoint.json",
+    "/tmp/p816-final/06b-after-rollback.json",
+    "/tmp/p816-final/07-add-after-rollback.json",
+    "/tmp/p816-final/08-collision.json",
+    "/tmp/p816-final/09-dup-exists.json",
+    "/tmp/p816-final/10-tween-plain.json",
+    "/tmp/p816-final/11-missing.json",
+    "/tmp/p816-final/12-transitions-final.json",
+    "/tmp/p816-final/13-verify.json",
+    "/tmp/p816-final/14-after-restart.json",
+    "/tmp/p816-final/15-status.json"
+  ]
+}

@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.14";
+const BRIDGE_VERSION = "0.8.16";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -136,8 +136,12 @@ function writeStatus() {
             "remove_movieclip",
             "list_transitions",
             "get_transition",
+            "verify_transition",
             "upsert_transition",
             "remove_transition",
+            "add_keyframes",
+            "set_keyframe",
+            "duplicate_transition",
             "add_transition_item",
             "update_transition_item",
             "remove_transition_item",
@@ -3561,6 +3565,283 @@ function listTransitions(doc) {
         list.push(describeTransition(transitions.get_Item(index)));
     return list;
 }
+// verify_transition 是只读检查，必须能对损坏的 Transition 出报告而不是自己先抛错：
+// describeTransition 遇到缺失的 tween 端点会直接 throw，一条坏轨道就会让整个组件
+// 查不出来。所以这里按公开 item 自行遍历，端点和值都容错读取。
+function finiteTransitionNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+}
+function transitionFinding(code, severity, transitionName, itemIndex, item, message, extra) {
+    const finding = {
+        code,
+        severity,
+        transition: transitionName,
+        itemIndex,
+        type: item ? String(item.type) : null,
+        targetId: item ? String(item.targetId || "") : null,
+        frame: item ? Number(item.frame) : null,
+        message
+    };
+    if (extra) {
+        for (const key of Object.keys(extra))
+            finding[key] = extra[key];
+    }
+    return finding;
+}
+function verifyTransitionValue(doc, transitionName, itemIndex, item, value, phase, target, checkBounds, findings, stats) {
+    const type = String(item.type);
+    const described = describeTransitionValue(type, value);
+    const report = (code, severity, message, extra) => {
+        const detail = { phase };
+        if (extra) {
+            for (const key of Object.keys(extra))
+                detail[key] = extra[key];
+        }
+        findings.push(transitionFinding(code, severity, transitionName, itemIndex, item, message, detail));
+    };
+    switch (type) {
+        case "Alpha":
+            if (!finiteTransitionNumber(described) || described < 0 || described > 1)
+                report("value_out_of_range", "error", `Alpha 关键帧值必须在 0 到 1 之间：${String(described)}`, { value: described });
+            break;
+        case "Color": {
+            if (!described || typeof described !== "object") {
+                report("value_missing", "error", "Color 关键帧缺少颜色值");
+                break;
+            }
+            for (const channel of ["r", "g", "b", "a"]) {
+                const channelValue = described[channel];
+                if (!finiteTransitionNumber(channelValue) || channelValue < 0 || channelValue > 1)
+                    report("value_out_of_range", "error", `Color.${channel} 必须在 0 到 1 之间：${String(channelValue)}`, { channel, value: channelValue });
+            }
+            break;
+        }
+        case "XY":
+        case "Size":
+        case "Pivot":
+        case "Scale":
+        case "Skew": {
+            if (!described || typeof described !== "object") {
+                report("value_missing", "error", `${type} 关键帧缺少坐标值`);
+                break;
+            }
+            for (const axis of ["x", "y"]) {
+                if (!finiteTransitionNumber(described[axis]))
+                    report("value_out_of_range", "error", `${type}.${axis} 必须是有限数字：${String(described[axis])}`, { axis, value: described[axis] });
+            }
+            if (type === "Size") {
+                for (const axis of ["x", "y"]) {
+                    if (finiteTransitionNumber(described[axis]) && described[axis] < 0)
+                        report("value_out_of_range", "error", `Size.${axis} 不能为负数：${String(described[axis])}`, { axis, value: described[axis] });
+                }
+            }
+            if (type === "Pivot") {
+                for (const axis of ["x", "y"]) {
+                    if (finiteTransitionNumber(described[axis]) && (described[axis] < 0 || described[axis] > 1))
+                        report("value_outside_expected_range", "warning", `Pivot.${axis} 通常应在 0 到 1 之间：${String(described[axis])}`, { axis, value: described[axis] });
+                }
+            }
+            if (type === "XY" && checkBounds) {
+                if (described.percent) {
+                    stats.boundsSkipped++;
+                }
+                else if (target && target !== doc.content && finiteTransitionNumber(described.x) && finiteTransitionNumber(described.y)) {
+                    stats.boundsChecked++;
+                    const canvasWidth = Number(doc.content.width) || 0;
+                    const canvasHeight = Number(doc.content.height) || 0;
+                    if (canvasWidth > 0 && canvasHeight > 0 && (described.x < 0 || described.y < 0 || described.x > canvasWidth || described.y > canvasHeight))
+                        report("position_outside_canvas", "warning", `XY ${phase} 位置 (${described.x}, ${described.y}) 超出画布 ${canvasWidth}x${canvasHeight}；滑入/滑出动画也会命中，请人工确认`, { canvas: { width: canvasWidth, height: canvasHeight } });
+                }
+                else {
+                    stats.boundsSkipped++;
+                }
+            }
+            break;
+        }
+        case "Rotation":
+            if (!finiteTransitionNumber(described))
+                report("value_out_of_range", "error", `Rotation 关键帧值必须是有限数字：${String(described)}`, { value: described });
+            break;
+        case "Animation":
+            if (!described || typeof described !== "object" || !Number.isInteger(described.frame) || described.frame < 0)
+                report("value_out_of_range", "error", `Animation.frame 必须是非负整数：${String(described && described.frame)}`, { value: described && described.frame });
+            break;
+        case "Sound": {
+            if (!described || typeof described !== "object") {
+                report("value_missing", "error", "Sound 关键帧缺少声音资源");
+                break;
+            }
+            const soundUrl = String(described.soundUrl || "");
+            stats.resourcesChecked++;
+            if (!soundUrl) {
+                report("value_missing", "error", "Sound.soundUrl 不能为空");
+            }
+            else {
+                try {
+                    const soundItem = resolveItem({ url: soundUrl });
+                    if (soundItem.type !== FairyEditor.FPackageItemType.SOUND)
+                        report("resource_type_mismatch", "error", `Sound.soundUrl 不是声音资源：${soundUrl}`, { resource: soundUrl });
+                }
+                catch (error) {
+                    report("resource_missing", "error", `Sound 资源不存在：${soundUrl}`, { resource: soundUrl });
+                }
+            }
+            if (!finiteTransitionNumber(described.volume) || described.volume < 0 || described.volume > 1)
+                report("value_out_of_range", "error", `Sound.volume 必须在 0 到 1 之间：${String(described.volume)}`, { value: described.volume });
+            break;
+        }
+        case "Transition": {
+            if (!described || typeof described !== "object") {
+                report("value_missing", "error", "Transition 关键帧缺少嵌套 Transition");
+                break;
+            }
+            const nestedName = String(described.transitionName || "");
+            stats.nestedChecked++;
+            if (!nestedName)
+                report("value_missing", "error", "Transition.transitionName 不能为空");
+            else if (!doc.content.transitions.GetItem(nestedName))
+                report("nested_transition_missing", "error", `嵌套 Transition 不存在：${nestedName}`, { nestedTransition: nestedName });
+            if (!Number.isInteger(described.playTimes) || described.playTimes < -1)
+                report("value_out_of_range", "error", `Transition.playTimes 必须是 -1 到 1000000 之间的整数：${String(described.playTimes)}`, { value: described.playTimes });
+            if (!finiteTransitionNumber(described.stopTime) || described.stopTime < -1)
+                report("value_out_of_range", "error", `Transition.stopTime 不能小于 -1：${String(described.stopTime)}`, { value: described.stopTime });
+            break;
+        }
+        case "Shake":
+            if (!finiteTransitionNumber(described && described.amplitude) || described.amplitude < 0)
+                report("value_out_of_range", "error", `Shake.amplitude 不能为负数：${String(described && described.amplitude)}`, { value: described && described.amplitude });
+            if (!finiteTransitionNumber(described && described.duration) || described.duration < 0)
+                report("value_out_of_range", "error", `Shake.duration 不能为负数：${String(described && described.duration)}`, { value: described && described.duration });
+            break;
+        case "ColorFilter":
+            for (const key of ["brightness", "contrast", "saturation", "hue"]) {
+                if (!finiteTransitionNumber(described && described[key]))
+                    report("value_out_of_range", "error", `ColorFilter.${key} 必须是有限数字：${String(described && described[key])}`, { channel: key, value: described && described[key] });
+            }
+            break;
+        case "Visible":
+        case "Text":
+        case "Icon":
+            break;
+    }
+}
+function verifyOneTransition(doc, transition, checkBounds) {
+    const transitionName = String(transition.name || "");
+    const findings = [];
+    const stats = { itemCount: 0, targetsChecked: 0, valuesChecked: 0, boundsChecked: 0, boundsSkipped: 0, resourcesChecked: 0, nestedChecked: 0 };
+    const frameRate = Number(transition.frameRate);
+    if (!Number.isInteger(frameRate) || frameRate < 1 || frameRate > 255)
+        findings.push(transitionFinding("frame_rate_invalid", "error", transitionName, -1, null, `frameRate 必须在 1 到 255 之间：${String(transition.frameRate)}`));
+    let publicIndex = 0;
+    for (let index = 0; index < transition.items.Count; index++) {
+        const item = transition.items.get_Item(index);
+        if (isSyntheticTweenEndpoint(item))
+            continue;
+        const itemIndex = publicIndex++;
+        stats.itemCount++;
+        const targetId = String(item.targetId || "");
+        let target = doc.content;
+        if (targetId) {
+            stats.targetsChecked++;
+            target = findObjectById(doc.content, targetId);
+            if (!target)
+                findings.push(transitionFinding("target_missing", "error", transitionName, itemIndex, item, `Transition 目标对象不存在：${targetId}`));
+        }
+        if (target) {
+            try {
+                if (typeof FairyEditor.FTransition.GetAllowType === "function" && !FairyEditor.FTransition.GetAllowType(target, String(item.type)))
+                    findings.push(transitionFinding("target_type_unsupported", "error", transitionName, itemIndex, item, `目标 ${targetId || "root"} 不支持轨道类型：${String(item.type)}`));
+            }
+            catch (_) { /* 类型查询失败不应阻断其余检查。 */ }
+        }
+        const frame = Number(item.frame);
+        if (!Number.isInteger(frame) || frame < 0)
+            findings.push(transitionFinding("frame_invalid", "error", transitionName, itemIndex, item, `关键帧时间必须是非负整数：${String(item.frame)}`));
+        stats.valuesChecked++;
+        verifyTransitionValue(doc, transitionName, itemIndex, item, item.value, "start", target, checkBounds, findings, stats);
+        if (item.tween) {
+            const next = item.nextItem;
+            if (!next) {
+                findings.push(transitionFinding("tween_missing_endpoint", "error", transitionName, itemIndex, item, "Tween 缺少结束关键帧"));
+            }
+            else {
+                if (String(next.targetId || "") !== targetId || String(next.type) !== String(item.type))
+                    findings.push(transitionFinding("tween_endpoint_mismatch", "error", transitionName, itemIndex, item, "Tween 结束关键帧的 target/type 与起始项不一致"));
+                const duration = Number(next.frame) - frame;
+                if (!(duration > 0))
+                    findings.push(transitionFinding("tween_invalid_duration", "error", transitionName, itemIndex, item, `Tween 时长必须大于 0，实际为 ${String(duration)} 帧`));
+                stats.valuesChecked++;
+                verifyTransitionValue(doc, transitionName, itemIndex, item, next.value, "end", target, checkBounds, findings, stats);
+            }
+        }
+    }
+    if (stats.itemCount === 0)
+        findings.push(transitionFinding("empty_transition", "warning", transitionName, -1, null, "Transition 不包含任何公开关键帧"));
+    const errors = findings.filter((finding) => finding.severity === "error");
+    const warnings = findings.filter((finding) => finding.severity === "warning");
+    return {
+        name: transitionName,
+        valid: errors.length === 0,
+        clean: errors.length === 0 && warnings.length === 0,
+        itemCount: stats.itemCount,
+        checks: {
+            targets: stats.targetsChecked,
+            values: stats.valuesChecked,
+            resources: stats.resourcesChecked,
+            nestedTransitions: stats.nestedChecked,
+            bounds: { checked: stats.boundsChecked, skipped: stats.boundsSkipped }
+        },
+        errorCount: errors.length,
+        warningCount: warnings.length,
+        errors,
+        warnings
+    };
+}
+function verifyTransition(params) {
+    const doc = getActiveDocument();
+    if (!doc.content || !doc.content.transitions)
+        throw new Error("当前文档不是组件文档，无法校验 Transition");
+    const checkBounds = params && params.checkBounds !== undefined ? Boolean(params.checkBounds) : true;
+    const requested = params && params.name !== undefined && params.name !== null ? String(params.name).trim() : "";
+    const collection = doc.content.transitions;
+    const selected = [];
+    if (requested) {
+        const name = normalizeTransitionName(requested);
+        const transition = collection.GetItem(name);
+        if (!transition)
+            verificationError("target_not_found", `当前组件中不存在 Transition：${name}`, { stage: "editor", transition: name });
+        selected.push(transition);
+    }
+    else {
+        for (let index = 0; index < collection.items.Count; index++)
+            selected.push(collection.items.get_Item(index));
+    }
+    const transitions = selected.map((transition) => verifyOneTransition(doc, transition, checkBounds));
+    let errorCount = 0;
+    let warningCount = 0;
+    let itemCount = 0;
+    for (const result of transitions) {
+        errorCount += result.errorCount;
+        warningCount += result.warningCount;
+        itemCount += result.itemCount;
+    }
+    return {
+        ok: true,
+        readOnly: true,
+        document: describeDocument(doc),
+        checkBounds,
+        transitions,
+        summary: {
+            transitionCount: transitions.length,
+            itemCount,
+            errorCount,
+            warningCount,
+            valid: errorCount === 0,
+            clean: errorCount === 0 && warningCount === 0
+        },
+        note: "只读校验：不修改文档、不保存。error 表示目标/值/嵌套引用确定有问题；warning 表示可能合法（例如滑入滑出动画的越界坐标），需要人工确认。"
+    };
+}
 function validateTransitionTarget(doc, targetId, type) {
     const id = targetId === undefined || targetId === null ? "" : String(targetId);
     const target = id ? findObjectById(doc.content, id) : doc.content;
@@ -3687,7 +3968,8 @@ function mutateTransitions(params, operation, mutate, verifySpec) {
     // Transition 条目经 transition.CreateItem/DeleteItem 与 FTransitionItem 成员写入。
     lastWritePath = WRITE_PATH_MODEL;
     const doc = getActiveDocument();
-    const transitionTarget = { id: null, name: verifySpec.name, path: null, type: "transition" };
+    const preSpec = typeof verifySpec === "function" ? null : verifySpec;
+    const transitionTarget = { id: null, name: preSpec ? preSpec.name : null, path: null, type: "transition" };
     // Reject impossible reload combinations before any mutation, so a bad
     // request never leaves the user's document half-written.
     validateReloadOptions(params, transitionTarget);
@@ -3709,12 +3991,14 @@ function mutateTransitions(params, operation, mutate, verifySpec) {
         catch (_) { /* preserve the original editor error */ }
         throw error;
     }
+    // duplicate_transition only learns the copy's name from the mutation result.
+    const spec = typeof verifySpec === "function" ? verifySpec(result) : verifySpec;
     // Verification runs outside the mutation try: a failed save must not roll
     // back an editor mutation that already landed (and may already be saved).
-    const verified = transitionWriteVerification(doc, verifySpec.name, verifySpec.present, params);
+    const verified = transitionWriteVerification(doc, spec.name, spec.present, params);
     const liveDoc = verified.state.doc || doc;
     return {
-        ok: true, operation, result, target: transitionTarget,
+        ok: true, operation, result, target: { ...transitionTarget, name: spec.name },
         document: describeDocument(liveDoc), transitions: listTransitions(liveDoc),
         documentModified: Boolean(liveDoc.isModified),
         saved: verified.saved, persisted: verified.persisted, strength: verified.strength,
@@ -3788,6 +4072,253 @@ function removeTransition(params) {
         doc.content.transitions.RemoveItem(transition);
         return removed;
     }, { name: normalizeTransitionName(params.name), present: false });
+}
+function publicTransitionItems(transition) {
+    const items = [];
+    for (let index = 0; index < transition.items.Count; index++) {
+        const item = transition.items.get_Item(index);
+        if (!isSyntheticTweenEndpoint(item))
+            items.push(item);
+    }
+    return items;
+}
+function transitionTrackItems(transition, targetId, type) {
+    const items = [];
+    for (let index = 0; index < transition.items.Count; index++) {
+        const item = transition.items.get_Item(index);
+        if (String(item.targetId || "") === targetId && String(item.type) === type)
+            items.push(item);
+    }
+    return items;
+}
+// CreateKeyFrame/SetKeyFrameProperty operate on the editor's active timeline.
+// Restore the user's playhead and timeline mode on every exit path, including
+// validation failures that trim the mutation.
+function withTransitionTimeline(doc, transitionName, mutation) {
+    const wasTimeline = Boolean(doc.timelineMode);
+    const previousName = doc.editingTransition ? String(doc.editingTransition.name) : null;
+    const previousHead = doc.head;
+    // 名称相同不代表还是同一个对象：upsert/remove 重建 Transition 后，编辑器可能仍
+    // 持有旧的 editingTransition 引用，此时 CreateKeyFrame 会写到已被替换的对象里。
+    const activeTransition = doc.content.transitions.GetItem(transitionName);
+    if (!doc.timelineMode || !doc.editingTransition || doc.editingTransition !== activeTransition)
+        doc.EnterTimelineMode(transitionName);
+    try {
+        return mutation();
+    }
+    finally {
+        try {
+            doc.head = previousHead;
+        }
+        catch (_) { /* best effort */ }
+        try {
+            if (wasTimeline) {
+                const current = doc.editingTransition ? String(doc.editingTransition.name) : null;
+                if (previousName && current !== previousName)
+                    doc.EnterTimelineMode(previousName);
+            }
+            else if (doc.timelineMode)
+                doc.ExitTimelineMode();
+        }
+        catch (_) { /* best effort */ }
+    }
+}
+function applyKeyFrameValue(doc, item, raw) {
+    applyTransitionValue(doc, String(item.type), item.value, raw);
+    lastWritePath = WRITE_PATH_MODEL;
+}
+function addKeyFrames(params) {
+    const name = normalizeTransitionName(params.name);
+    const rawKeyframes = params.keyframes;
+    if (!Array.isArray(rawKeyframes) || rawKeyframes.length === 0)
+        throw new Error("keyframes 必须是非空数组");
+    return mutateTransitions(params, "keyframes_added", (doc) => {
+        const transition = resolveTransition(doc, name);
+        const planned = rawKeyframes.map((raw, index) => {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw))
+                throw new Error(`keyframes[${index}] 必须是对象`);
+            assertKnownKeys(raw, ["targetId", "type", "frame", "label", "value"], `keyframes[${index}]`);
+            const type = normalizeTransitionType(raw.type);
+            const targetId = validateTransitionTarget(doc, raw.targetId, type);
+            const frame = nonNegativeInt(raw.frame, `keyframes[${index}].frame`);
+            if (raw.label !== undefined && raw.label !== null && typeof raw.label !== "string")
+                throw new Error(`keyframes[${index}].label 必须是字符串`);
+            return { raw, type, targetId, frame, label: raw.label === undefined || raw.label === null ? null : String(raw.label) };
+        });
+        // Reject collisions before the first CreateKeyFrame: the editor will
+        // happily add a second item on the same track/frame, and duplicates make
+        // the tween topology ambiguous.
+        const seen = {};
+        for (const plan of planned) {
+            for (const item of transitionTrackItems(transition, plan.targetId, plan.type))
+                if (Number(item.frame) === plan.frame)
+                    throw new Error(`关键帧已存在：${plan.type}@${plan.frame} (${plan.targetId || "root"})`);
+            const track = `${plan.targetId}|${plan.type}`;
+            const frames = seen[track] || (seen[track] = []);
+            if (frames.indexOf(plan.frame) >= 0)
+                throw new Error(`同一批次关键帧重复：${plan.type}@${plan.frame} (${plan.targetId || "root"})`);
+            frames.push(plan.frame);
+        }
+        return withTransitionTimeline(doc, name, () => {
+            const created = [];
+            for (const plan of planned) {
+                const target = plan.targetId ? findObjectById(doc.content, plan.targetId) : doc.content;
+                if (!target)
+                    throw new Error(`Transition targetId 不存在：${plan.targetId}`);
+                // CreateKeyFrame samples the object's current state at the playhead
+                // and adds the item to the transition itself; AddKeyFrame afterwards
+                // adds a duplicate and must not be called.
+                doc.head = plan.frame;
+                const item = doc.CreateKeyFrame(target, plan.type);
+                if (!item)
+                    throw new Error(`无法创建关键帧：${plan.type}@${plan.frame}`);
+                if (plan.raw.value !== undefined)
+                    applyKeyFrameValue(doc, item, plan.raw.value);
+                if (plan.label !== null)
+                    doc.SetKeyFrameProperty(item, "label", plan.label);
+                created.push(describeTransitionItem(item));
+            }
+            return created;
+        });
+    }, { name, present: true });
+}
+function locateKeyFrame(transition, params) {
+    const publicItems = publicTransitionItems(transition);
+    if (params.itemIndex !== undefined && params.itemIndex !== null) {
+        const itemIndex = nonNegativeInt(params.itemIndex, "itemIndex");
+        if (itemIndex >= publicItems.length)
+            throw new Error(`itemIndex 超出范围：${itemIndex}，当前公开关键帧 ${publicItems.length} 个`);
+        return { item: publicItems[itemIndex], itemIndex };
+    }
+    const type = normalizeTransitionType(params.type);
+    const targetId = params.targetId === undefined || params.targetId === null ? "" : String(params.targetId);
+    const frame = nonNegativeInt(params.frame, "frame");
+    // 按 targetId/type/frame 精确定位时也搜索 Tween 合成端点：把关键帧插入已有
+    // Tween 后，新帧会变成端点并从 get_transition 的公开列表中消失，但它仍可
+    // 通过显式身份寻址（例如再开启 Tween 把轨道续到下一个关键帧）。
+    for (let index = 0; index < transition.items.Count; index++) {
+        const item = transition.items.get_Item(index);
+        if (String(item.targetId || "") === targetId && String(item.type) === type && Number(item.frame) === frame) {
+            const publicIndex = publicItems.indexOf(item);
+            return { item, itemIndex: publicIndex >= 0 ? publicIndex : null };
+        }
+    }
+    throw new Error(`未找到关键帧：${type}@${frame} (${targetId || "root"})；请提供 itemIndex 或正确的 targetId/type/frame（含 Tween 端点）`);
+}
+function setKeyframe(params) {
+    const name = normalizeTransitionName(params.name);
+    const changes = params.changes;
+    if (!changes || typeof changes !== "object" || Array.isArray(changes))
+        throw new Error("changes 必须是对象");
+    assertKnownKeys(changes, ["frame", "label", "tween", "ease", "repeat", "yoyo", "value", "endValue"], "changes");
+    if (Object.keys(changes).length === 0)
+        throw new Error("changes 至少需要一个字段");
+    if (changes.tween === false && changes.endValue !== undefined)
+        throw new Error("tween=false 时不能同时设置 endValue");
+    return mutateTransitions(params, "keyframe_updated", (doc) => {
+        const transition = resolveTransition(doc, name);
+        const located = locateKeyFrame(transition, params);
+        const item = located.item;
+        // 6.1.4 只能给已处于 Tween 关系中的关键帧开启 Tween（Tween 起点，或插入
+        // 已有 Tween 后形成的合成端点）；普通关键帧之间没有端点对象，SetKeyFrameProperty
+        // 会静默不生效。这类轨道请用 upsert_transition 定义起止点。
+        if (changes.tween === true && !item.tween && !(item.prevItem && item.prevItem.tween))
+            throw new Error("该关键帧不在 Tween 关系中，无法直接开启 Tween；请使用 upsert_transition 定义新的起止点");
+        // SetKeyFrameProperty 作用于编辑器当前时间轴，未进入时间轴模式时调用
+        // 要么抛错、要么改到别处；先进入再写，结束后恢复用户原来的播放头。
+        return withTransitionTimeline(doc, name, () => {
+            if (changes.frame !== undefined) {
+                const newFrame = nonNegativeInt(changes.frame, "changes.frame");
+                if (newFrame !== Number(item.frame)) {
+                    for (const other of transitionTrackItems(transition, String(item.targetId || ""), String(item.type)))
+                        if (other !== item && Number(other.frame) === newFrame)
+                            throw new Error(`目标帧已存在关键帧：${item.type}@${newFrame}`);
+                    doc.SetKeyFrameProperty(item, "frame", newFrame);
+                    lastWritePath = WRITE_PATH_MODEL;
+                }
+            }
+            if (changes.tween !== undefined) {
+                doc.SetKeyFrameProperty(item, "tween", Boolean(changes.tween));
+                lastWritePath = WRITE_PATH_MODEL;
+                if (Boolean(changes.tween) && (!item.tween || !item.nextItem))
+                    throw new Error("该关键帧没有可用的 Tween 端点，无法建立 Tween；请先确保下一个关键帧可作为端点，或使用 upsert_transition");
+            }
+            if (changes.value !== undefined)
+                applyKeyFrameValue(doc, item, changes.value);
+            if (changes.endValue !== undefined) {
+                if (!item.nextItem)
+                    throw new Error("关键帧没有 Tween 端点，无法设置 endValue");
+                applyKeyFrameValue(doc, item.nextItem, changes.endValue);
+            }
+            if (changes.label !== undefined) {
+                doc.SetKeyFrameProperty(item, "label", String(changes.label));
+                lastWritePath = WRITE_PATH_MODEL;
+            }
+            if (changes.ease !== undefined) {
+                const ease = normalizeEase(changes.ease);
+                const parts = ease.split(".");
+                doc.SetKeyFrameProperty(item, "easeType", parts[0]);
+                if (parts.length > 1)
+                    doc.SetKeyFrameProperty(item, "easeInOutType", parts[1]);
+                lastWritePath = WRITE_PATH_MODEL;
+            }
+            if (changes.repeat !== undefined) {
+                const repeat = Number(changes.repeat);
+                if (!Number.isInteger(repeat) || repeat < -1 || repeat > 1000000)
+                    throw new Error("changes.repeat 必须是 -1 到 1000000 之间的整数");
+                doc.SetKeyFrameProperty(item, "repeat", repeat);
+                lastWritePath = WRITE_PATH_MODEL;
+            }
+            if (changes.yoyo !== undefined) {
+                doc.SetKeyFrameProperty(item, "yoyo", Boolean(changes.yoyo));
+                lastWritePath = WRITE_PATH_MODEL;
+            }
+            // 开启 Tween 会让合成端点变成公开的 Tween 起点；因此索引在写入后重算。
+            const publicIndex = publicTransitionItems(transition).indexOf(item);
+            return {
+                itemIndex: publicIndex >= 0 ? publicIndex : null,
+                syntheticEndpoint: isSyntheticTweenEndpoint(item),
+                item: describeTransitionItem(item)
+            };
+        });
+    }, { name, present: true });
+}
+function duplicateTransition(params) {
+    const sourceName = normalizeTransitionName(params.name);
+    const rawNewName = params.newName === undefined || params.newName === null ? "" : String(params.newName).trim();
+    const requestedName = rawNewName ? normalizeTransitionName(rawNewName) : null;
+    return mutateTransitions(params, "duplicated", (doc) => {
+        const transitions = doc.content.transitions;
+        const source = resolveTransition(doc, sourceName);
+        if (requestedName && transitions.GetItem(requestedName))
+            throw new Error(`Transition 已存在：${requestedName}`);
+        // 复制同样在编辑器时间轴上下文中执行；结束后恢复用户原来的时间轴。
+        const duplicate = withTransitionTimeline(doc, sourceName, () => {
+            const copy = doc.DuplicateTransition(sourceName);
+            if (!copy)
+                throw new Error(`复制 Transition 失败：${sourceName}`);
+            // 6.1.4 ignores the documented newInstanceName argument (the copy keeps a
+            // null name), so rename through the document model after duplicating.
+            if (requestedName)
+                doc.SetTransitionProperty(copy, "name", requestedName);
+            return copy;
+        });
+        const duplicateName = String(duplicate.name || "");
+        if (!duplicateName)
+            throw new Error("复制后的 Transition 名称为空");
+        const stored = transitions.GetItem(duplicateName);
+        if (!stored)
+            throw new Error(`复制后的 Transition 未进入集合：${duplicateName}`);
+        lastWritePath = WRITE_PATH_MODEL;
+        const sourceDefinition = describeTransition(source);
+        const duplicateDefinition = describeTransition(stored);
+        return {
+            source: sourceDefinition,
+            duplicate: duplicateDefinition,
+            structureNormalized: JSON.stringify(sourceDefinition.items) !== JSON.stringify(duplicateDefinition.items),
+            requestedName
+        };
+    }, (result) => ({ name: String(result.duplicate.name), present: true }));
 }
 async function importSound(params) {
     validatePackageWriteOptions(params, "sound", true);
@@ -5680,6 +6211,9 @@ function handleCommand(request) {
         remove_movieclip: true,
         upsert_transition: true,
         set_publish_settings: true,
+        add_keyframes: true,
+        set_keyframe: true,
+        duplicate_transition: true,
         remove_transition: true,
         add_transition_item: true,
         update_transition_item: true,
@@ -5774,10 +6308,18 @@ function handleCommand(request) {
             return listTransitions(getActiveDocument());
         case "get_transition":
             return describeTransition(resolveTransition(getActiveDocument(), params.name));
+        case "verify_transition":
+            return verifyTransition(params);
         case "upsert_transition":
             return upsertTransition(params);
         case "remove_transition":
             return removeTransition(params);
+        case "add_keyframes":
+            return addKeyFrames(params);
+        case "set_keyframe":
+            return setKeyframe(params);
+        case "duplicate_transition":
+            return duplicateTransition(params);
         case "add_transition_item":
             return addTransitionItem(params);
         case "update_transition_item":

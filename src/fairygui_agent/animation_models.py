@@ -120,6 +120,25 @@ class TransitionItem(TypedDict, total=False):
     tween: TransitionTween | None
 
 
+class KeyframeSpec(TypedDict, total=False):
+    targetId: str
+    type: str
+    frame: int
+    label: str
+    value: TransitionValue
+
+
+class KeyframeChanges(TypedDict, total=False):
+    frame: int
+    label: str
+    tween: bool
+    ease: str
+    repeat: int
+    yoyo: bool
+    value: TransitionValue
+    endValue: TransitionValue
+
+
 class TransitionDefinition(TypedDict, total=False):
     name: str
     frameRate: int

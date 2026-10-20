@@ -65,6 +65,25 @@ ANIMATION_CAPABILITIES = frozenset(
     }
 )
 
+# Phase 8 / P8-3 (0.8.15)：Transition 只读校验。单独登记以便缺失提示给出正确的最低版本，
+# 不把 0.8.1 的动画能力说成已经包含它。
+TRANSITION_VERIFY_CAPABILITIES = frozenset(
+    {
+        "verify_transition",
+    }
+)
+
+# Phase 8 / P8-3 写侧 (0.8.16)：时间轴关键帧增改与 Transition 复制。它们经编辑器时间轴
+# 与文档模型写入（CreateKeyFrame / SetKeyFrameProperty / DuplicateTransition），
+# 和 0.8.1 的条目级写操作不是同一批 API，最低版本单独提示。
+TRANSITION_KEYFRAME_CAPABILITIES = frozenset(
+    {
+        "add_keyframes",
+        "set_keyframe",
+        "duplicate_transition",
+    }
+)
+
 # Phase 4 (0.8.8)：List/Group 布局、Relation、gearDisplay、Controller。
 LAYOUT_CAPABILITIES = frozenset(
     {
@@ -248,6 +267,8 @@ class BridgeClient:
         status = self.ensure_ready()
         optional = {
             ANIMATION_CAPABILITIES: ("动画", "0.8.1"),
+            TRANSITION_VERIFY_CAPABILITIES: ("Transition 校验", "0.8.15"),
+            TRANSITION_KEYFRAME_CAPABILITIES: ("Transition 关键帧写入", "0.8.16"),
             LAYOUT_CAPABILITIES: ("布局/控制器", "0.8.8"),
             REFERENCE_CAPABILITIES: ("资源引用图", "0.8.10"),
             REFERENCE_REPLACE_CAPABILITIES: ("全工程引用替换", "0.8.11"),

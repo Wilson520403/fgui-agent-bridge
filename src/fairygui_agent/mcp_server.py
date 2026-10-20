@@ -9,7 +9,7 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
-from .animation_models import TransitionDefinition, TransitionItem
+from .animation_models import KeyframeChanges, KeyframeSpec, TransitionDefinition, TransitionItem
 from .bridge_client import BridgeClient
 from .editor_launcher import EditorLauncher
 from .project_locator import ProjectLocator
@@ -476,6 +476,19 @@ def fgui_get_transition(name: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def fgui_verify_transition(name: str | None = None, check_bounds: bool = True) -> dict[str, Any]:
+    """只读校验当前组件的 Transition：目标对象、关键帧值、嵌套引用与 XY 位置范围。
+
+    不修改文档、不保存。省略 name 时校验全部 Transition。summary.valid 只统计 error；
+    position_outside_canvas 是 warning——滑入/滑出动画的越界坐标本身是合法的。
+    """
+    params: dict[str, Any] = {"checkBounds": check_bounds}
+    if name:
+        params["name"] = name
+    return _client.call("verify_transition", params)
+
+
+@mcp.tool()
 def fgui_upsert_transition(transition: TransitionDefinition, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
     """声明式创建或完整替换一个 Transition；一次调用可由 fgui_undo/redo 原子回退。
 
@@ -522,6 +535,74 @@ def fgui_remove_transition_item(name: str, item_index: int, save: bool = False, 
     if item_index < 0:
         raise ValueError("item_index 不能小于 0")
     return _client.call("remove_transition_item", {"name": name, "itemIndex": item_index, "save": save, "verify": verify, "externalReload": external_reload})
+
+
+@mcp.tool()
+def fgui_add_keyframes(name: str, keyframes: list[KeyframeSpec], save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """在 Transition 时间轴上创建关键帧；一次调用可由 fgui_undo/redo 原子回退。
+
+    每项需要 targetId（空表示根组件）、type 与 frame；value 省略时由编辑器采样对象当前状态。
+    label 可写说明文字。同一轨道同一帧已存在会整体拒绝，不会留下半写入。
+    save=True 保存后默认比对磁盘 XML 中该 Transition 的条目数；external_reload=True（需 save=True）关闭重开再比对。
+    """
+    if not keyframes:
+        raise ValueError("keyframes 不能为空")
+    return _client.call("add_keyframes", {"name": name, "keyframes": keyframes, "save": save, "verify": verify, "externalReload": external_reload})
+
+
+@mcp.tool()
+def fgui_set_keyframe(
+    name: str,
+    changes: KeyframeChanges,
+    item_index: int | None = None,
+    target_id: str | None = None,
+    track_type: str | None = None,
+    frame: int | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """修改一个已有关键帧；可用 item_index，或 target_id + track_type + frame 定位。
+
+    按 target_id/type/frame 还能定位 get_transition 隐藏的 Tween 合成端点（此时
+    itemIndex=null、syntheticEndpoint=true）。changes 支持 frame / label / tween / ease /
+    repeat / yoyo / value / endValue。tween=true 只能用于已处于 Tween 关系中的关键帧
+    （Tween 起点，或插入已有 Tween 后形成的端点）；普通关键帧之间建立 Tween 请用
+    fgui_upsert_transition。endValue 写入 Tween 端点；tween=false 不能同时给 endValue。
+    save=True 保存后默认比对磁盘 XML；external_reload=True（需 save=True）关闭重开再比对。
+    """
+    if not changes:
+        raise ValueError("changes 至少需要一个字段")
+    if item_index is not None:
+        if item_index < 0:
+            raise ValueError("item_index 不能小于 0")
+        if target_id is not None or track_type is not None or frame is not None:
+            raise ValueError("item_index 不能与 target_id/track_type/frame 同时提供")
+    elif track_type is None or frame is None:
+        raise ValueError("必须提供 item_index，或 target_id（可选）+ track_type + frame")
+    params: dict[str, Any] = {"name": name, "changes": changes, "save": save, "verify": verify, "externalReload": external_reload}
+    if item_index is not None:
+        params["itemIndex"] = item_index
+    else:
+        params["type"] = track_type
+        params["frame"] = frame
+        if target_id is not None:
+            params["targetId"] = target_id
+    return _client.call("set_keyframe", params)
+
+
+@mcp.tool()
+def fgui_duplicate_transition(name: str, new_name: str | None = None, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """复制一个 Transition（含全部关键帧）；可由 fgui_undo 回退。
+
+    6.1.4 的 DuplicateTransition 运行时不接受新名称参数，Bridge 会复制后再经文档模型改名；
+    structureNormalized=true 表示副本结构经编辑器归一化，与源不完全一致。省略 new_name 时沿用编辑器自动命名。
+    save=True 保存后默认比对磁盘 XML 中副本的 <transition> 节点；external_reload=True（需 save=True）关闭重开再比对。
+    """
+    params: dict[str, Any] = {"name": name, "save": save, "verify": verify, "externalReload": external_reload}
+    if new_name:
+        params["newName"] = new_name
+    return _client.call("duplicate_transition", params)
 
 
 @mcp.tool()

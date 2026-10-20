@@ -246,9 +246,9 @@ SwitchPage / EnterTimelineMode / RefreshTransition
 
 | action | 底层 | 对应计划条目 |
 | --- | --- | --- |
-| `duplicate_transition` | `Document.DuplicateTransition` | Phase 5 |
-| `add_keyframes` | `Document.AddKeyFrames` / `CreateKeyFrame` | Phase 5「自动同步关键帧」 |
-| `set_keyframe` | `Document.SetKeyFrame` / `SetKeyFrameValue` | Phase 5 |
+| `duplicate_transition`（0.8.16 已落地） | `Document.DuplicateTransition` | Phase 5 |
+| `add_keyframes`（0.8.16 已落地） | `Document.CreateKeyFrame`（`AddKeyFrames(jsArray)` 6.1.4 不可用） | Phase 5「自动同步关键帧」 |
+| `set_keyframe`（0.8.16 已落地） | `Document.SetKeyFrameProperty`（`SetKeyFrameValue` 6.1.4 不可用） | Phase 5 |
 | `create_group` / `destroy_group` | `Document.CreateGroup` / `DestroyGroup` | Phase 0 缺口「无创建 Group 节点的 Action」 |
 | `duplicate_object` | `Document.CopySelection` + `Paste` | Phase 2 |
 | `adjust_depth` | `Document.AdjustDepth` | — |
@@ -276,6 +276,16 @@ AniSprite.SetPlaySettings / StepNext / StepPrev
 
 `FTransitions.TakeSnapshot/ReadSnapshot` 尤其有价值：**这就是编辑器自己用的
 "关键帧自动跟随属性变化"机制**，Bridge 现在是自己造 before 快照。
+
+> **2026-10-20 状态**：`verify_transition` 的只读版已于 0.8.15 落地，**已在 FairyGUI
+> Editor 6.1.4 真机复验**（模拟宿主 189/189、Python 44/44、tsc 0 error，证据
+> `tests/reports/p8-3-verify-transition-live.json`）。写侧 `add_keyframes` /
+> `set_keyframe` / `duplicate_transition` 已于 0.8.16 接入 Bridge 并**真机 6.1.4 验收**
+> （模拟宿主 212/212、Python 50/50、tsc 0 error，证据
+> `tests/reports/p8-3-keyframes-live.json`）：实际可用入口是 `CreateKeyFrame` +
+> `SetKeyFrameProperty` + `DuplicateTransition`；`AddKeyFrames(jsArray)` 与
+> `SetKeyFrameValue` 在 6.1.4 运行时不可用。`FTransitions.TakeSnapshot` 的自动跟随
+> 仍未接入。
 
 ### P1-B｜预览与截图：离屏渲染路线已被真机证伪（2026-10-19）
 

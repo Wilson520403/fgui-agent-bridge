@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.14`
+- Bridge 版本：`0.8.16`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：53，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析与包级发布设置写入工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：57，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、Transition 只读校验与关键帧写入工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -42,12 +42,16 @@
 | `fgui_list_controllers` / `fgui_set_controller` | 无 / `name`、pages/add_pages/selected_index/selected_page/exported/auto_radio_group_depth/home_page、create?、remove?、save?、verify?、external_reload? | 列出或创建/修改/删除当前组件 Controller |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
+| `fgui_verify_transition` | `name?`、`check_bounds?` | 只读校验 Transition 的目标、关键帧值、嵌套引用与 XY 范围；不保存、不置脏 |
 | `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name`，均支持 `save?`、`verify?`、`external_reload?` | 声明式创建、完整替换或删除 Transition |
-| `fgui_add_transition_item` / `fgui_update_transition_item` / `fgui_remove_transition_item` | `name`、类型化 `item`、`item_index`、`save?`、`verify?`、`external_reload?` | 原子增删改 Transition 关键帧 |
+| `fgui_add_transition_item` / `fgui_update_transition_item` / `fgui_remove_transition_item` | `name`、类型化 `item`、`item_index`、`save?`、`verify?`、`external_reload?` | 原子增删改 Transition 关键帧（条目级 API） |
+| `fgui_add_keyframes` | `name`、`keyframes`（`target_id`/`type`/`frame`/`label?`/`value?` 数组）、`save?`、`verify?`、`external_reload?` | 在时间轴上一次创建多个关键帧；帧号显式指定，批次内与既有轨道均做冲突预检 |
+| `fgui_set_keyframe` | `name`、`changes`、`item_index` 或 `target_id`+`track_type`+`frame`、`save?`、`verify?`、`external_reload?` | 修改单个关键帧：`frame`/`label`/`tween`/`ease`/`repeat`/`yoyo`/`value`/`endValue` |
+| `fgui_duplicate_transition` | `name`、`new_name?`、`save?`、`verify?`、`external_reload?` | 复制整条 Transition；6.1.4 原生复制忽略新名称，由文档模型改名 |
 | `fgui_preview_animation` | `kind`, `operation`, Transition 名称或 MovieClip 目标 | 播放、暂停、停止、跳帧或查询状态，不保存 |
 | `fgui_undo` / `fgui_redo` / `fgui_get_history` | 无 | Agent 事务优先的回退和历史读取 |
 | `fgui_save_document` / `fgui_save_all` / `fgui_discard_document` | 无 | 保存、全部保存或放弃当前文档修改 |
-| `fgui_get_publish_settings` / `fgui_publish` | 包名? / 范围、包、分支、保存策略 | 读取或执行现有发布配置；发布前自动将 1920×1080/2K 级大图设置为 FairyGUI `alone` 纹理集，避免与小图混排 |
+| `fgui_get_publish_settings` / `fgui_publish` | 包名? / 范围、包、分支、保存策略 | 读取或执行现有发布配置；发布前按 `fgui_analyze_atlas_fit` 的真实约束判定 `alone` 纹理集归属，装不下的才标记 |
 
 ## 动画语义
 
@@ -60,6 +64,9 @@
 - `Sound` 轨道只接受工程内声音类型的 `ui://` URL；可先使用 `fgui_import_sound` 导入。嵌套 `Transition` 必须已存在于同一组件。
 - `playTimes` 是 Editor 运行态信息，不序列化到组件 XML；持久播放次数应使用 `autoPlayRepeat` 或轨道自身的播放次数字段。
 - `fgui_preview_animation(kind="transition")` 只操作 Editor 预览。播放状态、暂停和 Timeline 跳帧不写入资源文件。
+- `fgui_verify_transition` 是**只读**校验，不修改文档、不保存、不置脏。检查目标对象是否存在、`FTransition.GetAllowType` 是否支持该轨道、Alpha/Color/Volume 的 0..1 范围、Size 非负、Rotation/Animation 帧值、嵌套 Transition 与 Sound 资源是否存在、Tween 是否有配对端点且时长合法，并可选检查 XY 是否落在画布内。
+- 结果分两级：`errors` 是确定缺陷（如目标已删除、值越界、嵌套引用缺失），`warnings` 是可能合法的情况（如 `position_outside_canvas`——滑入/滑出动画的越界坐标本身就是设计意图；Pivot 超出 0..1 等）。`summary.valid` 只由 error 决定，`summary.clean` 才要求 error 与 warning 均为 0。
+- `checkBounds=False`（CLI `--no-bounds`）跳过 XY 画布范围检查；省略 `name` 时校验当前组件的全部 Transition。校验器不调用 `describeTransition`，损坏的 Tween 不会让整个校验抛错。
 
 ### MovieClip
 
@@ -85,7 +92,7 @@
 
 - 基础：`status`、`ping`、`project`、`packages`、`items`、`open`、`active`、`tree`、`select`；`set`、`insert`、`remove` 支持 `--save` / `--no-verify` / `--external-reload`
 - 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`；均支持 `--save` / `--no-verify`，image/font/sound/movieclip 另支持 `--external-reload`（asset 重载）
-- Transition：`transitions`、`get-transition`、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
+- Transition：`transitions`、`get-transition`、`verify-transition`（可选 `--no-bounds`）、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`、`add-keyframes`、`set-keyframe`（`--item-index` 或 `--target-id`+`--type`+`--frame`）、`duplicate-transition`（`--new-name`）；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
 - 布局与控制器（0.8.8）：`set-list-layout`、`set-group-layout`、`set-relation`、`set-gear-display`、`controllers`、`set-controller`；写命令支持 `--save` / `--no-verify` / `--external-reload`
 - 预览：`preview-transition`、`preview-movieclip`
@@ -482,6 +489,48 @@ padding 每边 2 份的换算。
 
 要跨重启保留这些字段，只能在编辑器设置界面里改；Bridge 写了留不住。
 
+## 0.8.15：Transition 只读校验（P8-3 首个切片）
+
+### 行为
+
+`fgui_verify_transition` 读取当前组件的全部或指定 Transition，逐条检查并返回结构化发现，
+**不修改文档、不保存、不置脏**（`readOnly: true`，无 `save` / `verify` / `external_reload`）。
+这是 P8-3 的只读切片；关键帧写侧 API 在 0.8.16 补齐（见下节）。
+
+检查范围：
+
+- **目标**：空 `targetId` 视为根组件；非空时按 ID 解析，找不到报 `target_missing`；
+  用 `FTransition.GetAllowType` 校验轨道是否被该目标支持，不支持报 `target_type_unsupported`。
+- **关键帧值**：Alpha / Color 分量 / Sound volume 必须在 `0..1`；Size 不得为负；
+  Rotation 必须有限；Animation 帧必须是非负整数；Pivot 超出 `0..1` 记为 warning。
+- **引用**：嵌套 Transition 名称必须存在（`nested_transition_missing`）；
+  Sound URL 必须非空且解析到 `SOUND` 类型资源（`resource_missing`）。
+- **Tween**：公共关键帧背后的合成端点缺失报 `tween_missing_endpoint`，
+  端点配对异常报 `tween_endpoint_mismatch`，持续帧数非法报 `tween_invalid_duration`。
+- **范围**（默认开启）：非百分比 XY 关键帧若落在 `[0, width] × [0, height]` 之外，
+  报 **warning** `position_outside_canvas`——滑入/滑出动画本来就会把对象放到画布外。
+  根组件与 `percent` 坐标跳过；`checkBounds:false` 整体跳过。
+- **空 Transition** 报 warning `empty_transition`；`frameRate` 必须是 `1..255`。
+
+`errors` 表示确定缺陷，`warnings` 表示可能合法、需要人工确认。汇总中
+`summary.valid` 只由 error 决定，`summary.clean` 要求两者都为 0。校验器不调用
+`describeTransition`，因此端点缺失的损坏 Tween 不会让整个校验抛错，而是作为 finding 返回。
+
+### 验证状态
+
+模拟宿主 189 项、Python 44 项、tsc 0 error。**已在 FairyGUI Editor 6.1.4 真机复验**
+（证据 `tests/reports/p8-3-verify-transition-live.json`）：
+
+- 夹具 `transFade` 校验 `valid=true` / `clean=true`，检查 2 个目标、4 个关键帧值、
+  2 个 XY 范围，文档 `modified` 全程为 `false`。
+- `--no-bounds` 生效：`checkBounds=false`，`bounds.checked=0`。
+- 不存在的名称返回结构化 `target_not_found`（stage `editor`，退出码 1）。
+- 临时未保存探针：Alpha `1.5` 报 `value_out_of_range` error，
+  XY `(-100,-100)` 报 `position_outside_canvas` warning，`valid=false` / `clean=false`；
+  随后 `undo` 恢复 `modified=false`、`transitionCount=1`。
+- 全程未保存文档、未写 `package.xml`、未发布；探针的 `modified=true` 由 upsert 造成，
+  不是 `verify_transition`。
+
 ## 0.8.14：图集归属改判（P8-5 判定侧）
 
 ### 行为
@@ -548,3 +597,91 @@ padding 每边 2 份的换算。
 
 **未验证**：publish 路径的归属施加无模拟宿主覆盖（宿主未建模
 `PublishHandler`），仅由真机证据支撑。
+
+## 0.8.16：Transition 关键帧写入（P8-3 写侧）
+
+### 行为
+
+三个 Action 走编辑器时间轴与文档模型，均沿用 `save` → 磁盘 XML → `external_reload`
+验证梯子，并进入 Agent 动画撤销栈（`fgui_undo` / `fgui_redo` 整步回退）：
+
+- `fgui_add_keyframes`（`add_keyframes`）：一次创建多个关键帧。每个条目给
+  `target_id` / `type` / `frame`，可选 `label` 与 `value`。**帧号必须由调用方显式给出**
+  ——`CreateKeyFrame` 按播放头采样目标当前状态，自动推帧会让结果依赖采样时刻。
+  批次内与既有轨道都在第一次写入前做冲突预检，重复帧直接拒绝。
+- `fgui_set_keyframe`（`set_keyframe`）：按 `item_index`（公开关键帧序号）或
+  `target_id`+`track_type`+`frame` 定位，修改 `frame` / `label` / `tween` / `ease` /
+  `repeat` / `yoyo` / `value` / `endValue`。**按 `target_id/type/frame` 还能定位
+  `get_transition` 隐藏的 Tween 合成端点**（返回 `item_index=null`、
+  `syntheticEndpoint=true`）。`tween=true` 只能用于已处于 Tween 关系中的关键帧
+  （Tween 起点，或插入已有 Tween 后形成的端点）；普通关键帧之间建立 Tween 请用
+  `upsert_transition`。`endValue` 写的是 Tween 端点（下一个关键帧）的值。
+  `tween=false` 与 `endValue` 互斥。
+- `fgui_duplicate_transition`（`duplicate_transition`）：复制整条 Transition，
+  可选 `new_name`。返回 `source` / `duplicate` 定义，`structureNormalized` 表示复制后
+  的公开条目与源是否发生结构等价性差异（通常只在端点折叠上有差异）。
+
+### 六条 6.1.4 运行时事实（活体探针，2026-10-20）
+
+1. **`CreateKeyFrame(target,type)` 会采样目标在 `doc.head` 处的当前状态**并直接加入
+   Transition；它之后**不能再调 `AddKeyFrame`**，否则同一轨道会多出重复条目。
+2. **`AddKeyFrames(jsArray)` 不可用**（`invalid arguments ... striped by unity`），
+   所以批量创建必须逐条 `CreateKeyFrame`。
+3. **`SetKeyFrameValue` 不可用**：单参数/双参数/数组形式分别抛
+   `Index was outside the bounds of the array` 与 `Double → String` 转换错误。
+   值写入改用文档模型的类型化属性路径（与 `upsert_transition` 共用 `applyTransitionValue`）。
+4. **`SetKeyFrameProperty(item,"tween",true)` 只对已处于 Tween 关系中的关键帧生效**：
+   它能续接已有 Tween（把轨道重新链接为 `prev → item → next`），但对新轨道上两个
+   普通关键帧不生效——编辑器不会凭空创建端点对象。Action 在写入前拒绝这类请求并
+   提示改用 `upsert_transition`。`frame` / `label` / `easeType` / `easeInOutType` /
+   `repeat` / `yoyo` 均可写。
+   把关键帧插入已有 Tween 后，新帧会成为该 Tween 的**合成端点**并从 `get_transition`
+   的公开列表消失（原端点变成普通关键帧）；用 `target_id/type/frame` 显式定位后可以
+   改 `label` / `value`（写的是 Tween 端点值），但**不能靠 `tween=true` 把它续到下一个
+   关键帧**：6.1.4 上 `SetKeyFrameProperty` 后该端点 `nextItem` 仍为 null，Action 报
+   「没有可用的 Tween 端点」并整步回滚。要延长 Tween，用 `upsert_transition` 重建。
+5. **`DuplicateTransition(name,newName)` 忽略第二个参数**：复制体名称为 `null`，
+   必须再用 `SetTransitionProperty(copy,"name",...)` 改名；新名称与现有 Transition
+   重名时在写入前拒绝。
+6. **`encodedValue` 只对部分轨道安全**（XY 用 `"x,y"`、Color 用 `#RRGGBB`）；
+   Text / Icon / Sound 轨道的编码值不保证可往返，写侧应使用类型化 `value`。
+   读侧仍返回 `encoded` 供路径复用。
+
+### 时间轴与播放头
+
+三个 Action 都通过 `withTransitionTimeline` 执行：若当前未在目标 Transition 的时间轴，
+临时进入；结束后**恢复用户原来的播放头与时间轴模式**（包括原本正在编辑另一条
+Transition 的情况）。`add_keyframes` 会逐帧设置 `doc.head` 再创建，正是为了采样语义。
+
+### 能力边界
+
+- `TRANSITION_KEYFRAME_CAPABILITIES` 与 0.8.1 的条目级写操作、0.8.15 的只读校验
+  分成三个独立集合：旧插件缺能力时能准确提示最低版本 `0.8.16`，不会误报成 0.8.1。
+- 发布期间封锁：三个 Action 都列在 `actionsBlockedDuringPublish`。
+- 验证范围仍只覆盖 `<transition>` 名称与公开条目数（与既有 Transition 写操作一致），
+  不宣称属性级磁盘持久化；属性级确认用 `fgui_get_transition` 回读。
+- 目标对象必须已存在且支持该轨道；`targetId` 为空表示根组件。值范围与引用合法性
+  由 `fgui_verify_transition` 事后校验，写侧只做类型与结构校验。
+
+### 验证状态
+
+模拟宿主 212 项、Python 50 项、tsc 0 error。**已在 FairyGUI Editor 6.1.4 真机验收**
+（证据 `tests/reports/p8-3-keyframes-live.json`，16 项检查全部通过）：
+
+- `add_keyframes` 新建 Rotation@10（`strength:reload`）；`set_keyframe` 把同一帧
+  10→12 并改标签/值，重开后保持。
+- 向已有 Tween 插入 Alpha@10 后，该帧成为隐藏合成端点；按
+  `targetId/type/frame` 定位返回 `itemIndex:null`、`syntheticEndpoint:true`，
+  写 `label`/`value` 后 XML 为
+  `<item tween="true" startValue="0" endValue="0.4" duration="10" label2="split2"/>`，
+  `strength:reload`。
+- `duplicate_transition` 复制 transFade→transCopy，`structureNormalized:false`，
+  重开后两份都在（`strength:reload`）。
+- 对合成端点 `tween=true` 被 6.1.4 拒绝（`editor_rejected`）并回滚；回滚重建
+  Transition 后再次 `add_keyframes` 仍成功（真机复验 stale `editingTransition` 修复，
+  itemCount 4→5），修复前该序列会「返回成功但条目不变」。
+- 负路径全部按预期拒绝且不改文档：同轨同帧冲突、复制重名、普通轨道开 Tween、
+  定位不存在的关键帧。
+- 写后 `verify_transition` 两份均 `valid:true`、`clean:true`（error 0、warning 0）；
+  完整退出并重启编辑器后从磁盘读回全部值与标签。
+- 仓库 `sample/` 夹具 md5 验收前后未变，所有写入只发生在隔离副本。

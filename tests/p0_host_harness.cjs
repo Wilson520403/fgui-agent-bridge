@@ -100,7 +100,26 @@ function makeTransitionItem(targetId,type,frame){
   customEase:{points:{Clear(){},Add(){}},Update(){}}};
  return it;
 }
-function relinkTransitionItems(items){items.forEach((it,i)=>{it.prevItem=i>0?items[i-1]:null;it.nextItem=i<items.length-1?items[i+1]:null;});}
+// 真机 6.1.4：prev/next 是同一轨道（targetId+type）内的相邻关键帧，不是整张表的相邻项。
+// 按全局顺序连线会让其它轨道的关键帧被误判成 tween 端点。
+function relinkTransitionItems(items){
+ const tracks={};
+ items.forEach(it=>{const k=String(it.targetId||'')+'|'+String(it.type);(tracks[k]||(tracks[k]=[])).push(it);});
+ Object.values(tracks).forEach(track=>track.forEach((it,i)=>{it.prevItem=i>0?track[i-1]:null;it.nextItem=i<track.length-1?track[i+1]:null;}));
+}
+// CreateKeyFrame 采样目标对象当前状态（Alpha/Rotation/XY/Size 等），不是写死默认值。
+function sampleTransitionValue(target,type){
+ const v={f1:0,f2:0,b1:true,b2:true,b3:false,i:0,s:'',s2:'',iu:null};
+ switch(type){
+  case 'Alpha': v.f1=Number(target.alpha); break;
+  case 'Rotation': v.f1=Number(target.rotation||0); break;
+  case 'XY': v.f1=Number(target.x||0); v.f2=Number(target.y||0); break;
+  case 'Size': v.f1=Number(target.width||0); v.f2=Number(target.height||0); break;
+  case 'Scale': v.f1=Number(target.scaleX==null?1:target.scaleX); v.f2=Number(target.scaleY==null?1:target.scaleY); break;
+  case 'Visible': v.b1=target.visible!==false; break;
+ }
+ return v;
+}
 function makeTransition(name){
  const items=[];
  const t={name,options:0,autoPlay:false,autoPlayDelay:0,autoPlayRepeat:1,frameRate:60,playTimes:1,playing:false,_items:items,
@@ -108,6 +127,8 @@ function makeTransition(name){
   items:{get Count(){return items.length},get_Item:i=>items[i]},
   CreateItem(targetId,type,frame){const it=makeTransitionItem(targetId,type,frame);items.push(it);items.sort((a,b)=>a.frame-b.frame);relinkTransitionItems(items);return it;},
   DeleteItem(it){const i=items.indexOf(it);if(i>=0)items.splice(i,1);relinkTransitionItems(items);},
+  // DuplicateTransition 的浅拷贝在真机上保留轨道结构；这里逐项复制并保留 tween 标记。
+  CopyFrom(source){for(const it of source._items){const c=this.CreateItem(it.targetId,it.type,it.frame);c.label=it.label;c.tween=it.tween;c.easeType=it.easeType;c.easeInOutType=it.easeInOutType;c.repeat=it.repeat;c.yoyo=it.yoyo;Object.assign(c.value,JSON.parse(JSON.stringify(it.value)));}relinkTransitionItems(items);},
   Validate(){}};
  return t;
 }
@@ -434,6 +455,48 @@ function makeDoc(){
   AddController(c){controllers.push(c);return c;},
   RemoveController(c){const i=controllers.indexOf(c);if(i>=0)controllers.splice(i,1);}};
  const d={content,docURL:'ui://fixture0component',dead:false,
+  timelineMode:false,editingTransition:null,head:0,
+  EnterTimelineMode(name){const t=transitions.find(x=>x.name===name);if(!t)throw Error('未找到 Transition：'+name);this.editingTransition=t;this.timelineMode=true;},
+  ExitTimelineMode(){this.timelineMode=false;this.editingTransition=null;},
+  CreateKeyFrame(target,type){
+   if(!this.timelineMode||!this.editingTransition)throw Error('CreateKeyFrame 需要时间轴模式');
+   const targetId=target===content?'':String((target&&target.id)||'');
+   const item=this.editingTransition.CreateItem(targetId,type,Number(this.head)||0);
+   item.value=sampleTransitionValue(target,type);
+   return item;
+  },
+  SetKeyFrameProperty(item,prop,value){
+   const transition=this.editingTransition;
+   if(!transition||transition._items.indexOf(item)<0)throw Error('SetKeyFrameProperty 需要目标所在的时间轴');
+   if(prop==='frame'){item.frame=Number(value);transition._items.sort((a,b)=>a.frame-b.frame);relinkTransitionItems(transition._items);}
+   else if(prop==='label')item.label=String(value);
+   else if(prop==='tween'){
+    // 真机：没有后继关键帧时 tween 不成立，也不会凭空造出端点。
+    const track=transition._items.filter(x=>x.targetId===item.targetId&&x.type===item.type);
+    const index=track.indexOf(item);
+    item.tween=Boolean(value)&&index>=0&&index<track.length-1;
+    relinkTransitionItems(transition._items);
+   }
+   else if(prop==='easeType'||prop==='easeInOutType'||prop==='repeat'||prop==='yoyo')item[prop]=value;
+   else throw Error('不支持的 keyframe 属性：'+prop);
+  },
+  SetTransitionProperty(trans,prop,value){
+   if(prop!=='name')throw Error('不支持的 transition 属性：'+prop);
+   const name=String(value);
+   if(transitions.some(t=>t!==trans&&t.name===name))throw Error('Transition 已存在：'+name);
+   trans.name=name;
+  },
+  DuplicateTransition(name,newName){
+   const source=transitions.find(t=>t.name===name);
+   if(!source)throw Error('未找到 Transition：'+name);
+   // 6.1.4 实测：第二个参数在运行时被忽略，副本名称落成 null。
+   const copy=makeTransition(newName===undefined?('t'+transitions.length):null);
+   copy.options=source.options;copy.autoPlay=source.autoPlay;copy.autoPlayDelay=source.autoPlayDelay;
+   copy.autoPlayRepeat=source.autoPlayRepeat;copy.frameRate=source.frameRate;copy.playTimes=source.playTimes;
+   copy.CopyFrom(source);
+   transitions.push(copy);
+   return copy;
+  },
   history:{CanUndo:()=>false,CanRedo:()=>false,GetPendingList:()=>({Count:0})},
   SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;},SelectObject(){},
   UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
@@ -619,6 +682,306 @@ test('add_transition_item persists the new item count',()=>{upsert();const r=ctx
 test('remove_transition verifies absence on disk after save',()=>{upsert();const r=ctx.removeTransition({name:'fade',save:true});assert.equal(r.persisted,true);assert.equal(r.verification.xml.present,false);assert.ok(!files['fixture.xml'].includes('name="fade"'));});
 test('remove_transition external reload proves it stays gone',()=>{upsert();const r=ctx.removeTransition({name:'fade',save:true,externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.present,false);assert.equal(closeCount,1);});
 test('mutation failure still restores the transition snapshot',()=>{upsert({save:false});assert.throws(()=>ctx.addTransitionItem({name:'fade',item:{type:'Alpha',targetId:'missing-target',frame:0,value:{value:1}}}),/targetId/);assert.equal(transitions.find(t=>t.name==='fade')._items.length,1);});
+// --- verify_transition (P8-3) ---------------------------------------------
+// 这些用例直接往 transitions 里塞编辑器可能留下的坏数据；经 upsert_transition
+// 创建的轨道都会被写入前校验挡住，测不到校验器本身。
+function rawTransition(name,targetId,type,frame,value){
+ const t=makeTransition(name);
+ transitions.push(t);
+ const item=t.CreateItem(targetId,type,frame);
+ Object.assign(item.value,value||{});
+ return {t,item};
+}
+test('verify_transition reports a valid transition as clean',()=>{
+ upsert();
+ const r=ctx.verifyTransition({});
+ assert.equal(r.ok,true);
+ assert.equal(r.readOnly,true);
+ assert.equal(r.summary.valid,true);
+ assert.equal(r.summary.clean,true);
+ assert.equal(r.summary.transitionCount,1);
+ assert.equal(r.transitions[0].name,'fade');
+ assert.equal(r.transitions[0].itemCount,1);
+ assert.equal(r.transitions[0].checks.targets,1);
+});
+test('verify_transition is read-only: no save, no dirty flag',()=>{
+ upsert();
+ const before=files['fixture.xml'];
+ assert.equal(doc.isModified,false);
+ const r=ctx.verifyTransition({name:'fade'});
+ assert.equal(r.readOnly,true);
+ assert.equal(doc.isModified,false);
+ assert.equal(files['fixture.xml'],before);
+ assert.equal(closeCount,0);
+});
+test('verify_transition flags a deleted target object',()=>{
+ upsert({save:false});
+ objects.splice(objects.findIndex(o=>o.id==='image1'),1);
+ const r=ctx.verifyTransition({name:'fade'});
+ assert.equal(r.summary.valid,false);
+ assert.equal(r.transitions[0].errors[0].code,'target_missing');
+ assert.equal(r.transitions[0].errors[0].targetId,'image1');
+});
+test('verify_transition flags an out-of-range Alpha keyframe',()=>{
+ rawTransition('bad-alpha','image1','Alpha',0,{f1:2});
+ const r=ctx.verifyTransition({name:'bad-alpha'});
+ assert.equal(r.summary.errorCount,1);
+ assert.equal(r.transitions[0].errors[0].code,'value_out_of_range');
+ assert.equal(r.transitions[0].errors[0].phase,'start');
+});
+test('verify_transition flags a negative Size keyframe',()=>{
+ rawTransition('bad-size','image1','Size',0,{f1:-10,f2:20});
+ const r=ctx.verifyTransition({name:'bad-size'});
+ assert.equal(r.transitions[0].errors[0].code,'value_out_of_range');
+ assert.equal(r.transitions[0].errors[0].axis,'x');
+});
+test('verify_transition warns about XY keyframes outside the canvas',()=>{
+ rawTransition('slide','image1','XY',0,{f1:500,f2:20,b1:true,b2:true,b3:false});
+ const r=ctx.verifyTransition({name:'slide'});
+ assert.equal(r.summary.valid,true);
+ assert.equal(r.summary.warningCount,1);
+ assert.equal(r.transitions[0].warnings[0].code,'position_outside_canvas');
+ assert.equal(r.transitions[0].checks.bounds.checked,1);
+});
+test('verify_transition can skip the canvas bounds check',()=>{
+ rawTransition('slide','image1','XY',0,{f1:500,f2:20,b1:true,b2:true,b3:false});
+ const r=ctx.verifyTransition({name:'slide',checkBounds:false});
+ assert.equal(r.summary.warningCount,0);
+ assert.equal(r.transitions[0].checks.bounds.checked,0);
+});
+test('verify_transition flags a missing nested transition',()=>{
+ rawTransition('nested','image1','Transition',0,{s:'missing-nested',i:1,f1:0});
+ const r=ctx.verifyTransition({name:'nested'});
+ assert.equal(r.summary.valid,false);
+ assert.equal(r.transitions[0].errors[0].code,'nested_transition_missing');
+});
+test('verify_transition flags a missing Sound resource',()=>{
+ rawTransition('sound','image1','Sound',0,{s:'ui://fixture0missing',i:100});
+ const r=ctx.verifyTransition({name:'sound'});
+ assert.equal(r.summary.valid,false);
+ assert.equal(r.transitions[0].errors[0].code,'resource_missing');
+});
+test('verify_transition reports a tween without its endpoint instead of throwing',()=>{
+ const {item}=rawTransition('broken-tween','image1','Alpha',0,{f1:0});
+ item.tween=true;
+ const r=ctx.verifyTransition({name:'broken-tween'});
+ assert.equal(r.summary.valid,false);
+ assert.equal(r.transitions[0].errors[0].code,'tween_missing_endpoint');
+});
+test('verify_transition rejects a transition name that does not exist',()=>{
+ rejects(()=>ctx.verifyTransition({name:'no-such-transition'}),'target_not_found','editor');
+});
+test('verify_transition checks target/track compatibility',()=>{
+ upsert();
+ const original=ctx.CS.FairyEditor.FTransition.GetAllowType;
+ ctx.CS.FairyEditor.FTransition.GetAllowType=(target,type)=>type!=='Alpha';
+ try{
+  const r=ctx.verifyTransition({name:'fade'});
+  assert.equal(r.summary.valid,false);
+  assert.equal(r.transitions[0].errors[0].code,'target_type_unsupported');
+ }finally{ctx.CS.FairyEditor.FTransition.GetAllowType=original;}
+});
+test('verify_transition warns about an empty transition',()=>{
+ transitions.push(makeTransition('empty'));
+ const r=ctx.verifyTransition({name:'empty'});
+ assert.equal(r.summary.valid,true);
+ assert.equal(r.summary.warningCount,1);
+ assert.equal(r.transitions[0].warnings[0].code,'empty_transition');
+});
+// --- add_keyframes / set_keyframe / duplicate_transition (P8-3 写侧) ------
+function fadeTransition(items){ctx.upsertTransition({transition:{name:'fade',frameRate:30,items},save:true});}
+const addFrames=(keyframes,extra={})=>ctx.addKeyFrames({name:'fade',keyframes,save:true,...extra});
+const twoFrames=[{type:'Alpha',targetId:'image1',frame:10},{type:'Alpha',targetId:'image1',frame:30}];
+test('add_keyframes creates timeline keyframes and persists the item count',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ const r=addFrames(twoFrames);
+ assert.equal(r.ok,true);
+ assert.equal(r.operation,'keyframes_added');
+ assert.equal(r.result.length,2);
+ assert.equal(r.result[0].frame,10);
+ assert.equal(r.persisted,true);
+ assert.equal(r.strength,'disk');
+ assert.equal(r.verification.xml.itemCount,3);
+ assert.equal(r.transitions[0].items.length,3);
+});
+test('add_keyframes samples the target object state when no value is given',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ objects.find(o=>o.id==='image1').alpha=0.4;
+ const r=addFrames([{type:'Alpha',targetId:'image1',frame:10}]);
+ assert.equal(r.result[0].value,0.4);
+});
+test('add_keyframes rejects an occupied track frame before mutating',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ assert.throws(()=>addFrames([{type:'Alpha',targetId:'image1',frame:0}]),/关键帧已存在/);
+ assert.equal(transitions[0]._items.length,1);
+ assert.equal(doc.isModified,false); // 预检失败不得留下半写入
+});
+test('add_keyframes rejects a batch that collides with itself before mutating',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ assert.throws(()=>addFrames([{type:'Alpha',targetId:'image1',frame:10},{type:'Alpha',targetId:'image1',frame:10}]),/同一批次关键帧重复/);
+ assert.equal(transitions[0]._items.length,1);
+});
+test('add_keyframes validates every target before creating the first keyframe',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ assert.throws(()=>addFrames([{type:'Alpha',targetId:'image1',frame:10},{type:'Alpha',targetId:'ghost',frame:20}]),/targetId 不存在/);
+ assert.equal(transitions[0]._items.length,1);
+});
+test('add_keyframes restores the playhead and timeline mode afterwards',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ const r=addFrames(twoFrames);
+ assert.equal(r.ok,true);
+ assert.equal(doc.timelineMode,false);
+ assert.equal(doc.head,0);
+ assert.equal(doc.editingTransition,null);
+});
+test('add_keyframes keeps an already open timeline and its playhead',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ doc.EnterTimelineMode('fade');
+ doc.head=7;
+ const r=addFrames(twoFrames);
+ assert.equal(r.ok,true);
+ assert.equal(doc.timelineMode,true);
+ assert.equal(String(doc.editingTransition.name),'fade');
+ assert.equal(doc.head,7);
+});
+test('add_keyframes external reload round-trips the new keyframes',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ const r=addFrames(twoFrames,{externalReload:true});
+ assert.equal(r.strength,'reload');
+ assert.equal(r.verification.reload.values.itemCount,3);
+ assert.equal(closeCount,1);
+});
+test('add_keyframes refuses reload without save before mutating',()=>{
+ rejects(()=>ctx.addKeyFrames({name:'fade',keyframes:twoFrames,externalReload:true}),'invalid_argument','input');
+ assert.equal(transitions.length,0);
+ assert.equal(closeCount,0);
+});
+const locateMid={itemIndex:1};
+const setFrame=(changes,extra={})=>ctx.setKeyframe({name:'fade',...locateMid,changes,save:true,...extra});
+test('set_keyframe persists frame, label, ease, repeat and yoyo',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ addFrames(twoFrames);
+ const r=setFrame({frame:12,label:'mid',ease:'Cubic.InOut',repeat:2,yoyo:true});
+ assert.equal(r.ok,true);
+ assert.equal(r.operation,'keyframe_updated');
+ assert.equal(r.result.item.frame,12);
+ assert.equal(r.result.item.label,'mid');
+ assert.equal(r.result.item.tween,null);
+ assert.equal(r.persisted,true);
+ assert.equal(r.verification.xml.itemCount,3);
+ const live=transitions[0]._items.find(it=>it.frame===12);
+ assert.equal(live.easeType,'Cubic');
+ assert.equal(live.easeInOutType,'InOut');
+ assert.equal(live.repeat,2);
+ assert.equal(live.yoyo,true);
+});
+const tweenFade=()=>fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0},tween:{duration:30,ease:'Quad.Out',start:{value:0},end:{value:1}}}]);
+const setMidByTriple=(changes,extra={})=>ctx.setKeyframe({name:'fade',targetId:'image1',type:'Alpha',frame:10,changes,save:true,...extra});
+test('set_keyframe enables tween on a keyframe inserted into an existing tween',()=>{
+ tweenFade();
+ addFrames([{type:'Alpha',targetId:'image1',frame:10}]);
+ const r=setMidByTriple({tween:true,endValue:{value:0.25}});
+ assert.equal(r.ok,true);
+ assert.equal(r.result.item.tween.duration,20);
+ assert.equal(r.result.item.tween.end,0.25);
+ assert.equal(r.result.itemIndex,1);
+ assert.equal(r.result.syntheticEndpoint,false);
+ assert.equal(r.verification.xml.itemCount,2);
+ assert.equal(r.persisted,true);
+});
+test('set_keyframe external reload proves the tween survives reopen',()=>{
+ tweenFade();
+ addFrames([{type:'Alpha',targetId:'image1',frame:10}]);
+ const r=setMidByTriple({tween:true,endValue:{value:0.25}},{externalReload:true});
+ assert.equal(r.strength,'reload');
+ assert.equal(r.verification.reload.values.itemCount,2);
+});
+test('set_keyframe locates a hidden tween endpoint by target/type/frame',()=>{
+ tweenFade();
+ addFrames([{type:'Alpha',targetId:'image1',frame:10}]);
+ const r=setMidByTriple({label:'endpoint'});
+ assert.equal(r.result.syntheticEndpoint,true);
+ assert.equal(r.result.itemIndex,null);
+ assert.equal(r.result.item.label,'endpoint');
+ assert.equal(r.persisted,true);
+});
+test('set_keyframe refuses tween on a plain track keyframe before mutating',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ addFrames(twoFrames);
+ assert.throws(()=>setFrame({tween:true}),/不在 Tween 关系中/);
+ assert.equal(transitions[0]._items[1].tween,false);
+ assert.equal(transitions[0]._items.length,3);
+ assert.equal(doc.isModified,false);
+});
+test('keyframe writes re-enter a rebuilt transition instead of a stale editing reference',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ addFrames(twoFrames);
+ doc.EnterTimelineMode('fade');
+ const stale=doc.editingTransition;
+ assert.throws(()=>ctx.setKeyframe({name:'fade',itemIndex:0,changes:{frame:12,ease:'Bogus'},save:true}),/不支持的缓动类型/);
+ assert.notEqual(doc.editingTransition,transitions[0]);
+ assert.equal(doc.editingTransition,stale);
+ const r=addFrames([{type:'Alpha',targetId:'image1',frame:20}]);
+ assert.equal(r.ok,true);
+ assert.equal(r.verification.expected.itemCount,4);
+ assert.equal(transitions[0]._items.length,4);
+});
+test('set_keyframe rejects a frame collision before writing',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ addFrames(twoFrames);
+ assert.throws(()=>setFrame({frame:30}),/目标帧已存在/);
+ assert.equal(transitions[0]._items.filter(it=>it.frame===30).length,1);
+});
+test('set_keyframe rejects unknown change fields before mutating',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ assert.throws(()=>setFrame({evil:1}),/未知字段/);
+ assert.equal(transitions[0]._items[0].frame,0);
+});
+test('set_keyframe locates by targetId, type and frame',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ addFrames(twoFrames);
+ const r=ctx.setKeyframe({name:'fade',targetId:'image1',type:'Alpha',frame:10,changes:{label:'ten'},save:true});
+ assert.equal(r.ok,true);
+ assert.equal(r.result.item.frame,10);
+ assert.equal(r.result.item.label,'ten');
+});
+test('set_keyframe rejects locate input without itemIndex or track triple',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ assert.throws(()=>ctx.setKeyframe({name:'fade',changes:{label:'x'},save:true}),/不支持的 Transition 轨道类型/);
+});
+const duplicate=(extra={})=>ctx.duplicateTransition({name:'fade',newName:'fadeCopy',save:true,...extra});
+test('duplicate_transition renames the copy and persists it',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ const r=duplicate();
+ assert.equal(r.ok,true);
+ assert.equal(r.operation,'duplicated');
+ assert.equal(r.result.duplicate.name,'fadeCopy');
+ assert.equal(r.result.requestedName,'fadeCopy');
+ assert.equal(r.result.structureNormalized,false);
+ assert.equal(r.persisted,true);
+ assert.equal(r.strength,'disk');
+ assert.equal(r.verification.xml.itemCount,1);
+ assert.deepEqual(transitions.map(t=>t.name),['fade','fadeCopy']);
+});
+test('duplicate_transition refuses an existing name before copying',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ assert.throws(()=>duplicate({newName:'fade'}),/Transition 已存在/);
+ assert.equal(transitions.length,1);
+});
+test('duplicate_transition external reload proves the copy survives reopen',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ addFrames(twoFrames);
+ const r=duplicate({externalReload:true});
+ assert.equal(r.strength,'reload');
+ assert.equal(r.verification.reload.values.itemCount,3);
+});
+test('duplicate_transition without a requested name keeps the editor auto name',()=>{
+ fadeTransition([{type:'Alpha',targetId:'image1',frame:0,value:{value:0}}]);
+ const r=ctx.duplicateTransition({name:'fade',save:true});
+ assert.equal(r.result.duplicate.name,'t1');
+ assert.equal(r.result.requestedName,null);
+ assert.equal(r.persisted,true);
+});
 const importImage=(extra={})=>ctx.importImage({packageName:'Fixture',sourcePath:'/src/new.png',save:true,...extra});
 test('import_image saves package manifest and verifies item on disk',async()=>{files['/src/new.png']='PNGDATA';const r=await importImage();assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.present,true);assert.equal(r.verification.xml.name,'new');assert.equal(r.verification.xml.fileExists,true);});
 test('import_image external reload reloads the asset from disk',async()=>{files['/src/new.png']='PNGDATA';const r=await importImage({externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.verification.reload.strategy,'assetReload');assert.equal(r.verification.reload.performed,true);});

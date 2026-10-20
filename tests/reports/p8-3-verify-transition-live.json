@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-3-verify-transition-live",
+  "capturedAt": "2026-10-20T10:23:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.15",
+  "protocolVersion": "1.0",
+  "project": "sample (Package1 / BridgeFixture)",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app (bundle com.fairygui.FairyGUIEditor)",
+    "runFromAppTranslocation": true,
+    "launchProcedure": "osascript quit → open -a ~/Downloads/FairyGUI-Editor.app sample/sample.fairy → 等待心跳 → 置前台",
+    "pluginSnapshot": "通过 scripts/sync_to_project.py --project sample --apply 同步到 0.8.15 后重开工程",
+    "heartbeat": "首轮 status 即 online=true、pluginVersion=0.8.15、versionMatch=true、heartbeatAge≈0.46s"
+  },
+  "summary": {
+    "action": "verify_transition（只读）",
+    "result": "已真机验证并通过",
+    "mockHost": {
+      "passed": 189,
+      "total": 189
+    },
+    "python": {
+      "passed": 44,
+      "total": 44
+    },
+    "typescript": {
+      "errors": 0
+    },
+    "liveChecks": 5,
+    "liveFailures": 0
+  },
+  "checks": [
+    {
+      "id": "capability",
+      "command": "fgui-agent status",
+      "expected": "插件上报 verify_transition",
+      "actual": {
+        "online": true,
+        "pluginVersion": "0.8.15",
+        "versionMatch": true,
+        "hasVerifyTransition": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "valid-transition",
+      "command": "fgui-agent verify-transition transFade",
+      "requestId": "1792462904688-48b100d2",
+      "expected": "valid=true clean=true，文档不被置脏",
+      "actual": {
+        "readOnly": true,
+        "checkBounds": true,
+        "documentModified": false,
+        "transitionCount": 1,
+        "itemCount": 2,
+        "checks": {
+          "targets": 2,
+          "values": 4,
+          "resources": 0,
+          "nestedTransitions": 0,
+          "bounds": {
+            "checked": 2,
+            "skipped": 0
+          }
+        },
+        "errorCount": 0,
+        "warningCount": 0,
+        "summary": {
+          "valid": true,
+          "clean": true
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "no-bounds",
+      "command": "fgui-agent verify-transition transFade --no-bounds",
+      "requestId": "1792462905920-14cfbdc9",
+      "expected": "checkBounds=false 且跳过范围检查",
+      "actual": {
+        "checkBounds": false,
+        "documentModified": false,
+        "bounds": {
+          "checked": 0,
+          "skipped": 0
+        },
+        "summary": {
+          "valid": true,
+          "clean": true
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "missing-transition",
+      "command": "fgui-agent verify-transition does-not-exist",
+      "requestId": "1792462906190-b815bca1",
+      "expected": "结构化 target_not_found，退出码非零",
+      "actual": {
+        "ok": false,
+        "errorCode": "target_not_found",
+        "stage": "editor",
+        "transition": "does-not-exist",
+        "exitCode": 1
+      },
+      "status": "pass"
+    },
+    {
+      "id": "invalid-values-and-bounds",
+      "command": "upsert-transition <临时 bridgeVerifyProbe>（不保存）→ verify-transition bridgeVerifyProbe → undo",
+      "expected": "Alpha=1.5 报 error，XY=(-100,-100) 报 warning，撤销后恢复干净文档",
+      "actual": {
+        "upsert": {
+          "persisted": false,
+          "strength": "none",
+          "documentModified": true
+        },
+        "verify": {
+          "readOnly": true,
+          "itemCount": 2,
+          "checks": {
+            "targets": 2,
+            "values": 2,
+            "bounds": {
+              "checked": 1,
+              "skipped": 0
+            }
+          },
+          "errorCount": 1,
+          "warningCount": 1,
+          "valid": false,
+          "clean": false,
+          "errors": [
+            {
+              "code": "value_out_of_range",
+              "severity": "error",
+              "type": "Alpha",
+              "targetId": "n0_fix01",
+              "frame": 0,
+              "phase": "start",
+              "value": 1.5
+            }
+          ],
+          "warnings": [
+            {
+              "code": "position_outside_canvas",
+              "severity": "warning",
+              "type": "XY",
+              "targetId": "n1_fix01",
+              "frame": 0,
+              "phase": "start",
+              "canvas": {
+                "width": 800,
+                "height": 600
+              }
+            }
+          ]
+        },
+        "undo": {
+          "changed": true,
+          "mode": "agent-animation",
+          "documentModified": false,
+          "transitionCount": 1
+        }
+      },
+      "status": "pass"
+    }
+  ],
+  "restoredState": {
+    "command": "fgui-agent verify-transition（省略 name 校验全部）",
+    "requestId": "1792462943716-1c3136dc",
+    "document": {
+      "modified": false,
+      "savedVersion": 1,
+      "transitionCount": 1,
+      "transitions": [
+        "transFade"
+      ]
+    },
+    "summary": {
+      "transitionCount": 1,
+      "itemCount": 2,
+      "errorCount": 0,
+      "warningCount": 0,
+      "valid": true,
+      "clean": true
+    }
+  },
+  "boundary": "本报告只覆盖 0.8.15 的只读 verify_transition。错误路径使用一个不保存的临时 Transition 触发，随后经 Agent undo 撤销；验证全程未保存文档、未写 package.xml、未发布。temp probe 的存在期间 activeDocument.modified=true 是 upsert 造成的，不是 verify_transition。真机基线为 FairyGUI Editor 6.1.4，升级编辑器后需重跑。"
+}

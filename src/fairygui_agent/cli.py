@@ -198,6 +198,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("transitions", help="列出当前组件的全部 Transition")
     get_transition_parser = subparsers.add_parser("get-transition", help="读取当前组件的一个 Transition")
     get_transition_parser.add_argument("name")
+    verify_transition_parser = subparsers.add_parser("verify-transition", help="只读校验 Transition 的目标、关键帧与位置范围")
+    verify_transition_parser.add_argument("name", nargs="?")
+    verify_transition_parser.add_argument("--no-bounds", dest="check_bounds", action="store_false", default=True, help="跳过 XY 关键帧的画布范围检查")
     upsert_transition_parser = subparsers.add_parser("upsert-transition", help="声明式创建或替换 Transition")
     upsert_transition_parser.add_argument("definition", help="Transition JSON 对象")
     _add_write_verify_arguments(upsert_transition_parser, external_reload=True)
@@ -217,6 +220,22 @@ def build_parser() -> argparse.ArgumentParser:
     remove_transition_item_parser.add_argument("name")
     remove_transition_item_parser.add_argument("item_index", type=int)
     _add_write_verify_arguments(remove_transition_item_parser, external_reload=True)
+    add_keyframes_parser = subparsers.add_parser("add-keyframes", help="在 Transition 时间轴上创建关键帧（0.8.16）")
+    add_keyframes_parser.add_argument("name")
+    add_keyframes_parser.add_argument("keyframes", help="关键帧 JSON 数组，每项含 targetId/type/frame/label/value")
+    _add_write_verify_arguments(add_keyframes_parser, external_reload=True)
+    set_keyframe_parser = subparsers.add_parser("set-keyframe", help="修改一个已有公开关键帧（0.8.16）")
+    set_keyframe_parser.add_argument("name")
+    set_keyframe_parser.add_argument("changes", help="变更 JSON 对象")
+    set_keyframe_parser.add_argument("--item-index", type=int, help="按公开关键帧索引定位")
+    set_keyframe_parser.add_argument("--target-id", help="按目标对象 ID 定位（省略表示根组件）")
+    set_keyframe_parser.add_argument("--type", dest="track_type", help="按轨道类型定位")
+    set_keyframe_parser.add_argument("--frame", type=int, help="按帧号定位")
+    _add_write_verify_arguments(set_keyframe_parser, external_reload=True)
+    duplicate_transition_parser = subparsers.add_parser("duplicate-transition", help="复制 Transition 及其全部关键帧（0.8.16）")
+    duplicate_transition_parser.add_argument("name")
+    duplicate_transition_parser.add_argument("--new-name", help="副本名称；省略时沿用编辑器自动命名")
+    _add_write_verify_arguments(duplicate_transition_parser, external_reload=True)
 
     preview_transition_parser = subparsers.add_parser("preview-transition", help="预览当前组件的 Transition，不保存")
     preview_transition_parser.add_argument("operation", choices=("play", "pause", "stop", "seek", "next", "previous", "status"))
@@ -586,6 +605,11 @@ def main() -> int:
         elif args.command == "get-transition":
             action = "get_transition"
             params = {"name": args.name}
+        elif args.command == "verify-transition":
+            action = "verify_transition"
+            params = {"checkBounds": args.check_bounds}
+            if args.name:
+                params["name"] = args.name
         elif args.command == "upsert-transition":
             action = "upsert_transition"
             definition = json.loads(args.definition)
@@ -610,6 +634,34 @@ def main() -> int:
         elif args.command == "remove-transition-item":
             action = "remove_transition_item"
             params = {"name": args.name, "itemIndex": args.item_index, **_write_verify_params(args)}
+        elif args.command == "add-keyframes":
+            action = "add_keyframes"
+            keyframes = json.loads(args.keyframes)
+            if not isinstance(keyframes, list) or not keyframes:
+                raise ValueError("keyframes 必须是非空 JSON 数组")
+            params = {"name": args.name, "keyframes": keyframes, **_write_verify_params(args)}
+        elif args.command == "set-keyframe":
+            action = "set_keyframe"
+            changes = json.loads(args.changes)
+            if not isinstance(changes, dict) or not changes:
+                raise ValueError("changes 必须是非空 JSON 对象")
+            params = {"name": args.name, "changes": changes, **_write_verify_params(args)}
+            if args.item_index is not None:
+                if args.target_id is not None or args.track_type is not None or args.frame is not None:
+                    raise ValueError("--item-index 不能与 --target-id/--type/--frame 同时提供")
+                params["itemIndex"] = args.item_index
+            else:
+                if args.track_type is None or args.frame is None:
+                    raise ValueError("必须提供 --item-index，或 --target-id（可选）+ --type + --frame")
+                params["type"] = args.track_type
+                params["frame"] = args.frame
+                if args.target_id is not None:
+                    params["targetId"] = args.target_id
+        elif args.command == "duplicate-transition":
+            action = "duplicate_transition"
+            params = {"name": args.name, **_write_verify_params(args)}
+            if args.new_name:
+                params["newName"] = args.new_name
         elif args.command == "preview-transition":
             action = "preview_animation"
             params = {"kind": "transition", "operation": args.operation, "target": {"name": args.name}}

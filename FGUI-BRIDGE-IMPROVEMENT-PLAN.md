@@ -19,10 +19,10 @@
 | Phase 2 | 部分完成 | Image/Loader 替换已加入资源类型检查、稳定 ID 回定位、保存后 XML 回读；Button 状态、Controller page、字体及完整资源校验尚不能验收。 |
 | Phase 3 | 部分完成 | 文本读写 API、字段校验、颜色规范化、字号/颜色/行距 XML 回读已实现；完整样式 schema、批量原子回滚未完成。 |
 | Phase 4 | 部分完成 | **0.8.8 已实现** `set_list_layout`/`set_group_layout`/`set_relation`/`set_gear_display`/`set_controller`/`list_controllers` 六个 Action 并接入统一验证梯子（editor → save → 磁盘 XML → external reload）；模拟宿主 112 项全过，**已在 FairyGUI Editor 6.1.4 真机验证**（`tests/reports/phase4-live-0.8.8.json`）；List 的 numItems/item placeholder 写入、Controller page 批量资源替换尚未实现。 |
-| Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API 已实现；自动同步关键帧、专用验证未完成；**0.8.12 已落地按真实 `PackSettings` 的图集约束分析（`analyze_atlas_fit`）并真机复验**，截图诉求由 P8-4 结论承担（Unity 侧渲染）。 |
+| Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API、**只读校验（0.8.15 `verify_transition`，已真机复验）**与**关键帧写侧（0.8.16 `add_keyframes`/`set_keyframe`/`duplicate_transition`，已真机复验）**已实现；关键帧自动跟随属性变化仍未完成；**0.8.12 已落地按真实 `PackSettings` 的图集约束分析（`analyze_atlas_fit`）并真机复验**，截图诉求由 P8-4 结论承担（Unity 侧渲染）。 |
 | Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
 | Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。**2026-10-19：Bridge 侧离屏截图路线已证伪并放弃**（见 P8-4），截图诉求改由发布后在 Unity 侧渲染承担；`preview_run` 交互预览仍待实现。 |
-| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。**0.8.12 落地 P8-5 只读切片** `analyze_atlas_fit`：按真实 `PackSettings`（`padding`／下限放大／`maxWidth/maxHeight`／`square`／`rotation`）与全局 `AtlasSetting` 逐图判定 fit 与 binding，约束缺失时报 `unknown` 拒绝下结论，主产出是与旧大图硬编码规则的差异数 `disagreements`；纯只读，`publish` 仍按旧常量标记并以 `legacyRule.stillAppliedOnPublish` 显式声明。模拟宿主 150 项与 Python 35 项全过，**真机 6.1.4 已复验全局约束路径**（证据 `tests/reports/p8-5-atlas-fit-live.json`）；包级 `PackSettings` 路径真机无实例，仅模拟宿主覆盖。P8-5 写侧 `set_publish_settings`、`PublishHandler` 分步导出，以及 P8-3 ~ P8-7 规划完成未实现。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
+| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。**0.8.12 落地 P8-5 只读切片** `analyze_atlas_fit`：按真实 `PackSettings`（`padding`／下限放大／`maxWidth/maxHeight`／`square`／`rotation`）与全局 `AtlasSetting` 逐图判定 fit 与 binding，约束缺失时报 `unknown` 拒绝下结论，主产出是与旧大图硬编码规则的差异数 `disagreements`；纯只读，`publish` 仍按旧常量标记并以 `legacyRule.stillAppliedOnPublish` 显式声明。模拟宿主 150 项与 Python 35 项全过，**真机 6.1.4 已复验全局约束路径**（证据 `tests/reports/p8-5-atlas-fit-live.json`）；包级 `PackSettings` 路径真机无实例，仅模拟宿主覆盖。P8-5 写侧 `set_publish_settings` 已于 0.8.13/0.8.14 落地并真机复验；`PublishHandler` 分步导出与 P8-4、P8-6、P8-7 未实现。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。**0.8.15 落地 P8-3 只读切片** `verify_transition`（目标/轨道/值/引用/Tween/XY 范围，模拟宿主 189 项、Python 44 项、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-3-verify-transition-live.json`）；**0.8.16 落地 P8-3 写侧** `add_keyframes` / `set_keyframe` / `duplicate_transition`（模拟宿主 212/212、Python 50/50、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-3-keyframes-live.json`）；P8-4、P8-6、P8-7 未实现。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
 
 > **重排说明（2026-10-19）：** 本轮据此新增 Phase 8，并在 §7.1 给出按"能否清偿既有技术债"
 > 重排的当前实际待办；Phase 6（Lanhu 工作流）顺延。证据、边界与 API 依据见
@@ -519,7 +519,7 @@ list_controllers   # 附加的只读 Action
 - [x] 修改关键帧前自动保存 before 快照（内存事务快照及 Agent undo/redo，不等同于磁盘备份）；
 - [x] 对 XY、Size、Scale、Alpha、Color、Text、Icon 等轨道提供类型化 API；
 - [ ] 支持根据节点属性变化自动更新相关关键帧；
-- [ ] 增加 `verify_transition`：检查 target 是否存在、关键帧是否超出对象范围；
+- [x] 增加 `verify_transition`：检查 target 是否存在、关键帧是否超出对象范围（**0.8.15 已落地只读版并真机复验**；目标缺失/轨道不支持/值越界/嵌套与资源引用/Tween 端点均覆盖，范围类告警不阻断）；
 - [ ] ~~预览后导出指定帧截图~~（2026-10-19：Bridge 侧离屏渲染不可行，见 P8-4；改由 Unity 侧承担）
 - [ ] MovieClip 支持帧尺寸、透明边界、FPS 和循环参数报告（部分完成：已有创建/更新/读取/预览能力，未覆盖完整报告）；
 - [ ] 对大图和大帧集给出 atlas/alone 建议。（部分完成：已有发布前大图 alone 处理，未见完整大帧集分析建议。）
@@ -627,7 +627,7 @@ list_controllers   # 附加的只读 Action
 
 ## Phase 8：编辑器原生能力复用（2026-10-19 逆向分析新增）
 
-**状态：P8-0、P8-1 已落地（0.8.9，模拟宿主 118/118、Python 31/31、tsc 0 error，**并已在 FairyGUI Editor 6.1.4 真机复验**）；P8-2 只读部分已落地（0.8.10，模拟宿主 129/129、Python 33/33、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-2-live.json`）；**P8-2 写侧已落地（0.8.11，模拟宿主 137/137、Python 35/35、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-2-write-live.json`）**；P8-3 ~ P8-7 规划完成，实现未开始。** 本阶段由 FairyGUI Editor 逆向分析得出，证据、
+**状态：P8-0、P8-1 已落地（0.8.9，模拟宿主 118/118、Python 31/31、tsc 0 error，**并已在 FairyGUI Editor 6.1.4 真机复验**）；P8-2 只读部分已落地（0.8.10，模拟宿主 129/129、Python 33/33、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-2-live.json`）；**P8-2 写侧已落地（0.8.11，模拟宿主 137/137、Python 35/35、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-2-write-live.json`）**；P8-5 已落地（0.8.12 只读分析 / 0.8.13 写侧 / 0.8.14 判定侧，均真机复验）；**P8-3 只读切片已落地（0.8.15 `verify_transition`，模拟宿主 189/189、Python 44/44、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-3-verify-transition-live.json`）；P8-3 写侧已落地（0.8.16 `add_keyframes`/`set_keyframe`/`duplicate_transition`，模拟宿主 212/212、Python 50/50、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机验收，证据 `tests/reports/p8-3-keyframes-live.json`）**；P8-4、P8-6、P8-7 未实现。** 本阶段由 FairyGUI Editor 逆向分析得出，证据、
 能力差集与 API 依据见 `docs/fgui-editor-api-capability-map.md`。
 
 ### 背景
@@ -788,8 +788,8 @@ FTransitions.TakeSnapshot / ReadSnapshot / ClearSnapshot   // 编辑器自用的
 AniData { fps, speed, repeatDelay, swing, frameList, spriteList }
 ```
 
-- [ ] 新增 `add_keyframes`、`set_keyframe`、`duplicate_transition`；
-- [ ] `verify_transition`：检查 target 存在性、关键帧是否超出对象范围（Phase 5 长期未完成项）；
+- [x] 新增 `add_keyframes`、`set_keyframe`、`duplicate_transition`。**0.8.16 已落地并真机 6.1.4 验收**（模拟宿主 212/212、Python 50/50、tsc 0 error，证据 `tests/reports/p8-3-keyframes-live.json`）：三者在编辑器时间轴内执行并恢复原播放头/时间轴模式；新增/改帧/复制均经关闭重开与完整编辑器重启保持。真机确认 `CreateKeyFrame` 按播放头采样、`AddKeyFrames(jsArray)` 与 `SetKeyFrameValue` 不可用、`DuplicateTransition` 忽略新名称；插入已有 Tween 的关键帧会成为隐藏合成端点，可按 `target_id/type/frame` 定位并写 `label`/`value`，但对端点再开 `tween=true` 在 6.1.4 上会因 `nextItem` 为 null 被拒绝并回滚，延长 Tween 需用 `upsert_transition`。真机还暴露并修复了回滚重建 Transition 后 `doc.editingTransition` 仍指向旧对象的问题（后续写入会静默丢失）；
+- [x] `verify_transition`：检查 target 存在性、关键帧是否超出对象范围（Phase 5 长期未完成项）。**0.8.15 已落地只读切片并真机复验**：目标缺失/轨道不支持/值越界/嵌套 Transition 与 Sound 引用/Tween 端点配对/XY 画布范围（warning）全部覆盖，模拟宿主 189 项、Python 44 项、tsc 0 error（证据 `tests/reports/p8-3-verify-transition-live.json`）。0.8.16 写后复验两份 Transition 均 `valid/clean`；
 - [ ] MovieClip 补齐帧尺寸、透明边界、FPS、循环参数报告；
 - [ ] 评估用 `FTransitions.TakeSnapshot` 替代 Bridge 自造的 before 快照。
 
@@ -938,7 +938,7 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 | 1 | P8-0 + P8-1 | 先把写入路径纠正到文档模型层并获得编译期保护，否则新 Action 会复制现有坑 |
 | 2 | P8-2 | 直接清偿 §1.1 的技术债，是计划里最明确的一条 |
 | 3 | ~~P8-4~~ + P8-5 | **2026-10-19：P8-4 放弃**（见下节），本批只剩 P8-5 解锁 Phase 5 的硬骨头；`preview_run` 并入后续批次。**0.8.12：P8-5 只读切片完成**（`analyze_atlas_fit`），写侧 `set_publish_settings` 与 `PublishHandler` 分步导出仍在本批 |
-| 4 | P8-3 + P8-6 | 动画深入与新能力域 |
+| 4 | P8-3 + P8-6 | 动画深入与新能力域。**2026-10-20：P8-3 只读切片（0.8.15 `verify_transition`）与写侧关键帧 API（0.8.16）均已落地并真机验收** |
 | 5 | P8-7 批量 | 审计 / i18n / 原生撤销栈 / 可见性 |
 
 ---
@@ -1073,7 +1073,7 @@ Bridge 改进应在独立仓库完成：
 | 3 | ~~引用图（只读 + 全工程替换语义）~~ **0.8.10 + 0.8.11 已完成** | P8-2 | 直接清偿 §1.1 这条挂了两轮的技术债；写侧 `replace_references` 默认只预览、立即落盘不可撤销、`fileName` 半状态显式上报 |
 | 4 | ~~离屏渲染截图~~ **2026-10-19 已放弃**（`CaptureCamera` 对工程组件只出全透明空图，根因是编辑器不把组件交给 FairyGUI 运行时 stage 渲染）。`preview_run` 从本项剥离，仍待实现 | P8-4 | 解锁 Phase 7 的前提不成立，继续投入没有回报；证据见 `tests/reports/p8-4-render-feasibility.json` |
 | 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧均已真机复验，0.8.14 判定侧已落地** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：`folderAtlas` 清空语义已真机证伪（置空清除走不通，需换带外改 XML 或删除重导入）+ `PublishHandler` 分步导出 |
-| 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备 |
+| 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备。**0.8.15 只读 `verify_transition` 与 0.8.16 写侧 `add_keyframes`/`set_keyframe`/`duplicate_transition` 均已落地并真机验收（模拟宿主 212/212，证据 `tests/reports/p8-3-keyframes-live.json`）** |
 | 7 | 分支能力 | P8-6 | 新增域，多端/多版本项目价值高 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影 |
 | 9 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 8 项提供可靠写能力后再做，否则返工 |
