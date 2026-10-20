@@ -23,11 +23,15 @@
 | Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
 | Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。**2026-10-19：Bridge 侧离屏截图路线已证伪并放弃**（见 P8-4），截图诉求改由发布后在 Unity 侧渲染承担；`preview_run` 交互预览仍待实现。 |
 | Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。**0.8.12 落地 P8-5 只读切片** `analyze_atlas_fit`：按真实 `PackSettings`（`padding`／下限放大／`maxWidth/maxHeight`／`square`／`rotation`）与全局 `AtlasSetting` 逐图判定 fit 与 binding，约束缺失时报 `unknown` 拒绝下结论，主产出是与旧大图硬编码规则的差异数 `disagreements`；纯只读，`publish` 仍按旧常量标记并以 `legacyRule.stillAppliedOnPublish` 显式声明。模拟宿主 150 项与 Python 35 项全过，**真机 6.1.4 已复验全局约束路径**（证据 `tests/reports/p8-5-atlas-fit-live.json`）；包级 `PackSettings` 路径真机无实例，仅模拟宿主覆盖。P8-5 写侧 `set_publish_settings` 已于 0.8.13/0.8.14 落地并真机复验；P8-5 剩余的分步导出已于 2026-10-20 经活体探针证伪（公开 `Export*` 依赖 `Run()` 的私有流水线，不暴露；证据 `tests/reports/p8-5-publish-steps-probe.json`），P8-4、P8-7 未实现（当时）。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。**0.8.15 落地 P8-3 只读切片** `verify_transition`（目标/轨道/值/引用/Tween/XY 范围，模拟宿主 189 项、Python 44 项、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-3-verify-transition-live.json`）；**0.8.16 落地 P8-3 写侧** `add_keyframes` / `set_keyframe` / `duplicate_transition`（模拟宿主 212/212、Python 50/50、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-3-keyframes-live.json`）；**0.8.17 落地 P8-5 收尾** `clear_atlas_markers`：带外删除磁盘上错误的 `atlas="alone"`，默认预览、执行前保存并备份、回读校验、`Dispose` 重开包，模拟宿主 224/224、Python 50/50、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p8-5-atlas-marker-clear-live.json`），P8-5 已全部完成；**0.8.18 落地 P8-6 分支能力** `list_branches` / `create_branch` / `switch_branch` 与分支寻址读写（模拟宿主 230/230、Python 54/54、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-6-branches-live.json`）；**0.8.19 落地 P8-7 资源审计切片** `find_unused` / `find_duplicate`：原生审计入口经活体探针确认是 Pro 功能（非 Pro 会弹授权框并挂起），改由引用图与文件内容哈希实现（模拟宿主 239/239、Python 58/58、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-7-audit-live.json`）；P8-4 已放弃，P8-7 其余项（i18n / 原生撤销栈 / 控制台可见性 / 全文搜索）未实现。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
+| Phase 9 | 未实现 | 2026-10-20 蓝湖「设置拳谱」实拼（640×360 / 62 对象 / 像素一致 91.16%）暴露的 7 个原语缺口：`insert_text` 缺失（文本只能靠 Button 组件绕）、`set_text_style` 缺 `bold/stroke/shadow`、实例子对象不可写回、`replace_object_resource` 不支持组件实例、包资源无 `delete/rename`、坐标取整静默、大图导入无缩放与图集前置提示。详见下文 Phase 9。 |
 
 > **重排说明（2026-10-19）：** 本轮据此新增 Phase 8，并在 §7.1 给出按"能否清偿既有技术债"
 > 重排的当前实际待办；Phase 6（Lanhu 工作流）顺延。证据、边界与 API 依据见
 > `docs/fgui-editor-api-capability-map.md`，能力差集可用
 > `python3 scripts/extract_editor_api.py --list-untouched plugin/main.ts` 复现。
+>
+> **补充（2026-10-20）：** 新增 Phase 9，来自一次真实设计稿实拼。它不改 §7.1 的排序逻辑，
+> 但把 `insert_text` 顶到了 Phase 9 第一位——原因见 P9-0。
 
 ### 核查证据与验收边界
 
@@ -985,6 +989,203 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 
 ---
 
+## Phase 9：设计稿还原实测暴露的原语缺口（2026-10-20 新增）
+
+**状态：全部未实现。** 本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
+（2560×1440 4×，逻辑 640×360）→ `Package1/SettingRoutine`，62 个对象（46 图片 + 16 文本），
+像素一致 91.16%。过程中每一处"做不下去"都记下了当时的报错原文与绕路方案。
+
+> 与 Phase 6 的分工：Phase 6 定义"设计稿怎么映射进来"（manifest / 匹配 / 报告），
+> 本节定义"映射进来时缺哪些原语"。Phase 6 依赖本节，否则映射工作流只能跑在绕路上。
+
+### 背景：这次实拼卡在哪
+
+| 环节 | 计划做法 | 实际做法 | 卡点 |
+| --- | --- | --- | --- |
+| 造文本 | `insert_text` | 建 Button 组件 + 实例写 `title` | P9-0 |
+| 文本字重/投影 | `set_text_style` 带 `bold`/`shadow` | 放弃，接受 9% 色差 | P9-1 |
+| 组件实例定制 | 改实例子对象 | 每个文本建一个组件类型 | P9-2 |
+| 换文本样式组件 | `replace_object_resource` | 删除重插 + 手算 `insertIndex` | P9-3 |
+| 清理探测残留 | 删除包资源 | 关编辑器离线改 `package.xml` | P9-4 |
+| 大图入库 | 直接导入 4× 切图 | 2 张 2560 宽图触发图集告警 | P9-6 |
+
+### P9-0 `insert_text`：文本对象原语（最高优先）
+
+**现象。** Bridge 没有任何创建文本对象的入口。`insert_object` 只接受包内资源 URL
+（`Document.InsertObject(url, pos, index)`），而 FGUI 的文本是 displayList 里的裸节点，
+不是包资源，因此无法插入。
+
+试探结果：
+
+- `create-component --extension label` 产出
+  `<component extention="label"><label/></component>`——**没有 `title` 子对象**，
+  实例上 `set text` 直接 `editor_rejected / 验证失败：editor`；
+- 改用 `create-button --extension label` 能拿到带 `title` 的组件，但会被塞进 3 个按钮
+  状态底板（`n0`/`n1`/`n2`）和一个 `button` 控制器，必须逐个隐藏；
+- 最终 16 个文本全部是 **Button 实例**，每个都挂着 3 个隐藏状态底板和一个 `button` 控制器。
+
+**编辑器入口（已确认存在）。**
+
+```csharp
+FairyGUI.Utils.XML.Create(tag)                       // 造 <text> 节点
+XML.SetAttribute(name, value)
+FComponent.CreateChild(xml): FObject                 // 挂进文档
+Document.StartInlineEdit(FTextField)                 // 编辑器认这个类型
+FObject.NewObject(FPackage, type, missingInfo, flags) // 另一条构造路径
+```
+
+**要考虑的边界。**
+
+- [ ] `CreateChild` 绕过 `Document`，是否像 P8-0 踩过的那样导致 save 静默失败，必须先探针；
+- [ ] 新建节点是否自动分配 `id`/`name`，还是需要 `GetNextId()` 手动补；
+- [ ] 是否进 Agent 撤销栈（`clearAgentHistory` 语义要与现有写 Action 对齐）；
+- [ ] 验证：创建后 `get_tree` 能读到、`save` 后磁盘 XML 有 `<text>`、重开文档仍在。
+
+**验收标准。** `insert_text --x --y --text --font-size --color` 在空白组件里建出一个文本，
+保存重开后位置/文案/样式不变，且不依赖任何组件资源。
+
+### P9-1 `set_text_style` 补 `bold` / `stroke` / `shadow`
+
+**现象。** 当前白名单只有 `font/fontSize/color/align/vAlign/autoSize/letterSpacing/lineGap`。
+设计稿里 `98500` 用了 Alibaba PuHuiTi 115 Black + 青色(#00FFBA)/黄色(#F4F652) 双色投影，
+`02` 用了黄描边——这三样全部丢失，是 91.16% 里那 9% 的主要来源。
+
+**编辑器入口。** `FairyGUI.TextFormat` 已暴露全部字段：
+
+```csharp
+size  font  color  bold  italic  underline
+lineSpacing  letterSpacing
+outline  outlineColor      // 描边
+shadowOffset  shadowColor  // 投影
+gradientColor  faceDilate  outlineSoftness  underlaySoftness
+```
+
+XML 侧属性名**必须先实测确认**再写进 `VERIFIED_TEXT_KEYS`：按 FGUI 惯例应是
+`stroke` / `strokeColor` / `shadow` / `shadowColor`，但本仓库现有组件里没有任何带描边或
+投影的文本样本（`grep` 全空），默认值与省略条件都无从推断。这一条与 Phase 0 踩过的
+"XML 缺省属性导致假失败"是同一个坑，不能靠猜。
+
+**要考虑的边界。**
+
+- [ ] `bold` 在 `VERIFIED_TEXT_KEYS` 里的默认值与序列化条件（默认 false 是否省略属性）；
+- [ ] `shadow` 是 Vector2 序列化成 `"x,y"` 字符串，验证要按字符串比而不是按对象比；
+- [ ] 设计稿常见"双色投影"FGUI 只支持单层 shadow，需在 Skill/文档里明确"只能还原一层，另一层建议拆成图片或描边"；
+- [ ] 顺带确认：**单行文本 `height` 不可写**（实测 10px→16、14px→22、24px→34、30px→42，
+      设任意 height 恒 `editor_rejected`）。要么在 `autoSize=none` 时放开 `singleLine`，
+      要么由 Bridge 自动按"行高 = 推导高度"回写并显式说明不可控。当前实拼是手工
+      算 `y` 偏移补偿的，属于该由工具兜掉的工作。
+
+**验收标准。** 对一个文本设置 `bold`+`stroke`+`shadow` 后，磁盘 XML 出现对应属性且
+external reload 后仍在；`get_text_style` 能原样读回。
+
+### P9-2 实例子对象写回（override 语义）
+
+**现象。** 在组件实例上改内部子对象，内存生效、保存丢失：
+
+```text
+set target=path:diff_lbl_easy/title property=text value=轻松   → ok
+save_document                                                  → ok
+磁盘 XML                                                       → <component .../>（无任何子元素）
+```
+
+而 `Button.title` 能落盘，写成 `<Button title="轻松"/>`。说明**编辑器认 override，
+Bridge 的写路径没走进去**。
+
+**需要查清的问题。**
+
+- [ ] 编辑器原生交互（双击实例进容器改文字）落盘时写的是什么节点？按 FGUI 惯例应是
+      实例上的 `<text name="title" text="..."/>` 覆盖块；
+- [ ] 这条路径在 `editor.d.ts` 里对应哪个方法（`Document` 的公开方法里没有显式 override 入口，
+      怀疑在 `FObject.SetProperty` 的 owner-instance 分支里）；
+- [ ] 如果编辑器本身就是"只有 Button/Label 扩展才有 title 覆盖"，那 P9-2 应该降级为
+      "在文档里写清这条限制"，并把 P9-0 的优先级再提一档。
+
+**为什么值得做。** 现在 16 个文本 = 7 个组件类型（T10R/T14C/T14D/T14M/T15C/T24C/T30L），
+因为字号/颜色/对齐必须预先固化成组件。一旦能写 override，一个文本组件就能覆盖全部场景。
+
+### P9-3 `replace_object_resource` 支持组件实例
+
+**现象。**
+
+```text
+replace_object_resource target=diff_lbl_easy → ui://…T14D
+→ 可信资源替换目前仅支持 Image/Loader；Button 状态请使用专用 API
+```
+
+实拼中要把"白色文本组件"换成"深灰文本组件"（设计稿的 `轻松`/`普通` 是深灰字，蓝湖 JSON
+却导出白色），只能 `remove_object` + `insert_object --index` 手算位置重插。
+
+**编辑器入口。** `Document.ReplaceSelection(url)` 是编辑器原生替换选中对象的入口，
+理论上不限对象类型；`FComponent.NotifyChildReplaced(source, target)` 用于通知子对象被换。
+
+- [ ] 先验证 `ReplaceSelection` 对组件实例的行为（是否保留 xy/size/name/relations）；
+- [ ] 若不保留，退化为"换资源 + 回写布局属性"，并由 Bridge 统一做，
+      而不是让 Agent 自己删了重插。
+
+### P9-4 包资源 `delete` / `rename` / `move` / `duplicate`
+
+**现象。** Bridge 只能删 MovieClip（`remove_movieclip`），组件和图片没有任何删除入口。
+本次探测产生的 8 个废弃组件（`LblTest`/`BtnTest`/`Txt14C`/`Title10`/`Title15`/`Num24`/
+`Score30`/`Muted14`）只能关掉编辑器、手改 `package.xml` + 删 XML 文件收尾——这类"只能带外
+操作"的动作，正是 Bridge 应该消灭的。
+
+**编辑器入口（全都有）。**
+
+```csharp
+FPackage.DeleteItem(pi): number
+FPackage.RenameItem(pi, newName)
+FPackage.MoveItem(pi, path)
+FPackage.DuplicateItem(pi, newName)
+FPackage.CreateFolder(cname, path, autoRename)
+```
+
+**要考虑的边界。**
+
+- [ ] `DeleteItem` 的返回值语义（疑似受影响引用数），必须先把"被引用中的资源"挡在门外，
+      或至少要求 `--force` 并回读引用图（P8-2 的 `query_references` 正好复用）；
+- [ ] 删除是否连带删磁盘文件、是否可撤销（大概率不可撤销，需 `undoable:false` 显式声明）；
+- [ ] `RenameItem` 后所有引用是否需要同步（`replace_references` 只改引用不改名，两者不重叠）。
+
+### P9-5 坐标/尺寸的整数语义
+
+**现象。** FGUI 只存整数，设计稿是 4× 下采样出来的浮点（如 `50.5, 115.8`、`172.5×44.25`）。
+当前 `set_property` 接受浮点并在落盘时被静默取整，`get_tree` 读回来才看见差异——
+Agent 无从判断"是我传错了还是编辑器截断了"。
+
+**建议。** 写入时对 `x/y/width/height` 做显式取整并在响应里回报 `rounded: {from, to}`，
+让调用方知道发生了精度损失，而不是靠事后比对发现。
+
+### P9-6 大图导入与图集建议内置
+
+**现象。** 直接导入 4× 切图后 `analyze_atlas_fit` 报：
+
+```text
+bg        2560×1436  exceeds  already-alone
+bg_tint   2560×1440  exceeds  already-alone
+```
+
+即"要么降采样、要么单独图集"。当前要靠 Agent 自己先算一遍再决定导入分辨率，
+而 `import_image` 没有任何缩放/校验钩子。
+
+- [ ] `import_image` 增加可选 `max_size`（超过则等比缩放到该尺寸再入库，并在响应里回报缩放比）；
+- [ ] 导入时（或 `--check-atlas`）直接给出"该图会进不了默认图集"的前置提示，
+      复用 `analyze_atlas_fit` 的判定，而不是等 Agent 事后发现。
+
+### 执行顺序与关系
+
+| 批次 | 内容 | 理由 |
+| --- | --- | --- |
+| 1 | P9-0 + P9-1 | 文本是设计还原里最高频、当前最畸形的部分；两条合起来能把"文本必须做成组件"这个畸形结构拆掉 |
+| 2 | P9-2 + P9-3 | 组件实例真正可参数化，才谈得上组件化复用 |
+| 3 | P9-4 | 收尾卫生；没有它，任何试错都会在工程里留垃圾 |
+| 4 | P9-5 + P9-6 | 精度与图集属于体验优化，不阻塞主流程 |
+
+> 本节全部条目都应在 `sample` 隔离工程上先跑通再合入，并且**每条都要有真机证据**
+> （`tests/reports/p9-*.json`）。P9-0 尤其要先做探针：`CreateChild` 是否触发
+> P8-0 那类"绕过文档模型导致 save 静默失败"，决定了它是 1 天还是 1 周的工作量。
+
+---
+
 ## 5. 工程实现规范
 
 ### 5.1 修改范围
@@ -1118,10 +1319,16 @@ Bridge 改进应在独立仓库完成：
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备。**0.8.15 只读 `verify_transition` 与 0.8.16 写侧 `add_keyframes`/`set_keyframe`/`duplicate_transition` 均已落地并真机验收（模拟宿主 212/212，证据 `tests/reports/p8-3-keyframes-live.json`）** |
 | 7 | ~~分支能力~~ **0.8.18 已完成** | P8-6 | 新增域，多端/多版本项目价值高。`list_branches` / `create_branch` / `switch_branch` 与分支寻址读写均已落地并真机验收（模拟宿主 230/230，证据 `tests/reports/p8-6-branches-live.json`）；剩余仅 `RenameBranch` / `RemoveBranch` / 分支发布 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影。**0.8.19 已完成审计切片 `find_unused` / `find_duplicate`（免 Pro 授权，真机证据 `tests/reports/p8-7-audit-live.json`）**；i18n / 原生撤销栈 / 控制台可见性 / 全文搜索待做 |
-| 9 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 8 项提供可靠写能力后再做，否则返工 |
+| 9 | `insert_text` + 文本样式补全（`bold`/`stroke`/`shadow`） | P9-0 / P9-1 | 2026-10-20 实拼的**第一阻塞**：没有文本原语，16 个文本全被做成 Button 组件；没有描边/投影，还原度卡在 91%。编辑器原生入口齐备（`FComponent.CreateChild`、`TextFormat`），成本主要在探针验证 |
+| 10 | 实例子对象写回 / 组件实例换资源 / 包资源增删 | P9-2 / P9-3 / P9-4 | 决定"组件能不能被参数化"。不做，每个文案变体都要单独建一个组件类型；不做增删，任何试错都会在工程里留垃圾 |
+| 11 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 10 项提供可靠写能力后再做，否则返工 |
 
-**Phase 6 顺延到第 9 位**是本轮重排的主要变化：Lanhu 工作流的价值取决于 Bridge 写能力
+**Phase 6 顺延到第 11 位**是本轮重排的主要变化：Lanhu 工作流的价值取决于 Bridge 写能力
 与验证能力的可靠性，在 P8-0 落地前先做映射工作流，等于把不稳定的能力放大到批量场景。
+
+**2026-10-20 补充**：一次真实设计稿实拼把 P9-0/P9-1 排到了 Phase 6 之前——因为它是
+"能不能拼"的前置条件，而 Phase 6 解决的是"拼得快不快"。P9-0 的探针结论（`CreateChild`
+是否触发 P8-0 那类静默 save 失败）会直接决定这条排位是否需要调整。
 
 ---
 
