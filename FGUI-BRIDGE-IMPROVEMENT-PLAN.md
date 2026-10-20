@@ -991,7 +991,7 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 
 ## Phase 9：设计稿还原实测暴露的原语缺口（2026-10-20 新增）
 
-**状态：P9-0 与 P9-1 已于 0.8.20 落地并真机验收**（证据 `tests/reports/p9-0-p9-1-probe-live.json`、`p9-0-insert-text-live.json`、`p9-1-text-style-live.json`）；P9-2 ~ P9-6 仍未实现。本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
+**状态：P9-0 与 P9-1 已于 0.8.20 落地并真机验收**（证据 `tests/reports/p9-0-p9-1-probe-live.json`、`p9-0-insert-text-live.json`、`p9-1-text-style-live.json`）；**P9-2 已于 0.8.21 落地并真机验收，但按实测结论降级为『扩展级 override』**（证据 `tests/reports/p9-2-override-probe-live.json`、`p9-2-override-live.json`）；**P9-3 已于 0.8.21 落地并真机验收**（证据 `tests/reports/p9-3-replace-instance-live.json`）；P9-4 ~ P9-6 仍未实现。本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
 （2560×1440 4×，逻辑 640×360）→ `Package1/SettingRoutine`，62 个对象（46 图片 + 16 文本），
 像素一致 91.16%。过程中每一处"做不下去"都记下了当时的报错原文与绕路方案。
 
@@ -1004,8 +1004,8 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 | --- | --- | --- | --- |
 | 造文本 | `insert_text` | 建 Button 组件 + 实例写 `title` | P9-0 |
 | 文本字重/投影 | `set_text_style` 带 `bold`/`shadow` | 放弃，接受 9% 色差 | P9-1 |
-| 组件实例定制 | 改实例子对象 | 每个文本建一个组件类型 | P9-2 |
-| 换文本样式组件 | `replace_object_resource` | 删除重插 + 手算 `insertIndex` | P9-3 |
+| 组件实例定制 | 改实例子对象 | 每个文本建一个组件类型 | P9-2（真机结论：编辑器只支持扩展级 override，逐子对象覆盖不存在） |
+| 换文本样式组件 | `replace_object_resource` | 删除重插 + 手算 `insertIndex` | P9-3（0.8.21 已落地：编辑器原生 ReplaceSelection 保住布局） |
 | 清理探测残留 | 删除包资源 | 关编辑器离线改 `package.xml` | P9-4 |
 | 大图入库 | 直接导入 4× 切图 | 2 张 2560 宽图触发图集告警 | P9-6 |
 
@@ -1106,6 +1106,9 @@ external reload 后仍在；`get_text_style` 能原样读回。
 
 ### P9-2 实例子对象写回（override 语义）
 
+**状态：已按真机结论落地并降级（0.8.21）**。证据 `tests/reports/p9-2-override-probe-live.json`（一次性活体探针）、
+`p9-2-override-live.json`（真机验收）。**本节原先的三条问号已全部有答案，且其中一条推翻了原文的默认假设。**
+
 **现象。** 在组件实例上改内部子对象，内存生效、保存丢失：
 
 ```text
@@ -1114,22 +1117,54 @@ save_document                                                  → ok
 磁盘 XML                                                       → <component .../>（无任何子元素）
 ```
 
-而 `Button.title` 能落盘，写成 `<Button title="轻松"/>`。说明**编辑器认 override，
-Bridge 的写路径没走进去**。
+**根因（真机探针实测）。** override 登记在**实例节点**上，而实例内部的对象属于源组件、
+自己**没有 docElement**。Bridge 的通用写路径按 docElement 优先、找不到就回退对象模型，
+于是写进了内存里的实例副本，磁盘上什么都没写。对照组复现无误：内存值从 `""` 变成
+`"P92_CONTROL"`，序列化出来的实例节点逐字不变。
 
-**需要查清的问题。**
+**三个问号的答案。**
 
-- [ ] 编辑器原生交互（双击实例进容器改文字）落盘时写的是什么节点？按 FGUI 惯例应是
-      实例上的 `<text name="title" text="..."/>` 覆盖块；
-- [ ] 这条路径在 `editor.d.ts` 里对应哪个方法（`Document` 的公开方法里没有显式 override 入口，
-      怀疑在 `FObject.SetProperty` 的 owner-instance 分支里）；
-- [ ] 如果编辑器本身就是"只有 Button/Label 扩展才有 title 覆盖"，那 P9-2 应该降级为
-      "在文档里写清这条限制"，并把 P9-0 的优先级再提一档。
+- [x] **编辑器原生交互落盘时写的是什么节点？** 是**实例节点里的扩展子节点**：
+      `<component id="..." name="..." src="..."><Button title="轻松"/></component>`。
+      不是原文推测的 `<text name="title" text="..."/>` 覆盖块。
+- [x] **对应哪个方法？** `FairyEditor.View.DocElement.SetExtensionProperty(propName, value)`
+      （编辑器包内 `editor.d.ts` L20120）。同族的 `DocElement.SetChildProperty(target, propertyId, value)`
+      对普通子对象是**静默 no-op**（target 按名字/按 id、propId 0/1/2/3/8 全试无效），
+      对扩展类型名 `"Button"` 也无效——**编辑器侧不存在「逐子对象覆盖」这条路**。
+- [x] **要不要降级？** 要，而且降级后**更有用**：P9-2 交付的是**扩展级 override**
+      （`set_instance_override`），而不是原设想里的逐子对象覆盖。
 
-**为什么值得做。** 现在 16 个文本 = 7 个组件类型（T10R/T14C/T14D/T14M/T15C/T24C/T30L），
-因为字号/颜色/对齐必须预先固化成组件。一旦能写 override，一个文本组件就能覆盖全部场景。
+**降级后的能力边界（真机 6.1.4 + FairyGUI-unity 源码双向核对）。**
+
+| 能做 | 不能做 |
+| --- | --- |
+| 逐实例改扩展的 `title`（`text` 是别名）、`icon`、`selectedTitle`、`selectedIcon`、`titleColor`、`titleFontSize` | 逐实例改实例内部的**普通子对象**（普通 `<text>`、`<image>` 等）——编辑器不产出、运行时也不消费 |
+| 落盘形态与三个生产工程里 174 个真实 override 实例逐字一致 | 覆盖普通文本子对象的描边/投影/对齐等样式 |
+
+运行时契约：`GButton.Setup_AfterAdd` 读实例覆盖段的
+title / selectedTitle / icon / selectedIcon / titleColor / titleFontSize，
+`GLabel.Setup_AfterAdd` 读 title / icon / titleColor / titleFontSize——与编辑器写出的 XML 属性
+一一对应，所以这一层是「编辑器与运行时都对得上」的。
+
+**另外三条只有真机才暴露的事实。**
+
+1. **对象模型直写扩展成员不置脏**，`save` 会静默跳过（P8-0 老坑在扩展属性上复现）——
+   必须走文档模型层。
+2. **`titleColor` / `titleFontSize` 是「开关 + 参数」结构**：不先置 `titleColorSet` /
+   `titleFontSizeSet` 就不落盘（与 P9-1 的描边/投影同构），写序固定为先开关后参数。
+3. **颜色只保留 RGB 六位**，编辑器丢掉 alpha；**源组件没有扩展时 `SetExtensionProperty`
+   是静默 no-op**（不抛异常也不落盘）——Bridge 必须自己拦，否则就是假成功。
+
+**为什么值得做（原文的前提要改写）。** 原文说「一旦能写 override，一个文本组件就能覆盖全部场景」——
+覆盖得掉的是**文案**（title）与**字号/颜色**（titleFontSize/titleColor），覆盖不掉普通文本子对象的
+其它样式；而且 16 个文本本来也不该做成 7 个组件类型，**P9-0 的 `insert_text` 已经把它解了**。
+override 的真正价值在别处：**同一个按钮组件在多处使用、各自显示不同标题**——这是设计稿还原里
+极高频的需求，而它此前只能靠「删了重插 + 手算 insertIndex」绕过去。
 
 ### P9-3 `replace_object_resource` 支持组件实例
+
+**状态：已按真机结论落地（0.8.21）**。证据 `tests/reports/p9-3-replace-instance-live.json`。
+**结论与原文的假设不同：编辑器原生就够用，不需要退化。**
 
 **现象。**
 
@@ -1144,9 +1179,22 @@ replace_object_resource target=diff_lbl_easy → ui://…T14D
 **编辑器入口。** `Document.ReplaceSelection(url)` 是编辑器原生替换选中对象的入口，
 理论上不限对象类型；`FComponent.NotifyChildReplaced(source, target)` 用于通知子对象被换。
 
-- [ ] 先验证 `ReplaceSelection` 对组件实例的行为（是否保留 xy/size/name/relations）；
-- [ ] 若不保留，退化为"换资源 + 回写布局属性"，并由 Bridge 统一做，
-      而不是让 Agent 自己删了重插。
+- [x] **`ReplaceSelection` 对组件实例的行为（真机 6.1.4 实测）**：`id`、`name`、`xy`、
+      relation 绑定、**显式** `size` 全部保留并落盘成
+      `<component id="..." name="..." src="<新 itemId>" fileName="..." xy="..."/>`；
+      唯一会变的是**没有显式 size 时**尺寸跟随新源组件——这是 FGUI 本来的语义。
+- [x] **不需要退化成"换资源 + 回写布局属性"**：原生命令一次就把布局保住，
+      Bridge 只需把类型校验从"仅 Image/Loader"放宽到"组件实例 + 组件资源"，
+      并在响应里回报 `layout`（前后 x/y/尺寸/relation 数）与 `notes`，
+      免得"尺寸悄悄变了"没人看见。
+- [x] 顺带修掉一个会挡路的默认值：CLI/MCP 的 `expected_type` 原本默认写死 `image`，
+      插件侧又要求它与目标推导类型一致 → 组件替换永远被拒。
+      改为**省略则按目标推导、传入则作断言**。
+- [x] 与 P9-2 叠加可用：实例上的扩展 override 在替换后存续；换成没有扩展的源组件时，
+      编辑器会自己丢弃不适用的 override（原生行为，Bridge 不干预）。
+
+**实现边界。** 根组件是组件定义本身不是实例，不能替换；组件实例只能换组件资源、
+Image/Loader 只能换 image 资源，类型不匹配在写入前拒绝。
 
 ### P9-4 包资源 `delete` / `rename` / `move` / `duplicate`
 

@@ -490,6 +490,80 @@ Bridge 自己维护了 `agentUndoStack` / `agentRedoStack`。编辑器有原生�
 - 6.1.4 上 C# 反射被裁剪：`obj.GetType().GetFields()/GetProperties()/GetMethods()` 全部返回 0 成员，
   `Object.keys(C# 对象)` 返回空数组。**枚举成员只能靠「已知候选名逐个探测」**。
 
+## 4.6 组件实例的 override：0.8.21 的实测结论（2026-10-20）
+
+证据：`tests/reports/p9-2-override-probe-live.json`（一次性探针）、`p9-2-override-live.json`（真机验收）。
+
+**为什么「改实例内部子对象」保存会丢**
+
+override 登记在**实例节点**上，而实例内部的对象属于源组件、自己没有 `docElement`。
+Bridge 的通用写路径按 `docElement` 优先、找不到就回退对象模型，于是写进了内存里的实例副本，
+磁盘上什么都没写。对照组实测：内存值从 `""` 变成 `"P92_CONTROL"`，序列化出来的实例节点逐字不变。
+
+**可用与不可用的入口**
+
+| 语义 | 编辑器入口 | 实测结论 |
+| --- | --- | --- |
+| 扩展级覆盖 | `DocElement.SetExtensionProperty(propName, value)` | **唯一可用入口**。落盘形态是实例节点里的扩展子节点 `<component ...><Button title="..."/></component>` |
+| 逐子对象覆盖 | `DocElement.SetChildProperty(target, propertyId, value)` | 对普通子对象**静默 no-op**（target 按名字/按 id、propId 0/1/2/3/8 全试无效）；对扩展类型名 `"Button"` 也无效 |
+| 扩展成员直写 | `obj.extention.title = v` | 内存生效但**不置脏**，`save` 静默跳过（P8-0 老坑在扩展属性上复现） |
+| 无扩展的源组件 | `SetExtensionProperty` | 静默 no-op：不抛异常也不落盘——Bridge 必须自己拦，否则是假成功 |
+
+**扩展成员名即 XML 属性名**
+
+| 语义 | 成员 | 落盘属性 | 备注 |
+| --- | --- | --- | --- |
+| 标题 | `title` / `text` | `title` | `text` 是别名，落盘仍是 `title` |
+| 图标 | `icon` | `icon` | |
+| 选中态标题/图标 | `selectedTitle` / `selectedIcon` | 同名 | Button 扩展专有 |
+| 标题颜色 | `titleColor`（+ `titleColorSet`） | `titleColor` | **开关 + 参数**：不置 `titleColorSet` 就不落盘 |
+| 标题字号 | `titleFontSize`（+ `titleFontSizeSet`） | `titleFontSize` | 同上 |
+| 颜色格式 | — | 六位 RGB | 编辑器**丢掉 alpha**，带 alpha 的输入要提前拒绝 |
+
+`fontSize` / `color` 这类短名在 `FairyEditor.FButton` 上不存在（抛 `not exists in FairyEditor.FButton`），
+只能用 `titleFontSize` / `titleColor`。
+
+**运行时契约（编辑器与运行时对齐，不是编辑器自嗨）**
+
+FairyGUI-unity 的 `GButton.Setup_AfterAdd` 读实例扩展覆盖段：
+`title` / `selectedTitle` / `icon` / `selectedIcon` / `titleColor` / `titleFontSize`；
+`GLabel.Setup_AfterAdd` 读 `title` / `icon` / `titleColor` / `titleFontSize`。
+属性名与编辑器写出的 XML 一一对应。运行时另有一条通用子对象覆盖通道
+（`GComponent.Setup_AfterAdd` 的 target 路径 + propertyId 0=text / 1=icon），
+但**编辑器不产出这种节点**，所以 Bridge 用不上。
+
+**规模佐证**：本机三个生产工程（many_tradition / CleanCommando / youdoo_boxing_jab）共 174 个
+真实 override 实例，tag 只有 `Button`(33) / `ProgressBar`(8) / `Slider`(9)
+（其余 124 个 `relation`、40 个 `gearDisplay` 是实例自身的节点属性），
+**没有任何一个普通子对象（text/image）的 override 样本**——真人在编辑器里也只产出扩展级覆盖。
+
+## 4.7 组件实例换源组件：0.8.21 的实测结论（2026-10-20）
+
+证据：`tests/reports/p9-3-replace-instance-live.json`（一次性探针 + 真机验收）。
+
+**结论：编辑器原生就够用，不需要退化成「换资源 + 回写布局属性」。**
+
+| 语义 | 编辑器入口 | 实测结论 |
+| --- | --- | --- |
+| 换源组件 | `Document.ReplaceSelection(url)`（先 `Document.SetSelection(obj)`） | 对组件实例**完全可用**；这是编辑器自己的替换命令，Image 替换走的也是它 |
+| 保留什么 | — | `id`、`name`、`xy`、relation 绑定、**显式** `size` 属性全部保留 |
+| 会变什么 | — | 实例**没有**显式 `size` 时，尺寸取新源组件的自然尺寸——FGUI 本来的语义（实例尺寸默认继承源组件） |
+| 落盘形态 | — | `<component id="..." name="..." src="<新 itemId>" fileName="<新文件名>.xml" xy="..."/>` |
+| 扩展 override | — | 同扩展类型的源组件下 override 存续；换成无扩展的源组件时编辑器自行丢弃失效的 override |
+| 对象模型 | `FObject.resourceURL` | **只读 getter**；实例节点的 `src` 只存在于文档模型层，对象模型改不动 |
+
+**两条必须记住的结论。**
+
+1. `FObject.resourceURL` 是只读的，组件替换**只能走文档模型层**（`Document.ReplaceSelection`）——
+   与 P0-C「既有节点走 DocElement」是同一条结论的另一个面。
+2. `expected_type` 之前在 CLI/MCP 两侧都默认写死 `image`，而插件侧又要求它与目标推导类型一致，
+   组件替换会被自己的默认值挡在门外。已改为「省略则按目标推导、传入则作断言」。
+
+**为什么这件事值得单列一节**：P9-3 的原始诉求是「把白色文本组件换成深灰文本组件」，
+此前只能 `remove_object` + `insert_object --index` 手算插入位置重插——位置算错就是布局错位，
+而且 Agent 得为一次换图付两次写操作的代价。现在是一次调用，编辑器自己把 id/name/xy/relation
+和显式尺寸都保住。
+
 ---
 
 ## 5. 建议的落地顺序

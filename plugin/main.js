@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.20";
+const BRIDGE_VERSION = "0.8.21";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -164,6 +164,7 @@ function writeStatus() {
             "undo",
             "redo",
             "verify_document", "replace_object_resource", "get_text_style", "set_text_style",
+            "set_instance_override",
             "set_list_layout", "set_group_layout", "set_relation", "set_gear_display",
             "set_controller", "list_controllers",
             "query_references", "query_dependencies", "find_unused", "find_duplicate", "replace_references",
@@ -2926,26 +2927,53 @@ function packageItemRef(item, type, folderPath, checkFile) {
         checkFile
     };
 }
+// 实例的布局事实：替换前后都要报出来，否则「换了资源但布局悄悄变了」无法察觉。
+function instanceLayoutFacts(obj) {
+    if (!obj)
+        return null;
+    return {
+        x: obj.x,
+        y: obj.y,
+        width: obj.width,
+        height: obj.height,
+        relationCount: (obj.relations && obj.relations.items) ? obj.relations.items.Count : 0
+    };
+}
 function replaceObjectResource(params) {
     const doc = getActiveDocument();
     let obj = resolveObject(doc, params.target);
     validateReloadOptions(params, targetSummary(obj, params.target));
     const type = String(obj.objectType || "").toLowerCase();
-    if (["image", "loader"].indexOf(type) < 0 || params.state)
-        verificationError("unsupported_property", "可信资源替换目前仅支持 Image/Loader；Button 状态请使用专用 API", { stage: "input" });
+    // P9-3：组件实例也能换源组件。判据是「组件 + 有 resourceURL + 不是当前文档根」——
+    // 根组件是组件定义本身，换掉它等于换掉整个文档。
+    const isComponentInstance = type === "component" && !!String(obj.resourceURL || "") && obj !== doc.content;
+    if (["image", "loader"].indexOf(type) < 0 && !isComponentInstance)
+        verificationError("unsupported_property", "可信资源替换目前仅支持 Image/Loader/组件实例；Button 状态请使用专用 API", { stage: "input" });
+    if (params.state)
+        verificationError("unsupported_property", "可信资源替换目前仅支持 Image/Loader/组件实例；Button 状态请使用专用 API", { stage: "input" });
     const url = String(params.resourceURL || params.url || "").trim();
     if (url.indexOf("ui://") !== 0)
         verificationError("invalid_argument", "resourceURL 必须是 ui:// URL", { stage: "input" });
     const resource = resolveItem({ url });
-    if (resource.type !== FairyEditor.FPackageItemType.IMAGE || (params.expectedType && String(params.expectedType).toLowerCase() !== "image"))
-        verificationError("invalid_argument", "本切片的资源类型必须是 image", { stage: "input", resourceURL: url });
+    // 组件实例换组件；Image/Loader 换 image（Loader 的槽位是 url，指向的仍是图片资源）。
+    const wantItemType = isComponentInstance ? FairyEditor.FPackageItemType.COMPONENT : FairyEditor.FPackageItemType.IMAGE;
+    const wantTypeName = isComponentInstance ? "component" : "image";
+    if (resource.type !== wantItemType || (params.expectedType && String(params.expectedType).toLowerCase() !== wantTypeName))
+        verificationError("invalid_argument", `本次替换的资源类型必须是 ${wantTypeName}`, { stage: "input", resourceURL: url, expectedType: wantTypeName });
     const canonicalUrl = String(resource.GetURL());
     const before = verifiedObjectValues(obj);
+    const layoutBefore = instanceLayoutFacts(obj);
     const expected = { id: before.id, name: before.name, type, resourceURL: canonicalUrl };
     const preserveSize = params.preserveSize !== false;
-    if (preserveSize) {
+    // 图片替换会改默认尺寸，Bridge 负责把原尺寸写回去；组件实例的尺寸按 FGUI 语义
+    // 跟着源组件走（实例有显式 size 就保留，没有就跟随新源），不回写。
+    if (preserveSize && !isComponentInstance) {
         expected.width = obj.width;
         expected.height = obj.height;
+    }
+    const notes = [];
+    if (isComponentInstance) {
+        notes.push("组件实例的尺寸按 FGUI 语义处理：实例有显式 size 就保留，没有就跟随新源组件；preserve_size 对组件实例不适用。");
     }
     if (before.resourceURL !== canonicalUrl) {
         if (type === "loader") {
@@ -2954,22 +2982,30 @@ function replaceObjectResource(params) {
             obj.url = canonicalUrl;
         }
         else {
-            // Image 走 Document.ReplaceSelection：编辑器自己的替换命令，
+            // Image 与组件实例都走 Document.ReplaceSelection：编辑器自己的替换命令，
             // 会按资源类型处理默认尺寸/图集归属，优于直接改成员。
+            // 真机 6.1.4 实测（tests/reports/p9-3-replace-instance-live.json）：组件实例
+            // 走这条命令时 id/name/xy/relation/显式 size 全部保留，只有「没有显式 size
+            // 时尺寸跟随新源组件」这一条是 FGUI 本来的语义。
             lastWritePath = WRITE_PATH_DOCUMENT;
             doc.SetSelection(obj);
             doc.ReplaceSelection(canonicalUrl);
             // ReplaceSelection can invalidate the old object reference. Re-resolve by stable ID.
             obj = resolveObject(doc, { id: before.id });
         }
-        if (preserveSize) {
+        if (preserveSize && !isComponentInstance) {
             obj.width = expected.width;
             obj.height = expected.height;
         }
         doc.SetModified(true);
         doc.RefreshInspectors();
     }
-    return writeVerification(doc, obj, before, verifiedObjectValues(obj), params, expected);
+    const result = writeVerification(doc, obj, before, verifiedObjectValues(obj), params, expected);
+    if (isComponentInstance) {
+        result.layout = { before: layoutBefore, after: instanceLayoutFacts(obj) };
+        result.notes = notes;
+    }
+    return result;
 }
 // --- Phase 8 / P8-2：资源引用图（只读） ------------------------------------
 // 编辑器自带的 DependencyQuery 能给出 propKey / arrayIndex 这种"哪个对象的哪个
@@ -7693,6 +7729,7 @@ function findDuplicates(params) {
 }
 const DOCUMENT_WRITE_ACTIONS = {
     set_property: true,
+    set_instance_override: true,
     insert_object: true,
     remove_object: true,
     replace_object_resource: true,
@@ -7726,6 +7763,308 @@ const BRANCH_READ_ACTIONS = {
     open_document: true,
     get_tree: true
 };
+// ---------- P9-2：组件实例的扩展级 override（override 语义） ----------
+//
+// 现象（真机 6.1.4 复现，证据 tests/reports/p9-2-override-probe-live.json）：
+//   在组件实例上改内部子对象，内存生效、保存丢失。
+//
+// 根因：override 登记在**实例节点**上，而实例内部的对象属于源组件、自己没有 docElement。
+// Bridge 的通用写路径按 docElement 优先、找不到就回退对象模型，于是写进了内存里的
+// 实例副本，磁盘上什么都没写。
+//
+// 编辑器只支持**扩展级** override，真机 6.1.4 实测结论：
+//   ① 唯一入口是 DocElement.SetExtensionProperty(propName, value)；
+//   ② 落盘形态是实例节点里的扩展子节点 <component ...><Button title="..."/></component>；
+//   ③ DocElement.SetChildProperty 对普通子对象是静默 no-op（target 按名字/按 id、
+//      propId 0/1/2/3/8 全部无效）——编辑器不支持逐子对象覆盖；
+//   ④ 对象模型直写扩展成员不置脏，save 会静默跳过（P8-0 老坑）——必须走文档模型层；
+//   ⑤ titleColor / titleFontSize 是「开关 + 参数」结构：不先置 ...Set 标志就不落盘
+//      （与 P9-1 的描边/投影同构），写序固定为「先开关后参数」；
+//   ⑥ 颜色只保留 RGB 六位，编辑器会丢掉 alpha。
+//
+// 运行时契约（FairyGUI-unity GButton.Setup_AfterAdd / GLabel.Setup_AfterAdd）：
+// 实例级扩展覆盖在运行时被读成同一组字段，编辑器写出的 XML 属性与运行时字段一一对应，
+// 所以这一层是「编辑器与运行时都对得上」的，不是只在编辑器里好看。
+const INSTANCE_OVERRIDE_KEYS = {
+    Button: {
+        title: { kind: "string", attr: "title", member: "title" },
+        text: { kind: "string", attr: "title", member: "text" },
+        icon: { kind: "string", attr: "icon", member: "icon" },
+        selectedTitle: { kind: "string", attr: "selectedTitle", member: "selectedTitle" },
+        selectedIcon: { kind: "string", attr: "selectedIcon", member: "selectedIcon" },
+        titleColor: { kind: "color", attr: "titleColor", member: "titleColor", flag: "titleColorSet" },
+        titleFontSize: { kind: "number", attr: "titleFontSize", member: "titleFontSize", flag: "titleFontSizeSet" }
+    },
+    Label: {
+        title: { kind: "string", attr: "title", member: "title" },
+        text: { kind: "string", attr: "title", member: "text" },
+        icon: { kind: "string", attr: "icon", member: "icon" },
+        titleColor: { kind: "color", attr: "titleColor", member: "titleColor", flag: "titleColorSet" },
+        titleFontSize: { kind: "number", attr: "titleFontSize", member: "titleFontSize", flag: "titleFontSizeSet" }
+    }
+};
+function instanceOverrideExt(obj) {
+    const ext = obj ? obj.extention : null;
+    return ext && typeof ext === "object" ? ext : null;
+}
+// 扩展类型名（"Button" / "Label"）。落盘时实例节点里的扩展子节点用的就是这个名字。
+function instanceOverrideExtType(obj) {
+    const ext = instanceOverrideExt(obj);
+    if (!ext)
+        return "";
+    return String(ext._type || obj.extentionId || "");
+}
+// 颜色统一成六位大写 RGB：编辑器落盘会丢掉 alpha，两边必须用同一形态比对。
+function overrideColorHex(value) {
+    const raw = String(value || "").trim();
+    const normalized = normalizedColor(raw, "override color");
+    return normalized.substring(0, 7);
+}
+function instanceOverrideValueFromExt(ext, spec) {
+    if (!ext)
+        return null;
+    const raw = ext[spec.member];
+    if (raw === undefined || raw === null)
+        return null;
+    if (spec.kind === "color")
+        return overrideColorHex(colorHex(raw));
+    if (spec.kind === "number")
+        return Number(raw);
+    return String(raw);
+}
+// 把一组 override 值写进实例的扩展节点（文档模型层）。
+// 「先开关后参数」是硬约束：titleColor/titleFontSize 不先置 ...Set 标志就不落盘。
+// 写扩展成员时值必须是成员的真实类型（颜色要 UnityEngine.Color，不是 "#RRGGBB"），
+// 传错类型编辑器会抛 Invalid cast——所以类型转换在这里做，不在调用方。
+function writeInstanceOverrideValue(el, spec, value, key) {
+    if (spec.flag) {
+        try {
+            el.SetExtensionProperty(spec.flag, true);
+        }
+        catch (error) {
+            verificationError("editor_rejected", `开启扩展属性开关失败：${spec.flag}`, { stage: "editor", key, reason: String(error) });
+        }
+    }
+    const typed = spec.kind === "color" ? unityColor(value, key)
+        : spec.kind === "number" ? Number(value)
+            : String(value);
+    try {
+        el.SetExtensionProperty(spec.member, typed);
+    }
+    catch (error) {
+        verificationError("editor_rejected", `写入实例级 override 失败：${key}`, { stage: "editor", key, reason: String(error) });
+    }
+}
+function applyInstanceOverrideValues(doc, obj, values, previous) {
+    const el = docElementFor(obj);
+    if (!el)
+        verificationError("editor_rejected", "实例没有可用的文档模型节点，无法登记 override", { stage: "editor", target: targetSummary(obj, null) });
+    const ext = instanceOverrideExt(obj);
+    const extType = instanceOverrideExtType(obj);
+    const specTable = INSTANCE_OVERRIDE_KEYS[extType];
+    const applied = {};
+    const appliedKeys = [];
+    for (const key of Object.keys(values)) {
+        const spec = specTable[key];
+        // null 表示「这个键原本不存在」：编辑器没有 unset 入口，跳过而不是写空值。
+        if (values[key] === null || values[key] === undefined)
+            continue;
+        try {
+            writeInstanceOverrideValue(el, spec, values[key], key);
+        }
+        catch (error) {
+            // 半写入不留：把已经写下去的键按旧值回滚，再把失败抛出去。
+            let rolledBack = true;
+            const notRestored = [];
+            if (previous) {
+                for (const done of appliedKeys) {
+                    const old = previous[done];
+                    if (old === null || old === undefined) {
+                        notRestored.push(done);
+                        rolledBack = false;
+                        continue;
+                    }
+                    try {
+                        writeInstanceOverrideValue(el, specTable[done], old, done);
+                    }
+                    catch (_) {
+                        notRestored.push(done);
+                        rolledBack = false;
+                    }
+                }
+            }
+            verificationError("editor_rejected", `写入实例级 override 失败：${key}`, {
+                stage: "editor", key, reason: String(error), appliedKeys, rolledBack, notRestored
+            });
+        }
+        applied[key] = values[key];
+        appliedKeys.push(key);
+    }
+    lastWritePath = WRITE_PATH_DOCUMENT;
+    return { applied, extType, ext };
+}
+// 读回：扩展节点里这些键当前的值。
+function instanceOverrideMemoryValues(obj, keys) {
+    const ext = instanceOverrideExt(obj);
+    const values = {};
+    for (const key of Object.keys(keys))
+        values[key] = instanceOverrideValueFromExt(ext, keys[key]);
+    return values;
+}
+// 读回：磁盘 XML 里实例节点下的扩展子节点上的属性值。
+function instanceOverridePersistedValues(doc, obj, keys, extType) {
+    const found = findPersistedObjectNode(doc, obj);
+    let overrideNode = null;
+    for (let i = 0; i < found.node.elements.Count; i++) {
+        const child = found.node.elements.get_Item(i);
+        if (String(child.name) === extType) {
+            overrideNode = child;
+            break;
+        }
+    }
+    const values = {};
+    for (const key of Object.keys(keys)) {
+        const spec = keys[key];
+        if (!overrideNode) {
+            values[key] = null;
+            continue;
+        }
+        const raw = overrideNode.GetAttribute(spec.attr);
+        if (raw === null || raw === undefined) {
+            values[key] = null;
+            continue;
+        }
+        if (spec.kind === "number")
+            values[key] = Number(raw);
+        else if (spec.kind === "color")
+            values[key] = overrideColorHex(String(raw));
+        else
+            values[key] = String(raw);
+    }
+    return { values, file: found.file };
+}
+function setInstanceOverride(params) {
+    const doc = getActiveDocument();
+    validateReloadOptions(params, null);
+    const obj = resolveObject(doc, params.target);
+    if (obj === doc.content)
+        verificationError("invalid_argument", "根组件是组件定义本身，不支持实例级 override；请改用 set_property 或在父组件里操作实例", { stage: "input", target: targetSummary(obj, params.target) });
+    if (String(obj.objectType || "").toLowerCase() !== "component" || !String(obj.resourceURL || ""))
+        verificationError("invalid_argument", "目标不是组件实例（实例才有 resourceURL 且可承载 override）", { stage: "input", target: targetSummary(obj, params.target) });
+    const extType = instanceOverrideExtType(obj);
+    if (!extType)
+        verificationError("invalid_argument", "该实例的源组件没有扩展（extention），编辑器不支持实例级 override；请在源组件里改，或用 insert_text 直接建对象", { stage: "input", target: targetSummary(obj, params.target) });
+    const specTable = INSTANCE_OVERRIDE_KEYS[extType];
+    if (!specTable)
+        verificationError("unsupported_property", `扩展类型 ${extType} 不支持实例级 override`, { stage: "input", extType, supported: Object.keys(INSTANCE_OVERRIDE_KEYS) });
+    const raw = params.properties;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        verificationError("invalid_argument", "properties 必须是非空对象", { stage: "input" });
+    const requestKeys = Object.keys(raw);
+    if (!requestKeys.length)
+        verificationError("invalid_argument", "properties 不能为空", { stage: "input" });
+    // 先把全部键校验完再动编辑器，避免半写入。
+    const values = {};
+    for (const key of requestKeys) {
+        const spec = specTable[key];
+        if (!spec)
+            verificationError("unsupported_property", `扩展 ${extType} 不支持属性：${key}`, { stage: "input", key, extType, supported: Object.keys(specTable) });
+        const value = raw[key];
+        if (spec.kind === "number") {
+            const n = Number(value);
+            if (!Number.isFinite(n) || n <= 0)
+                verificationError("invalid_argument", `${key} 必须是正数`, { stage: "input", key, value });
+            values[key] = n;
+        }
+        else if (spec.kind === "color") {
+            const text = String(value || "").trim();
+            if (!/^#[0-9A-Fa-f]{6}$/.test(text))
+                verificationError("invalid_argument", `${key} 必须是 #RRGGBB 六位颜色（编辑器落盘只保留 RGB，alpha 会被丢掉）`, { stage: "input", key, value });
+            values[key] = overrideColorHex(text);
+        }
+        else {
+            if (typeof value !== "string")
+                verificationError("invalid_argument", `${key} 必须是字符串`, { stage: "input", key, value });
+            values[key] = value;
+        }
+    }
+    // 文档脏状态必须在写之前取：撤销时按它还原，否则一次本来干净的写入
+    // 撤销后会把文档留成 modified。
+    const documentModifiedBefore = doc.isModified;
+    const before = instanceOverrideMemoryValues(obj, specTable);
+    const writeInfo = applyInstanceOverrideValues(doc, obj, values, before);
+    const after = instanceOverrideMemoryValues(obj, specTable);
+    doc.RefreshInspectors();
+    // 写入前的当前值即撤销目标。null 表示「原本没有这个覆盖」。
+    const undoValues = {};
+    for (const key of requestKeys)
+        undoValues[key] = before[key] === null ? null : before[key];
+    const redoValues = {};
+    for (const key of requestKeys)
+        redoValues[key] = after[key] === null ? null : after[key];
+    agentUndoStack.push({
+        kind: "instance-override",
+        documentUrl: doc.docURL,
+        target: historyTarget(obj, params.target),
+        properties: requestKeys,
+        before: undoValues,
+        after: redoValues,
+        documentModifiedBefore
+    });
+    agentRedoStack.length = 0;
+    const expected = {};
+    for (const key of requestKeys)
+        expected[key] = values[key];
+    const specSubset = {};
+    for (const key of requestKeys)
+        specSubset[key] = specTable[key];
+    const extTypeForRead = writeInfo.extType;
+    const readers = {
+        memory: (o) => instanceOverrideMemoryValues(o, specSubset),
+        persisted: (d, o) => instanceOverridePersistedValues(d, o, specSubset, extTypeForRead)
+    };
+    const result = writeVerification(doc, obj, undoValues, redoValues, params, expected, readers);
+    result.extentionType = extType;
+    result.properties = requestKeys;
+    result.writePath = lastWritePath;
+    result.history = {
+        agentUndoCount: agentUndoStack.length,
+        agentRedoCount: agentRedoStack.length,
+        nativeCanUndo: doc.history.CanUndo(),
+        nativeCanRedo: doc.history.CanRedo(),
+        nativePendingCount: doc.history.GetPendingList().Count
+    };
+    return result;
+}
+// 撤销/重做：把 override 值写回。空字符串表示「写回空值」——编辑器不会因此删掉
+// 已存在的属性，所以撤销后磁盘上可能仍留着一个空属性，这点在响应里说明。
+function applyInstanceOverrideHistory(entry, undo) {
+    const doc = openDocumentByUrl(entry.documentUrl);
+    const obj = resolveObject(doc, entry.target);
+    const nextValue = undo ? entry.before : entry.after;
+    const extType = instanceOverrideExtType(obj);
+    const current = instanceOverrideMemoryValues(obj, INSTANCE_OVERRIDE_KEYS[extType] || {});
+    // 撤销确实改了值时，文档必须重新变脏：否则内存里是旧值、磁盘上还是新值，
+    // 而编辑器认为「没有改动」，撤销会在关文档时被悄悄丢掉。
+    const changed = Object.keys(nextValue).some(k => !valuesEqual(current[k] === undefined ? null : current[k], nextValue[k]));
+    applyInstanceOverrideValues(doc, obj, nextValue, current);
+    doc.SetModified(undo ? (entry.documentModifiedBefore || changed) : true);
+    doc.RefreshInspectors();
+    // 原本不存在的键没有 unset 入口，撤销时只能保留当前值——这一点要说出来。
+    const notRestored = Object.keys(nextValue).filter(k => nextValue[k] === null || nextValue[k] === undefined);
+    return {
+        mode: "agent-instance-override",
+        target: { id: obj.id, name: obj.name, type: obj.objectType },
+        properties: entry.properties,
+        values: nextValue,
+        changed,
+        notRestored,
+        note: notRestored.length
+            ? "这些属性在写入前并不存在，编辑器没有 unset 入口，撤销后保留当前值。"
+            : undefined,
+        document: describeDocument(doc)
+    };
+}
 function handleCommand(request) {
     // 每条写路径必须自己声明写入层；不声明就是 null（unknown），
     // 不能沿用上一个 action 的值——那会让 writePath 变成谎报。
@@ -7757,6 +8096,7 @@ function handleCommand(request) {
         remove_transition_item: true,
         select_object: true,
         set_property: true,
+        set_instance_override: true,
         insert_object: true,
         remove_object: true,
         set_list_layout: true,
@@ -8052,6 +8392,9 @@ function handleCommand(request) {
         }
         case "insert_text":
             return insertText(params);
+        // P9-2：组件实例的扩展级 override
+        case "set_instance_override":
+            return setInstanceOverride(params);
         case "remove_object": {
             const doc = getActiveDocument();
             const obj = resolveObject(doc, params.target);
@@ -8173,7 +8516,9 @@ function handleCommand(request) {
                         ? applyAnimationHistory(entry, true)
                         : entry.kind === "movieclip"
                             ? applyMovieClipHistory(entry, true)
-                            : applyAgentHistory(entry, true);
+                            : entry.kind === "instance-override"
+                                ? applyInstanceOverrideHistory(entry, true)
+                                : applyAgentHistory(entry, true);
                     agentRedoStack.push(entry);
                     return { changed: true, ...result };
                 }
@@ -8194,7 +8539,9 @@ function handleCommand(request) {
                         ? applyAnimationHistory(entry, false)
                         : entry.kind === "movieclip"
                             ? applyMovieClipHistory(entry, false)
-                            : applyAgentHistory(entry, false);
+                            : entry.kind === "instance-override"
+                                ? applyInstanceOverrideHistory(entry, false)
+                                : applyAgentHistory(entry, false);
                     agentUndoStack.push(entry);
                     return { changed: true, ...result };
                 }

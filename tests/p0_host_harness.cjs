@@ -449,6 +449,8 @@ function setup() {
  // document's XML stage, which is exactly what the tree verification must skip.
  objects.push({id:'comp1',name:'panel',objectType:'component',resourceURL:'ui://fixture0panel',width:100,height:50,x:200,y:200,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;},get numChildren(){return 1},GetChildAt:()=>makeInner()});
  attachLayoutMembers(objects[objects.length-1]);
+ // 0.8.21：comp1 扮演「Button 扩展的组件实例」，实例级 override 写在它身上。
+ attachInstanceExtension(objects[objects.length-1]);
  doc=makeDoc();
  resources['ui://fixture0component']={file:'fixture.xml',owner:{id:'fixture0'}};
  const mc={id:'mc1',name:'loop.jta',type:'movieclip',title:'loop',path:'/',file:'/pkg/mc.jta',width:64,height:64,exported:true,folderAtlas:'',owner:pkg,
@@ -612,7 +614,7 @@ function reloadFromDisk(){
   const scale=(a.scale||'1,1').split(',').map(Number);
   const o={id:a.id,name:a.name,x:xy[0],y:xy[1],width:size[0],height:size[1],scaleX:scale[0],scaleY:scale[1]??scale[0],rotation:Number(a.rotation||0),alpha:Number(a.alpha||1),visible:a.visible!=='false',touchable:a.touchable!=='false',grayed:a.grayed==='true',text:a.text??a.title??'',icon:a.icon||'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
   if(n.name==='image'){o.objectType='image';o.resourceURL='ui://fixture0'+a.src;}
-  if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;}
+  if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;attachInstanceExtension(o,n);}
   if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
   if(n.name==='text'){const off=(a.shadowOffset||'0,0').split(',').map(Number);
    Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none',
@@ -641,6 +643,45 @@ const TEXT_DEFAULTS={font:'',fontSize:12,color:'#FFFFFF',align:'left',vAlign:'to
 function omitDefaults(a){
  for(const [k,d] of Object.entries(TEXT_DEFAULTS)) if(a[k]===d||String(a[k])===String(d)) delete a[k];
  return a;
+}
+// 0.8.21 实例级 override：夹具里的 comp1 扮演「Button 扩展的组件实例」。
+// 语义按真机 6.1.4 探针建模（tests/reports/p9-2-override-probe-live.json）：
+//   · 实例自己有 docElement，内部子对象没有；
+//   · SetExtensionProperty 是唯一入口，而且它自己会把文档置脏
+//     （对象模型直写扩展成员不会置脏，save 会静默跳过——P8-0 老坑）；
+//   · titleColor/titleFontSize 是「开关 + 参数」结构，不置 ...Set 标志就不落盘；
+//   · 落盘形态是实例节点里的扩展子节点 <Button title="..."/>。
+function attachInstanceExtension(o,node){
+ const ext={_type:'Button',extentionId:'Button',title:'',text:'',icon:'',selectedTitle:'',selectedIcon:'',
+  titleColor:new Color(1,1,1,1),titleFontSize:0,titleColorSet:false,titleFontSizeSet:false,_override:{}};
+ o.extention=ext;
+ o.docElement={isValid:true,
+  // 真机 DocElement 同时有 SetProperty 与 SetExtensionProperty；这里给一个够用的最小面。
+  SetProperty(prop,value){if(prop in ext)ext[prop]=value;else o[prop]=value;},
+  SetExtensionProperty(prop,value){
+  if(prop==='title'){ext.title=String(value);ext.text=ext.title;ext._override.title=ext.title;}
+  else if(prop==='text'){ext.text=String(value);ext.title=ext.text;ext._override.title=ext.title;}
+  else if(prop==='icon'){ext.icon=String(value);ext._override.icon=ext.icon;}
+  else if(prop==='selectedTitle'){ext.selectedTitle=String(value);ext._override.selectedTitle=ext.selectedTitle;}
+  else if(prop==='selectedIcon'){ext.selectedIcon=String(value);ext._override.selectedIcon=ext.selectedIcon;}
+  else if(prop==='titleColor'){ext.titleColor=value;ext._override.titleColor=value;}
+  else if(prop==='titleColorSet'){ext.titleColorSet=Boolean(value);}
+  else if(prop==='titleFontSize'){ext.titleFontSize=Number(value);ext._override.titleFontSize=ext.titleFontSize;}
+  else if(prop==='titleFontSizeSet'){ext.titleFontSizeSet=Boolean(value);}
+  else throw Error('not exists in FairyEditor.FButton: '+prop);
+  doc.SetModified(true);
+ }};
+ // 从磁盘读回既有 override：真机重开文档后覆盖仍在。
+ for(const c of (node&&node.children||[])){
+  if(c.name!=='Button')continue;
+  const a=c.attrs||{};
+  if(a.title!==undefined){ext.title=a.title;ext.text=a.title;ext._override.title=a.title;}
+  if(a.icon!==undefined){ext.icon=a.icon;ext._override.icon=a.icon;}
+  if(a.selectedTitle!==undefined){ext.selectedTitle=a.selectedTitle;ext._override.selectedTitle=a.selectedTitle;}
+  if(a.selectedIcon!==undefined){ext.selectedIcon=a.selectedIcon;ext._override.selectedIcon=a.selectedIcon;}
+  if(a.titleColor!==undefined){ext.titleColor=hexToColor(a.titleColor);ext.titleColorSet=true;ext._override.titleColor=ext.titleColor;}
+  if(a.titleFontSize!==undefined){ext.titleFontSize=Number(a.titleFontSize);ext.titleFontSizeSet=true;ext._override.titleFontSize=ext.titleFontSize;}
+ }
 }
 function serialize() {
  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
@@ -699,6 +740,17 @@ function serialize() {
  for(const r of relItems)children.push(`<relation target="${r.target?esc(String(r.target.id||'')):''}" sidePair="${esc(r.sidePair||'')}"/>`);
  const gear=o._gears&&o._gears[0];
  if(gear&&gear.controller)children.push(`<gearDisplay controller="${esc(gear.controller.name)}" pages="${(gear.pages||[]).join(',')}"/>`);
+ // 0.8.21：实例级 override 落盘成实例节点里的扩展子节点
+ if(o.objectType==='component'&&o.extention){
+  const ov=o.extention._override||{};const oa=[];
+  if(ov.title!==undefined)oa.push(`title="${esc(ov.title)}"`);
+  if(ov.icon!==undefined)oa.push(`icon="${esc(ov.icon)}"`);
+  if(ov.selectedTitle!==undefined)oa.push(`selectedTitle="${esc(ov.selectedTitle)}"`);
+  if(ov.selectedIcon!==undefined)oa.push(`selectedIcon="${esc(ov.selectedIcon)}"`);
+  if(ov.titleColor!==undefined)oa.push(`titleColor="${ctx.colorHex(ov.titleColor)}"`);
+  if(ov.titleFontSize!==undefined)oa.push(`titleFontSize="${Number(ov.titleFontSize)}"`);
+  if(oa.length)children.push(`<${o.extention._type} ${oa.join(' ')}/>`);
+ }
  return children.length?`<${o.objectType} ${attrs}>${children.join('')}</${o.objectType}>`:`<${o.objectType} ${attrs}/>`;
  }).join('')+'</displayList>'+serializeTransitions()+'</component>';
 }
@@ -783,6 +835,107 @@ test('insert_text writes the new-style attributes too',()=>{
 });
 test('insert_text refuses a non-root parent',()=>{
  rejects(()=>ctx.insertText({target:{id:'text1'},text:'x',save:true}),'invalid_argument','input');
+});
+// ---- 0.8.21：组件实例的扩展级 override（set_instance_override） ----
+// 语义依据真机 6.1.4 探针（tests/reports/p9-2-override-probe-live.json）：
+// 唯一入口是实例 docElement 的 SetExtensionProperty，落盘形态是实例节点里的扩展子节点。
+const override=(extra={})=>ctx.setInstanceOverride({target:{id:'comp1'},properties:{title:'轻松',titleFontSize:28,titleColor:'#333333'},save:true,...extra});
+test('instance override lands in the extension child node of the instance',()=>{
+ const r=override();
+ assert.equal(r.persisted,true);
+ assert.equal(r.writePath,'document-model');
+ assert.equal(r.extentionType,'Button');
+ assert.equal(r.verification.xml.title,'轻松');
+ assert.equal(r.verification.xml.titleFontSize,28);
+ assert.equal(r.verification.xml.titleColor,'#333333');
+ assert.match(files['fixture.xml'],/<Button title="轻松" titleColor="#333333" titleFontSize="28"\/>/);
+});
+test('instance override survives a document reload',()=>{
+ override();
+ const r=ctx.setInstanceOverride({target:{id:'comp1'},properties:{title:'复验'},save:true,externalReload:true});
+ assert.equal(r.strength,'reload');
+ assert.equal(r.verification.reload.values.title,'复验');
+ assert.match(files['fixture.xml'],/title="复验"/);
+});
+test('instance override does not touch the source component',()=>{
+ override();
+ // 覆盖只落在实例节点上：夹具里 comp1 之外的节点不受影响
+ assert.equal(objects.length,4);
+ assert.equal(objects[3].extention.title,'轻松');
+});
+test('unsupported extension property is rejected before any write',()=>{
+ rejects(()=>ctx.setInstanceOverride({target:{id:'comp1'},properties:{fontSize:30},save:true}),'unsupported_property','input');
+ assert.doesNotMatch(files['fixture.xml'],/<Button/);
+});
+test('instance override rejects a non-instance target',()=>{
+ rejects(()=>ctx.setInstanceOverride({target:{id:'text1'},properties:{title:'x'},save:true}),'invalid_argument','input');
+ assert.doesNotMatch(files['fixture.xml'],/<Button/);
+});
+test('instance override rejects a source component without an extension',()=>{
+ const inst=objects[3];
+ delete inst.extention;
+ rejects(()=>ctx.setInstanceOverride({target:{id:'comp1'},properties:{title:'x'},save:true}),'invalid_argument','input');
+ assert.doesNotMatch(files['fixture.xml'],/<Button/);
+});
+test('instance override rejects a color that is not six-digit RGB',()=>{
+ rejects(()=>ctx.setInstanceOverride({target:{id:'comp1'},properties:{titleColor:'#11223344'},save:true}),'invalid_argument','input');
+ assert.doesNotMatch(files['fixture.xml'],/<Button/);
+});
+test('instance override rejects a non-positive font size',()=>{
+ rejects(()=>ctx.setInstanceOverride({target:{id:'comp1'},properties:{titleFontSize:0},save:true}),'invalid_argument','input');
+});
+// ---- 0.8.21：replace_object_resource 支持组件实例（P9-3） ----
+// 语义依据真机 6.1.4 探针（tests/reports/p9-3-replace-instance-live.json）：
+// 走 Document.ReplaceSelection，id/name/xy/relation/显式 size 全部保留；
+// 没有显式 size 时尺寸跟随新源组件（FGUI 语义，不是 Bridge 改的）。
+const swapComp=(extra={})=>{
+ resources['ui://fixture0panel2']={id:'panel2',owner:{id:'fixture0'},type:'component',width:100,height:50,GetURL:()=>'ui://fixture0panel2'};
+ return ctx.replaceObjectResource({target:{id:'comp1'},resourceURL:'ui://fixture0panel2',save:true,...extra});
+};
+test('a component instance can be swapped to another component resource',()=>{
+ const r=swapComp();
+ assert.equal(r.persisted,true);
+ assert.equal(r.writePath,'document-model');
+ assert.equal(r.after.resourceURL,'ui://fixture0panel2');
+ assert.match(files['fixture.xml'],/src="panel2"/);
+});
+test('the swap keeps the instance id, name and position',()=>{
+ const before=objects[3];
+ swapComp();
+ const after=objects.find(o=>o.id==='comp1');
+ assert.ok(after,'替换后必须还能按 id 找到同一个实例');
+ assert.equal(after.name,before.name);
+ assert.equal(after.x,before.x);
+ assert.equal(after.y,before.y);
+});
+test('the swap reports the layout before and after',()=>{
+ const r=swapComp();
+ assert.ok(r.layout&&r.layout.before&&r.layout.after,'组件实例替换必须回报布局变化');
+ assert.equal(r.layout.before.x,r.layout.after.x);
+});
+test('a component instance cannot be swapped to an image resource',()=>{
+ rejects(()=>ctx.replaceObjectResource({target:{id:'comp1'},resourceURL:'ui://fixture0blue',save:true}),'invalid_argument','input');
+ assert.equal(objects[3].resourceURL,'ui://fixture0panel');
+});
+test('an image object cannot be swapped to a component resource',()=>{
+ swapComp();
+ rejects(()=>ctx.replaceObjectResource({target:{id:'image1'},resourceURL:'ui://fixture0panel2',save:true}),'invalid_argument','input');
+});
+test('expected_type is asserted against the type derived from the target',()=>{
+ swapComp();
+ rejects(()=>ctx.replaceObjectResource({target:{id:'comp1'},resourceURL:'ui://fixture0panel2',expectedType:'image',save:true}),'invalid_argument','input');
+});
+test('a non-instance object is not a replaceable component instance',()=>{
+ swapComp();
+ rejects(()=>ctx.replaceObjectResource({target:{id:'text1'},resourceURL:'ui://fixture0panel2',save:true}),'unsupported_property','input');
+});
+test('instance override is undoable through the agent history',()=>{
+ override();
+ const r=ctx.handleCommand({action:'undo',params:{}});
+ assert.equal(r.mode,'agent-instance-override');
+ // 撤销恢复的是**写入前**的值（夹具里实例扩展的默认 title 是空串），不是刚写的值。
+ assert.equal(r.values.title,'');
+ assert.equal(objects[3].extention.title,'');
 });
 test('Missing XML fails closed',()=>{delete files['fixture.xml'];rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24}}),'persistence_failed','xml');});
 test('Malformed XML fails closed',()=>{files['fixture.xml']='<broken';rejects(()=>ctx.verifyDocument({target:{id:'text1'},expected:{fontSize:24}}),'persistence_failed','xml');});

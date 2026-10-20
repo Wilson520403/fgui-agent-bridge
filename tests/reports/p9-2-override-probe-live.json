@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "suite": "p9-2-instance-override-probe",
+  "capturedAt": "2026-10-20T17:45:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.20（含未提交的一次性 p9_2_probe / p9_2_probe2 探针 Action，用完已撤回）",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600）",
+  "question": "P9-2『实例子对象写回（override 语义）』在 FairyGUI Editor 6.1.4 上的真实入口与落盘形态是什么？规划文档写的是「编辑器原生交互落盘时写的是什么节点？这条路径在 editor.d.ts 里对应哪个方法？如果编辑器本身就是『只有 Button/Label 扩展才有 title 覆盖』，P9-2 应降级」。",
+  "verdict": "三问都有确定答案，且规划文档的默认假设需要按实测改写。① 落盘形态是**实例节点里的扩展子节点**：<component ...><Button title=\"...\"/></component>，与本机三个生产工程里 174 个真实 override 实例的形态逐字一致。② 唯一可写入口是 **DocElement.SetExtensionProperty(propName, value)**（编辑器包内 editor.d.ts L20120）；同族的 **DocElement.SetChildProperty(target, propertyId, value) 对普通子对象是静默 no-op**（target 按名字/按 id、propId 0/1/2/3/8 全部无效），所以『改实例内部子对象』这条路在编辑器侧根本不存在。③ 因此 P9-2 必须**降级为扩展级 override**：Button/Label 扩展的 title/icon/selectedTitle/selectedIcon/titleColor/titleFontSize 可逐实例覆盖，**任意嵌套子对象（如普通 <text>）不能逐实例覆盖**——这不是 Bridge 的缺口，是编辑器与 FGUI 运行时共同的边界。另有两个非直觉的真机事实：titleColor/titleFontSize 是『开关 + 参数』结构（不先置 titleColorSet/titleFontSizeSet 就不落盘），颜色只保留 RGB 六位（alpha 被编辑器丢掉）。",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app（com.fairygui.FairyGUIEditor）",
+    "platform": "macOS (Apple Silicon)",
+    "probeHarness": "临时 p9_2_probe / p9_2_probe2 Action + CLI `call`，探针结束后从 plugin/main.ts 撤回",
+    "fixture": "sample/assets/Package1/BridgeFixture.xml 内临时插入的 BridgeTextTest（extention=Button，含 title 文本子对象）实例",
+    "controlGroup": "每轮都先跑『对象模型直写子对象』对照组：内存值变了、序列化出来的实例节点逐字不变，确认不是保存链路的问题"
+  },
+  "findings": [
+    {
+      "id": "A1",
+      "claim": "override 登记在实例节点上；实例内部的子对象没有 docElement——这是 P9-2『内存生效、磁盘不落』的根因",
+      "evidence": "探针 structure 步：实例 lblOverride/p92probe 的 docElement 存在且 isValid=true（hasDocElement=true, docElementValid=true）；而它的子对象 title（id n1_mvx6）的 hasDocElement=false。Bridge 的通用写路径 writeObjectProperty() 按 docElement 优先、找不到就回退对象模型（plugin/main.ts P8-0 段），于是写进内存副本。",
+      "impact": "P9-2 的写路径必须显式走实例节点的文档模型层，不能复用「按对象找 docElement」的通用路径。"
+    },
+    {
+      "id": "A2",
+      "claim": "对照组复现：对象模型直写实例内部子对象，磁盘什么都没写",
+      "evidence": "control-object-model-child 步：child.SetProperty(\"text\",\"P92_CONTROL\") 后读回 after=P92_CONTROL（内存生效），但 doc.Serialize() 抓到的实例节点与基线逐字相同：<component id=\"n8_rhus\" name=\"p92probe\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"600,420\"/>；save 后磁盘 XML 里该实例仍无任何子节点。",
+      "impact": "『改实例内部子对象』在 6.1.4 上无解；这类需求应改用 insert_text 直接建对象，或把样式固化成组件类型。"
+    },
+    {
+      "id": "A3",
+      "claim": "DocElement.SetChildProperty 对普通子对象与扩展类型名都是静默 no-op",
+      "evidence": "doc-setchildproperty-by-name（target=子对象名）与 doc-setchildproperty-by-id（target=子对象 id）两步：子对象 text 读回仍为空、实例节点序列化逐字不变、无异常；childprop-extension-target 轮把 target 换成扩展类型名 \"Button\"、propId 0 与 1 仍然无效；childprop-plain-text-ids 轮把 propId 0/1/2/3/8 全试一遍，磁盘节点始终是 <component .../>。",
+      "impact": "不要把 SetChildProperty 当成 override 入口接进 Bridge——它在这个构建里对实例子对象完全无效。"
+    },
+    {
+      "id": "A4",
+      "claim": "DocElement.SetExtensionProperty 是唯一可用入口，落盘形态是实例节点里的扩展子节点",
+      "evidence": "ext-standalone 轮：单独调用 SetExtensionProperty(\"title\",\"P92_EXT_ONLY\") 后，doc.Serialize() 与磁盘 XML 均为 <component id=\"n9_gkoo\" name=\"p92_ext-standalone\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"600,460\"><Button title=\"P92_EXT_ONLY\"/></component>。",
+      "impact": "Bridge 的 override 写路径 = 实例 docElement.SetExtensionProperty；落盘形态与生产工程一致，不需要自定义序列化。"
+    },
+    {
+      "id": "A5",
+      "claim": "对象模型直写扩展成员**不会置脏**，save 会静默跳过（P8-0 老坑在扩展属性上复现）",
+      "evidence": "model-dirty-check 轮：先 doc.Save() 把文档变干净（modified=false），再 ext.title=\"P92_DIRTY_MODEL\" → modified 仍为 false；随后的 doc.Save() 磁盘节点没有 <Button> 子节点。ext-dirty-check 轮同样的序列用 SetExtensionProperty → modified 变 true，落盘 <Button title=\"P92_DIRTY_EXT\"/>。",
+      "impact": "扩展 override 只能走文档模型层；写对象模型成员会得到「内存改了、磁盘没改」的静默失败。"
+    },
+    {
+      "id": "A6",
+      "claim": "titleColor / titleFontSize 是『开关 + 参数』结构：不先置 ...Set 标志就不落盘",
+      "evidence": "ext-style-flags 轮（只给值 + 置标志）落盘 <Button titleColor=\"#00ffba\" titleFontSize=\"33\"/>；只给值不置标志的那一轮（instanceName=p92_alpha）落盘节点是空的 <component id=\"n17_lj4x\" .../>，两个属性都没写进去。",
+      "impact": "Bridge 收到颜色/字号时必须自动开 titleColorSet / titleFontSizeSet，写序固定为先开关后参数（与 P9-1 的描边/投影同构）。"
+    },
+    {
+      "id": "A7",
+      "claim": "扩展成员名即 XML 属性名；text 是 title 的别名，落盘仍是 title；颜色只保留 RGB 六位",
+      "evidence": "ext-text-alias 轮：SetExtensionProperty(\"text\",\"P92_ALIAS\") → 落盘 <Button title=\"P92_ALIAS\"/>；ext-style 轮：SetExtensionProperty(\"fontSize\",28) 抛 \"fontSize not exists in FairyEditor.FButton\"，而 titleFontSize 正常；ext-generic 轮：输入 #11223344 落盘为 titleColor=\"#112233\"（alpha 被丢掉）。",
+      "impact": "白名单只能用真实成员名；颜色输入限定六位 RGB，带 alpha 必须提前拒绝而不是静默丢弃。"
+    },
+    {
+      "id": "A8",
+      "claim": "源组件没有扩展时，SetExtensionProperty 是静默 no-op（不抛异常、也不落盘）",
+      "evidence": "ext-plain-component 轮：对 Component1（无扩展）的实例写扩展属性，extType 为 null、磁盘节点为空 <component id=\"n14_hgsi\" .../>，无异常。",
+      "impact": "Bridge 必须在写之前检查实例的 extentionId，为空就报 invalid_argument，否则会得到『返回成功但什么都没写』的假成功。"
+    },
+    {
+      "id": "A9",
+      "claim": "落盘形态与本机三个生产工程的真实 override 实例逐字一致（174 个样本）",
+      "evidence": "扫描 many_tradition / CleanCommando / youdoo_boxing_jab 三个工程的全部组件 XML：带 src 的实例节点中共有 174 个含子节点的 override 实例，tag 分布为 Button 33、ProgressBar 8、Slider 9（其余 124 个 relation、40 个 gearDisplay 是实例自身的节点属性），属性集合为 Button.title、ProgressBar.value/max、Slider.value/max——**没有任何一个普通子对象（text/image）的 override 样本**。",
+      "impact": "『编辑器只支持扩展级 override』不只是探针结论，也是三个线上工程的事实：真人在编辑器里也只会产出扩展级 override。"
+    },
+    {
+      "id": "A10",
+      "claim": "运行时按同一组字段消费实例级 override（编辑器与运行时对齐，不是编辑器自嗨）",
+      "evidence": "FairyGUI-unity 运行时源码 GButton.Setup_AfterAdd 读实例扩展覆盖段：title / selectedTitle / icon / selectedIcon / titleColor / titleFontSize；GLabel.Setup_AfterAdd 读 title / icon / titleColor / titleFontSize。属性名与编辑器写出的 XML 属性一一对应。",
+      "impact": "扩展级 override 可以放心交付给运行时；普通子对象的逐实例覆盖则编辑器与运行时两侧都不支持。"
+    }
+  ],
+  "runtimeContract": {
+    "source": "https://raw.githubusercontent.com/fairygui/FairyGUI-unity/master/Assets/Scripts/UI/GButton.cs 与 GLabel.cs",
+    "note": "GComponent.Setup_AfterAdd 另有通用子对象覆盖通道（target 为子对象路径，propertyId 0=text / 1=icon），但**编辑器不会产出这种节点**（见 A3），因此 Bridge 无法经编辑器路径使用它。",
+    "button": ["title", "selectedTitle", "icon", "selectedIcon", "titleColor", "titleFontSize"],
+    "label": ["title", "icon", "titleColor", "titleFontSize"]
+  },
+  "decisions": [
+    "P9-2 降级并重定义为『实例级扩展 override』：set_instance_override 写 Button/Label 扩展的 title/icon/selectedTitle/selectedIcon/titleColor/titleFontSize。",
+    "明确不支持并写进文档：任意嵌套子对象（普通 text/image 等）的逐实例覆盖——编辑器与运行时两侧都不支持，改用 insert_text 直接建对象。",
+    "颜色限定 #RRGGBB 六位，带 alpha 直接拒绝（编辑器落盘会丢 alpha）。",
+    "titleColor / titleFontSize 由 Bridge 自动开 ...Set 开关，写序为先开关后参数。",
+    "写路径固定为实例节点的文档模型层（SetExtensionProperty），不用对象模型（对象模型不置脏，save 静默跳过）。"
+  ],
+  "conclusion": "P9-2 不是「实现一个子对象 override」，而是「实现扩展级 override + 把子对象 override 判为编辑器不支持」。规划文档里『一旦能写 override，一个文本组件就能覆盖全部场景』的前提要改写：覆盖的是**文案**（title）与**字号/颜色**（titleFontSize/titleColor），覆盖不了普通文本子对象的其它样式；普通文本仍应走 P9-0 的 insert_text 直接建。"
+}

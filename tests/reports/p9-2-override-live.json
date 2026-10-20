@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "suite": "p9-2-instance-override-live",
+  "capturedAt": "2026-10-20T17:47:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.21",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600）",
+  "feature": "set_instance_override（组件实例的扩展级 override）+ fgui_set_instance_override + CLI set-instance-override",
+  "fixture": {
+    "sourceComponent": "BridgeTextTest（extention=Button，含 title 文本子对象 n1_mvx6）",
+    "instance": "BridgeFixture 内的实例 lblOverride（id n8_ryub），另有一个无扩展实例 plainInst（Component1）",
+    "note": "实例与无扩展实例都是本轮临时插入的，验收后已把 sample 工程恢复到 git 状态。"
+  },
+  "writePath": "document-model（实例节点的 DocElement.SetExtensionProperty）",
+  "cases": [
+    {
+      "id": "W1",
+      "case": "写扩展级 override 并存盘重开验证",
+      "request": {
+        "action": "set_instance_override",
+        "target": {
+          "path": "lblOverride"
+        },
+        "properties": {
+          "title": "轻松",
+          "titleFontSize": 28,
+          "titleColor": "#333333"
+        },
+        "save": true,
+        "externalReload": true
+      },
+      "ok": true,
+      "before": {
+        "title": "轻松",
+        "titleFontSize": 28,
+        "titleColor": "#333333"
+      },
+      "after": {
+        "title": "轻松",
+        "titleFontSize": 28,
+        "titleColor": "#333333"
+      },
+      "saved": true,
+      "persisted": true,
+      "strength": "reload",
+      "writePath": "document-model",
+      "extentionType": "Button",
+      "verification": {
+        "editorReadback": {
+          "title": "轻松",
+          "titleFontSize": 28,
+          "titleColor": "#333333"
+        },
+        "xmlReadback": {
+          "title": "轻松",
+          "titleFontSize": 28,
+          "titleColor": "#333333"
+        },
+        "externalReload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments",
+          "values": {
+            "title": "轻松",
+            "titleFontSize": 28,
+            "titleColor": "#333333"
+          }
+        },
+        "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/BridgeFixture.xml"
+      },
+      "diskXml": "    <component id=\"n8_ryub\" name=\"lblOverride\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"600,420\">\n      <Button title=\"轻松\" titleColor=\"#333333\" titleFontSize=\"28\"/>\n    </component>",
+      "note": "strength=reload：关闭并重新打开文档后重新定位并比对，三个值都还在——这是能证明「重新载入时值不丢」的最强档位。"
+    },
+    {
+      "id": "W2",
+      "case": "第二次写入后可被 Agent 撤销",
+      "request": {
+        "action": "set_instance_override",
+        "properties": {
+          "title": "困难",
+          "titleFontSize": 32
+        },
+        "save": true
+      },
+      "ok": true,
+      "before": {
+        "title": "轻松",
+        "titleFontSize": 28
+      },
+      "after": {
+        "title": "困难",
+        "titleFontSize": 32
+      },
+      "strength": "disk",
+      "history": {
+        "agentUndoCount": 2,
+        "agentRedoCount": 0,
+        "nativeCanUndo": true,
+        "nativeCanRedo": false,
+        "nativePendingCount": 3
+      }
+    },
+    {
+      "id": "W3",
+      "case": "Agent 撤销把值写回旧值，并让文档重新变脏（否则撤销会在关文档时被丢掉）",
+      "ok": true,
+      "mode": "agent-instance-override",
+      "values": {
+        "title": "轻松",
+        "titleFontSize": 28
+      },
+      "notRestored": [],
+      "note": "撤销恢复的是**写入前**的值（磁盘上此前被存成新值）；撤销确实改了值时文档会被重新标记为 modified，存盘后磁盘回到撤销后的值：<Button title=\"最终复验\" titleColor=\"#2c3e50\" titleFontSize=\"25\"/>。",
+      "diskXmlAfterUndo": "<component id=\"n8_fvhu\" name=\"finalCheck\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"600,420\">\n  <Button title=\"最终复验\" titleColor=\"#2c3e50\" titleFontSize=\"25\"/>\n</component>",
+      "changed": true,
+      "documentModifiedAfterUndo": true
+    }
+  ],
+  "negativeCases": [
+    {
+      "case": "不支持的扩展属性",
+      "ok": false,
+      "code": "unsupported_property",
+      "message": "扩展 Button 不支持属性：fontSize",
+      "details": {
+        "stage": "input",
+        "key": "fontSize",
+        "extType": "Button",
+        "supported": [
+          "title",
+          "text",
+          "icon",
+          "selectedTitle",
+          "selectedIcon",
+          "titleColor",
+          "titleFontSize"
+        ]
+      }
+    },
+    {
+      "case": "颜色格式非法（带 alpha 也会被拒）",
+      "ok": false,
+      "code": "invalid_argument",
+      "message": "titleColor 必须是 #RRGGBB 六位颜色（编辑器落盘只保留 RGB，alpha 会被丢掉）",
+      "details": {
+        "stage": "input",
+        "key": "titleColor",
+        "value": "#12345"
+      }
+    },
+    {
+      "case": "目标是根组件",
+      "ok": false,
+      "code": "invalid_argument",
+      "message": "根组件是组件定义本身，不支持实例级 override；请改用 set_property 或在父组件里操作实例",
+      "details": {
+        "stage": "input"
+      }
+    },
+    {
+      "case": "目标不是组件实例",
+      "ok": false,
+      "code": "invalid_argument",
+      "message": "目标不是组件实例（实例才有 resourceURL 且可承载 override）",
+      "details": {
+        "stage": "input"
+      }
+    },
+    {
+      "case": "源组件没有扩展",
+      "ok": false,
+      "code": "invalid_argument",
+      "message": "该实例的源组件没有扩展（extention），编辑器不支持实例级 override；请在源组件里改，或用 insert_text 直接建对象",
+      "details": {
+        "stage": "input"
+      }
+    },
+    {
+      "case": "字号不是正数",
+      "ok": false,
+      "code": "invalid_argument",
+      "message": "titleFontSize 必须是正数",
+      "details": {
+        "stage": "input",
+        "key": "titleFontSize",
+        "value": "大"
+      }
+    }
+  ],
+  "negativeCaseNote": "六条负路径全部在写入前被拒（invalid_argument / unsupported_property），不留半写入；其中『源组件没有扩展』这条尤其重要——编辑器对该情况是静默 no-op（不抛异常也不落盘），Bridge 必须自己拦住，否则就是假成功。",
+  "sourceComponentUntouched": {
+    "file": "sample/assets/Package1/BridgeTextTest.xml",
+    "checked": "源组件里不含任何本次写入的值（轻松/困难/28/32），override 只落在实例节点上。"
+  },
+  "runtimeAlignment": {
+    "note": "落盘的 <Button title=... titleColor=... titleFontSize=.../> 与 FairyGUI-unity 运行时的 GButton.Setup_AfterAdd 读取的字段一一对应（title / selectedTitle / icon / selectedIcon / titleColor / titleFontSize），编辑器与运行时两侧对齐。",
+    "source": "https://raw.githubusercontent.com/fairygui/FairyGUI-unity/master/Assets/Scripts/UI/GButton.cs"
+  },
+  "unverified": [
+    "Windows 版 FairyGUI Editor 未验证（本轮全部结论基于 macOS 上的 6.1.4）。",
+    "Label 扩展只验证了机制，未在真机上落出可用的 Label 组件样本（样本工程里 create-component --extension label 产出的是未被注册的扩展，extentionId 为空），因此 Label 的属性名与运行时字段按 FairyGUI-unity GLabel.Setup_AfterAdd 核对，标注为『机制支持、未真机落盘验证』。",
+    "发布（publish）后的产物未逐字节核对；运行时消费结论来自 FairyGUI-unity 源码与三个生产工程的 174 个真实 override 实例。"
+  ],
+  "finalRecheck": {
+    "after": {
+      "title": "最终复验",
+      "titleFontSize": 25,
+      "titleColor": "#2C3E50"
+    },
+    "strength": "reload",
+    "writePath": "document-model",
+    "undo": {
+      "mode": "agent-instance-override",
+      "values": {
+        "title": "最终复验"
+      },
+      "changed": true,
+      "documentModifiedAfterUndo": true
+    },
+    "diskXml": "<component id=\"n8_fvhu\" name=\"finalCheck\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"600,420\">\n  <Button title=\"最终复验\" titleColor=\"#2c3e50\" titleFontSize=\"25\"/>\n</component>",
+    "note": "撤回一次性探针后的最终复验（探针 Action 已从 plugin/main.ts 删除，编辑器跑的是正式构建）。"
+  },
+  "checks": {
+    "mockHost": "257/257",
+    "python": "58 passed + 12 subtests",
+    "tsc": "0 error",
+    "phase0FixtureLive": "uv run python scripts/phase0_fixture.py verify --live → exit 0",
+    "sampleProjectRestored": "验收后 sample 工程已恢复到 git 状态（git status 无 sample 改动）"
+  }
+}

@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "suite": "p9-3-replace-instance-live",
+  "capturedAt": "2026-10-20T18:05:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.21",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离回归工程，Package1/BridgeFixture 800x600）",
+  "feature": "replace_object_resource 支持组件实例（换源组件）+ CLI replace-object-resource / MCP fgui_replace_object_resource",
+  "question": "P9-3：『把白色文本组件换成深灰文本组件』此前只能 remove_object + insert_object 手算 insertIndex 重插。Document.ReplaceSelection 对组件实例是什么行为（保留 xy/size/name/relations 吗）？若不保留，是否要退化成『换资源 + 回写布局属性』由 Bridge 统一做？",
+  "verdict": "**编辑器原生就够用，不需要退化。** Document.ReplaceSelection(url) 对组件实例完全可用：id / name / xy / relation / 显式 size 全部保留，磁盘落成 <component id=... name=... src=<新 itemId> fileName=... xy=...>。唯一会变的是**没有显式 size 时**实例尺寸跟随新源组件——这是 FGUI 本来的语义（实例尺寸默认继承源组件），不是替换动作改的。实例上的 P9-2 扩展 override 在替换后**存续**（新源组件同为 Button 扩展时）；换成没有扩展的源组件时，编辑器会自己丢弃不适用的 override。因此 Bridge 只需把类型校验从『仅 Image/Loader』放宽到『组件实例 + 组件资源』，其余全部交给编辑器原生命令。",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app（com.fairygui.FairyGUIEditor）",
+    "platform": "macOS (Apple Silicon)",
+    "probeHarness": "临时 p9_3_probe Action + CLI `call p9_3_probe`，探针结束后从 plugin/main.ts 撤回",
+    "fixture": "BridgeTestButton（extention=Button，200x80）实例 → 换成 BridgeTextTest（extention=Button，240x100）实例；另测无扩展的 Component1",
+    "controlGroup": "替换前后都抓同一 id 对象的 xy/size/relationCount 与内存序列化、磁盘 XML，确保『保留』与『变更』都有对照"
+  },
+  "findings": [
+    {
+      "id": "B1",
+      "claim": "Document.ReplaceSelection 对组件实例可用，且保留 id/name/xy/relation",
+      "evidence": "探针：替换前 {id:n8_qsdi, name:p93target, resourceURL:ui://qsezbqtwp93m3, x:300, y:200, relationCount:1} → 替换后 {id:n8_qsdi, name:p93target, resourceURL:ui://qsezbqtwmvx64, x:300, y:200, relationCount:1}；内存序列化 <component id=\"n8_qsdi\" name=\"p93target\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"300,200\"><relation target=\"\" sidePair=\"right-right\"/></component>，磁盘一致。",
+      "impact": "Bridge 不需要自己回写布局属性，原生命令一次搞定。"
+    },
+    {
+      "id": "B2",
+      "claim": "没有显式 size 时，实例尺寸跟随新源组件；有显式 size 时保留",
+      "evidence": "无显式 size：200x80 → 240x100（新源 BridgeTextTest 的自然尺寸）。有显式 size（size=\"150,60\"）：替换后仍是 size=\"150,60\"。",
+      "impact": "这是 FGUI 语义（实例尺寸默认继承源组件），不是替换动作改的。Bridge 在响应里回报 layout.before/after 并注明 preserve_size 对组件实例不适用——不做静默的尺寸改写。"
+    },
+    {
+      "id": "B3",
+      "claim": "实例上的扩展 override 在替换后存续；源组件扩展类型不同时编辑器会自己丢弃它",
+      "evidence": "带 <Button title=\"覆盖文案\"/> 的 Button 实例换成同为 Button 扩展的源组件 → override 仍在；换成无扩展的 Component1 → 节点变成 <component id=\"n11_qsdi\" name=\"p93cross\" src=\"7vc10\" fileName=\"Component1.xml\" xy=\"360,200\"/>，override 节点消失、extentionId 变空。",
+      "impact": "P9-2 与 P9-3 可以叠加使用；失效的 override 由编辑器原生清理，Bridge 不额外干预。"
+    },
+    {
+      "id": "B4",
+      "claim": "对象模型直改实例的源组件不可行：resourceURL 是只读 getter",
+      "evidence": "editor.d.ts 中 FObject.resourceURL 仅有 get；实例节点的 src 属性只存在于文档模型层（DocElement），对象模型改不动。",
+      "impact": "组件替换只能走文档模型层（ReplaceSelection），与 P8-0「既有节点走 DocElement」的结论一致。"
+    },
+    {
+      "id": "B5",
+      "claim": "expected_type 之前默认写死 image，会把组件替换挡在门外",
+      "evidence": "CLI --expected-type 与 MCP expected_type 的默认值都是 image，插件侧又要求它与目标推导类型一致 → 组件替换永远被拒。",
+      "impact": "改成『省略则按目标对象推导（image/loader→image，组件实例→component），显式传入则作为断言』，行为更贴合调用方。"
+    }
+  ],
+  "implementation": {
+    "plugin": "plugin/main.ts replaceObjectResource：放宽类型判定（组件实例 + 组件资源），组件实例走 Document.ReplaceSelection，响应新增 layout（before/after）与 notes",
+    "cli": "CLI replace-object-resource：--expected-type 默认值改为空（按目标推导），传了就作断言",
+    "mcp": "fgui_replace_object_resource：expected_type 默认 None（按目标推导）"
+  },
+  "liveVerification": {
+    "W1": {
+      "case": "组件实例换源组件（save + external_reload）",
+      "ok": true,
+      "saved": true,
+      "persisted": true,
+      "strength": "reload",
+      "writePath": "document-model",
+      "afterResourceURL": "ui://qsezbqtwmvx64",
+      "layout": {
+        "before": {
+          "x": 300,
+          "y": 200,
+          "width": 200,
+          "height": 80,
+          "relationCount": 1
+        },
+        "after": {
+          "x": 300,
+          "y": 200,
+          "width": 240,
+          "height": 100,
+          "relationCount": 1
+        }
+      },
+      "notes": [
+        "组件实例的尺寸按 FGUI 语义处理：实例有显式 size 就保留，没有就跟随新源组件；preserve_size 对组件实例不适用。"
+      ],
+      "xmlReadback": {
+        "id": "n8_w8ng",
+        "name": "finalSwap",
+        "type": "component",
+        "resourceURL": "ui://qsezbqtwmvx64",
+        "font": "",
+        "fontSize": 12,
+        "color": "#FFFFFF",
+        "align": "left",
+        "vAlign": "top",
+        "autoSize": "none",
+        "letterSpacing": 0,
+        "lineGap": 0,
+        "bold": false,
+        "italic": false,
+        "underline": false,
+        "strokeSize": 1,
+        "strokeColor": "#000000",
+        "shadowX": 0,
+        "shadowY": 0,
+        "shadowColor": "#000000",
+        "shadow": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "alpha": 1,
+        "visible": true,
+        "touchable": true,
+        "grayed": false,
+        "text": "",
+        "icon": "",
+        "x": 300,
+        "y": 200,
+        "width": null,
+        "height": null
+      },
+      "reloadValues": {
+        "id": "n8_w8ng",
+        "name": "finalSwap",
+        "type": "component",
+        "resourceURL": "ui://qsezbqtwmvx64",
+        "font": "",
+        "fontSize": null,
+        "color": null,
+        "align": null,
+        "vAlign": null,
+        "autoSize": null,
+        "lineGap": null,
+        "letterSpacing": null,
+        "width": 240,
+        "height": 100,
+        "x": 300,
+        "y": 200,
+        "bold": null,
+        "italic": null,
+        "underline": null,
+        "strokeSize": null,
+        "strokeColor": null,
+        "shadowX": null,
+        "shadowY": null,
+        "shadowColor": null,
+        "shadow": null,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "alpha": 1,
+        "visible": true,
+        "touchable": true,
+        "grayed": false,
+        "text": "",
+        "icon": ""
+      },
+      "diskXml": "<component id=\"n8_w8ng\" name=\"finalSwap\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"300,200\">\n      <relation target=\"\" sidePair=\"right-right\"/>\n    </component>"
+    },
+    "W2": {
+      "case": "实例带扩展 override 时换源组件（override 存续）",
+      "ok": true,
+      "saved": true,
+      "persisted": true,
+      "strength": "reload",
+      "writePath": "document-model",
+      "afterResourceURL": "ui://qsezbqtwmvx64",
+      "layout": {
+        "before": {
+          "x": 340,
+          "y": 200,
+          "width": 200,
+          "height": 80,
+          "relationCount": 0
+        },
+        "after": {
+          "x": 340,
+          "y": 200,
+          "width": 240,
+          "height": 100,
+          "relationCount": 0
+        }
+      },
+      "notes": [
+        "组件实例的尺寸按 FGUI 语义处理：实例有显式 size 就保留，没有就跟随新源组件；preserve_size 对组件实例不适用。"
+      ],
+      "xmlReadback": {
+        "id": "n9_w8ng",
+        "name": "finalOvr",
+        "type": "component",
+        "resourceURL": "ui://qsezbqtwmvx64",
+        "font": "",
+        "fontSize": 12,
+        "color": "#FFFFFF",
+        "align": "left",
+        "vAlign": "top",
+        "autoSize": "none",
+        "letterSpacing": 0,
+        "lineGap": 0,
+        "bold": false,
+        "italic": false,
+        "underline": false,
+        "strokeSize": 1,
+        "strokeColor": "#000000",
+        "shadowX": 0,
+        "shadowY": 0,
+        "shadowColor": "#000000",
+        "shadow": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "alpha": 1,
+        "visible": true,
+        "touchable": true,
+        "grayed": false,
+        "text": "",
+        "icon": "",
+        "x": 340,
+        "y": 200,
+        "width": null,
+        "height": null
+      },
+      "reloadValues": {
+        "id": "n9_w8ng",
+        "name": "finalOvr",
+        "type": "component",
+        "resourceURL": "ui://qsezbqtwmvx64",
+        "font": "",
+        "fontSize": null,
+        "color": null,
+        "align": null,
+        "vAlign": null,
+        "autoSize": null,
+        "lineGap": null,
+        "letterSpacing": null,
+        "width": 240,
+        "height": 100,
+        "x": 340,
+        "y": 200,
+        "bold": null,
+        "italic": null,
+        "underline": null,
+        "strokeSize": null,
+        "strokeColor": null,
+        "shadowX": null,
+        "shadowY": null,
+        "shadowColor": null,
+        "shadow": null,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "alpha": 1,
+        "visible": true,
+        "touchable": true,
+        "grayed": false,
+        "text": "保留的覆盖",
+        "icon": ""
+      },
+      "diskXml": "<component id=\"n9_w8ng\" name=\"finalOvr\" src=\"mvx64\" fileName=\"BridgeTextTest.xml\" xy=\"340,200\">\n      <Button title=\"保留的覆盖\"/>\n    </component>\n  </displayList>"
+    },
+    "negativeCases": [
+      {
+        "case": "组件实例换成图片资源",
+        "ok": false,
+        "code": "invalid_argument",
+        "message": "本次替换的资源类型必须是 component"
+      },
+      {
+        "case": "expected_type 断言不匹配",
+        "ok": false,
+        "code": "invalid_argument",
+        "message": "本次替换的资源类型必须是 component"
+      },
+      {
+        "case": "目标是根组件",
+        "ok": false,
+        "code": "unsupported_property",
+        "message": "可信资源替换目前仅支持 Image/Loader/组件实例；Button 状态请使用专用 API"
+      },
+      {
+        "case": "图片对象换成组件资源",
+        "ok": false,
+        "code": "invalid_argument",
+        "message": "本次替换的资源类型必须是 image"
+      }
+    ],
+    "sourceComponentsUntouched": {
+      "checked": [
+        "BridgeTestButton.xml",
+        "BridgeTextTest.xml"
+      ],
+      "containsProbeValue": false
+    }
+  },
+  "checks": {
+    "mockHost": "264/264（含 7 项新用例）",
+    "python": "58 passed + 12 subtests",
+    "tsc": "0 error",
+    "phase0FixtureLive": "uv run python scripts/phase0_fixture.py verify --live → exit 0",
+    "sampleProjectRestored": "验收后 sample 工程已恢复到 git 状态"
+  },
+  "unverified": [
+    "Windows 版 FairyGUI Editor 未验证（本轮结论基于 macOS 上的 6.1.4）。",
+    "跨包替换（源组件在另一个包）未在真机上试：编辑器会写 pkg= 与 fileName= 属性，本次只验证了同包替换。",
+    "替换成 Button 扩展组件后其状态图/控制器等内部结构未逐项核对（编辑器按新源组件重建实例内部对象）。"
+  ]
+}

@@ -297,7 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     resource_parser = subparsers.add_parser("replace-object-resource", help="替换对象资源引用")
     _add_target_arguments(resource_parser)
     resource_parser.add_argument("resource_url")
-    resource_parser.add_argument("--expected-type", default="image")
+    resource_parser.add_argument("--expected-type", default="", help="断言资源类型（image/component）；省略则按目标对象推导")
     resource_parser.add_argument("--state")
     resource_parser.add_argument("--save", action="store_true")
     resource_parser.add_argument("--no-verify", action="store_true")
@@ -343,6 +343,11 @@ def build_parser() -> argparse.ArgumentParser:
     text_set_parser.add_argument("style", help="文本样式 JSON 对象")
     text_set_parser.add_argument("--save", action="store_true")
     text_set_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
+    override_parser = subparsers.add_parser("set-instance-override", help="写组件实例的扩展级 override（0.8.21）")
+    _add_target_arguments(override_parser)
+    override_parser.add_argument("properties", help="扩展属性 JSON 对象，例如 {\"title\":\"轻松\",\"titleFontSize\":28}")
+    override_parser.add_argument("--save", action="store_true")
+    override_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
     verify_parser = subparsers.add_parser("verify-document", help="验证当前文档")
     verify_parser.add_argument("--max-depth", type=int, default=12)
     verify_parser.add_argument("--path")
@@ -776,7 +781,8 @@ def main() -> int:
             params = {"target": target_from_args(args)}
         elif args.command == "replace-object-resource":
             action = "replace_object_resource"
-            params = {"target": target_from_args(args), "resourceURL": args.resource_url, "expectedType": args.expected_type, "verify": not args.no_verify, "save": args.save, "externalReload": args.external_reload}
+            params = {"target": target_from_args(args), "resourceURL": args.resource_url, "verify": not args.no_verify, "save": args.save, "externalReload": args.external_reload}
+            if args.expected_type: params["expectedType"] = args.expected_type
             if args.state: params["state"] = args.state
         elif args.command == "references":
             action = "query_references"
@@ -818,6 +824,9 @@ def main() -> int:
         elif args.command == "set-text-style":
             action = "set_text_style"
             params = {"target": target_from_args(args), "style": load_json_value(args.style), "save": args.save, "verify": True, "externalReload": args.external_reload}
+        elif args.command == "set-instance-override":
+            action = "set_instance_override"
+            params = {"target": target_from_args(args), "properties": load_json_value(args.properties), "save": args.save, "verify": True, "externalReload": args.external_reload}
         elif args.command == "verify-document":
             action = "verify_document"
             params = {"maxDepth": args.max_depth, "readXml": not args.editor_only, "externalReload": args.external_reload}

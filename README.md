@@ -20,6 +20,7 @@ FairyGUI Agent Bridge 在 FairyGUI Editor 和 AI 编程助手之间架了一座�
 - **做动效**：读取、创建和修改 Transition，支持全部原生轨道，可逐关键帧调整，也能在编辑器里直接预览。
 - **整理资源关系**：替换图片引用，查询「谁引用了它」和「它依赖了谁」。
 - **分支协作**：列出、创建和切换工程分支，让试验性的改动落在独立目录里，不影响主干。
+- **实例级覆盖**：同一个组件在不同实例上显示不同文案与样式（按钮标题、字号、颜色）。
 - **验证改动**：保存后比对文档与磁盘 XML，确认内容真的写进去了。
 - **发布**：按活动包、指定包或全部包发布，并在发布前按真实图集约束处理大图。
 
@@ -214,6 +215,10 @@ uv run fgui-agent find-duplicate
 uv run fgui-agent save
 uv run fgui-agent insert-text --text "Hello" --x 40 --y 520 --name title \
   --style '{"fontSize":28,"color":"#FFCC00","bold":true,"strokeSize":2,"strokeColor":"#FF0000","shadowX":1,"shadowY":2}' --save
+
+# 同一个组件的不同实例显示不同文案与样式（扩展级 override）
+uv run fgui-agent set-instance-override '{"title":"轻松","titleFontSize":28,"titleColor":"#333333"}' \
+  --path lblOverride --save --external-reload
 uv run fgui-agent publish --scope active
 ```
 
@@ -223,19 +228,19 @@ uv run fgui-agent publish --scope active
 
 ## MCP 工具一览
 
-共 63 个工具，按用途分组：
+共 65 个工具，按用途分组：
 
 | 类别 | 工具名称 | 功能描述 |
 | :--- | :--- | :--- |
 | **连接与定位** | `fgui_status`、`fgui_ping`、`fgui_use_project`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items` | 检查连接状态、切换工程、查看包列表与包内资源（`fgui_list_items` 可指定 `branch`） |
 | **分支** | `fgui_list_branches`、`fgui_create_branch`、`fgui_switch_branch` | 列出、创建和切换工程分支，切换后读写都会落在对应分支 |
-| **文档与对象** | `fgui_open_document`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_select_object`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_property`、`fgui_remove_object` | 打开组件、查看对象树、选中元件、修改属性及增删显示对象；`fgui_insert_text` 创建文本对象（0.8.20+） |
+| **文档与对象** | `fgui_open_document`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_select_object`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_property`、`fgui_set_instance_override`、`fgui_remove_object` | 打开组件、查看对象树、选中元件、修改属性及增删显示对象；`fgui_insert_text` 创建文本对象（0.8.20+）；`fgui_set_instance_override` 写实例的扩展级 override（0.8.21+） |
 | **资源创建/导入** | `fgui_create_component`、`fgui_create_button`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound` | 新建组件/按钮，从本地绝对路径导入图片、字体与声音 |
 | **MovieClip 序列帧** | `fgui_create_movieclip`、`fgui_get_movieclip`、`fgui_update_movieclip`、`fgui_remove_movieclip` | 从本地图片序列创建或更新序列帧动画（帧直接嵌入 `.jta`） |
 | **Transition 动效** | `fgui_list_transitions`、`fgui_get_transition`、`fgui_verify_transition`、`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item`、`fgui_add_keyframes`、`fgui_set_keyframe`、`fgui_duplicate_transition` | 读取与校验动效，声明式增改整段动效，原子化修改条目或关键帧，复制整条 Transition |
 | **动画预览** | `fgui_preview_animation` | 在编辑器中实时播放、暂停、停止、跳帧预览 Transition 或 MovieClip |
 | **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 撤销/重做、保存文档或放弃未保存修改 |
-| **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`、`fgui_replace_references`、`fgui_query_references`、`fgui_query_dependencies`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树、替换资源引用、查询引用图、读写文本样式（0.8.20+ 支持 `bold`/`italic`/`underline`/`strokeSize`/`strokeColor`/`shadowX`/`shadowY`/`shadowColor`） |
+| **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`（0.8.21+ 也可换组件实例的源组件）、`fgui_replace_references`、`fgui_query_references`、`fgui_query_dependencies`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树、替换资源引用、查询引用图、读写文本样式（0.8.20+ 支持 `bold`/`italic`/`underline`/`strokeSize`/`strokeColor`/`shadowX`/`shadowY`/`shadowColor`） |
 | **冗余资源** | `fgui_find_unused`、`fgui_find_duplicate` | 找出没有被引用的资源，以及内容完全重复的文件（只读） |
 | **布局与控制器** | `fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 修改 List/Group 布局、替换 Relation 绑定、设置 gearDisplay 联动、增删改 Controller |
 | **图集与发布** | `fgui_get_publish_settings`、`fgui_set_publish_settings`、`fgui_analyze_atlas_fit`、`fgui_clear_atlas_markers`、`fgui_publish` | 查询或修改发布设置、判断图片能否放进图集、修正图集标记、执行资源发布 |
@@ -255,6 +260,20 @@ uv run fgui-agent publish --scope active
 响应里的 `persisted` 和 `strength`（`reload` / `disk` / `none`）会告诉你验证到了哪一层。
 
 属性修改和 Transition 编辑会进入 Agent 撤销栈，可以用 `fgui_undo` / `fgui_redo` 回退。结构创建、删除和资源导入不属于可逆操作；`discard` 只放弃当前文档未保存的修改，不能替代 `undo` 或 `save`。
+
+### 同一个组件、不同实例（扩展级 override）
+
+- `fgui_set_instance_override` 让同一个组件在不同实例上显示不同的文案与样式：Button 扩展可写 `title`（`text` 是别名）、`icon`、`selectedTitle`、`selectedIcon`、`titleColor`、`titleFontSize`；Label 扩展可写 `title`、`icon`、`titleColor`、`titleFontSize`。落盘形态是实例节点里的扩展子节点 `<Button title="..."/>`。
+- **只有扩展级这一层可用**。改实例内部的普通子对象（普通 `<text>`、`<image>`）在 FairyGUI Editor 6.1.4 上做不到：编辑器不产出这种节点，运行时也不消费，Bridge 会在写入前直接拒绝。这类需求请用 `fgui_insert_text` 直接建对象，或把样式固化成组件类型。
+- 颜色只接受 `#RRGGBB` 六位（编辑器落盘会丢掉 alpha，带 alpha 的输入会被拒绝）；`titleColor` / `titleFontSize` 是「开关 + 参数」结构，Bridge 会自动打开对应开关。
+- 源组件没有扩展（例如普通组件实例）时会被拒绝，不会静默无效。
+
+### 换掉一个组件实例
+
+- `fgui_replace_object_resource` 除了 Image/Loader，**0.8.21 起也支持把组件实例换成另一个组件**——此前「把白色文本组件换成深灰文本组件」只能删掉重插，还要手算插入位置。
+- 实例的 `id`、`name`、位置、relation 绑定和**显式写死的尺寸**都会保留；实例上的扩展覆盖（`<Button title="..."/>`）也会跟着留下来。换成没有扩展的源组件时，编辑器会自己丢弃用不上的覆盖。
+- 实例**没有**显式写死尺寸时，尺寸会跟随新源组件——这是 FairyGUI 本来的语义。响应里的 `layout` 会报出替换前后的位置与尺寸，尺寸变了能立刻看出来。
+- 根组件是组件定义本身，不是实例，不能被替换。
 
 ### 查找冗余资源
 

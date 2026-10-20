@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.19`
+- Bridge 版本：`0.8.21`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：64，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：65，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override 工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -33,7 +33,7 @@
 | `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing、`save?`、`verify?`、`external_reload?`（删除不支持 external_reload） | 读取、更新或显式强制删除 MovieClip |
 | `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth`、`branch?` | 读取活动文档或对象树 |
 | `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
-| `fgui_replace_object_resource` | target、resource_url、expected_type、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用（Button 状态显式拒绝） |
+| `fgui_replace_object_resource` | target、resource_url、expected_type?、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用，0.8.21 起也支持**组件实例换源组件**（Button 状态显式拒绝）；expected_type 省略则按目标推导、传入则作断言 |
 | `fgui_query_references` / `fgui_query_dependencies` | `resource_url`、`max_items?`、`skip_package_open?` / 另加 `seek_level?` | 只读引用图：谁引用了这个资源 / 这个资源依赖了谁，精确到 packageId/itemId/propKey/arrayIndex/valueType；`seek_level` 取 `selection`/`samePackageButNotExported`/`samePackage`（默认）/`all`，`max_items` 默认 200、上限 2000 |
 | `fgui_find_unused` | `packages?`、`types?`、`include_branches?`、`skip_exported?`、`max_items?` | 只读资源审计：按引用图找出零引用资源，返回包、路径、文件大小与图片尺寸；导出资源默认列出并标记 `exported`，`skip_exported=true` 可排除；`max_items` 默认 500、上限 5000 |
 | `fgui_find_duplicate` | `packages?`、`types?`、`include_branches?`、`max_groups?`、`max_items_per_group?` | 只读资源审计：按文件内容 MD5 + 字节数分组，返回每组条目、浪费字节数；`max_groups` 默认 100、上限 1000，`max_items_per_group` 默认 50、上限 500 |
@@ -46,6 +46,7 @@
 | `fgui_list_controllers` / `fgui_set_controller` | 无 / `name`、pages/add_pages/selected_index/selected_page/exported/auto_radio_group_depth/home_page、create?、remove?、save?、verify?、external_reload? | 列出或创建/修改/删除当前组件 Controller |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
 | `fgui_insert_text` | text、x、y、name?、style?、save?、verify?、external_reload? | 0.8.20 新增：在当前文档根组件下创建文本对象（FGUI 的文本是裸节点，insert_object 插不进来） |
+| `fgui_set_instance_override` | target、`properties`（扩展属性集）、save?、verify?、external_reload? | 0.8.21 新增：写组件实例的**扩展级** override（Button/Label 的 title/icon/selectedTitle/selectedIcon/titleColor/titleFontSize），落盘形态是实例节点里的扩展子节点 `<Button title="..."/>`；编辑器与 FGUI 运行时都只支持这一层，**不支持**逐子对象（普通 text/image）覆盖 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
 | `fgui_verify_transition` | `name?`、`check_bounds?` | 只读校验 Transition 的目标、关键帧值、嵌套引用与 XY 范围；不保存、不置脏 |
 | `fgui_upsert_transition` / `fgui_remove_transition` | 类型化 `transition` / `name`，均支持 `save?`、`verify?`、`external_reload?` | 声明式创建、完整替换或删除 Transition |
@@ -894,3 +895,111 @@ Transition 的情况）。`add_keyframes` 会逐帧设置 `doc.head` 再创建�
 
 **未在真机触发**：分支资源审计（示例工程没有分支，由模拟宿主覆盖）、大工程耗时上限、
 运行时动态加载导致的「假未使用」（属于口径边界，不宣称能消除）。
+
+## 0.8.21：实例级扩展 override（P9-2）
+
+### 行为
+
+- `fgui_set_instance_override`（`set_instance_override`）：写**组件实例**的扩展级 override，
+  让同一个组件在不同实例上显示不同的文案与样式。参数：`target`（实例）、`properties`
+  （扩展属性集）、`save` / `verify` / `external_reload`。
+- 白名单（按扩展类型）：Button 支持 `title`（`text` 是别名）、`icon`、`selectedTitle`、
+  `selectedIcon`、`titleColor`（`#RRGGBB`）、`titleFontSize`；Label 支持 `title`（`text`
+  是别名）、`icon`、`titleColor`、`titleFontSize`。
+- 落盘形态是实例节点里的扩展子节点：
+  `<component id="..." name="..." src="..."><Button title="轻松" titleColor="#333333" titleFontSize="28"/></component>`。
+  这与 FairyGUI-unity 运行时读的实例覆盖段（GButton.Setup_AfterAdd 读 title / selectedTitle /
+  icon / selectedIcon / titleColor / titleFontSize）一一对应，编辑器与运行时对齐。
+- 走 `save` / `verify` / `external_reload` 写验证梯子；`external_reload` 是关闭并重开文档后
+  重新定位比对，能证明「重新载入时值不丢」。
+- 进 Agent 属性事务栈：`fgui_undo` / `fgui_redo` 可把值写回旧值。
+
+### 6.1.4 运行时事实（活体探针 + 真机，证据 `tests/reports/p9-2-override-probe-live.json`）
+
+- **根因**：override 登记在**实例节点**上，而实例内部的对象属于源组件、自己没有 docElement。
+  Bridge 原来的通用写路径按 docElement 优先、找不到就回退对象模型，于是写进了内存副本，
+  磁盘上什么都没写——这就是「改实例内部子对象，内存生效、保存丢失」的原因。
+- **唯一入口是 `DocElement.SetExtensionProperty(propName, value)`**。
+  同族的 `DocElement.SetChildProperty(target, propertyId, value)` 对普通子对象是**静默 no-op**
+  （target 按名字/按 id、propId 0/1/2/3/8 全部无效），所以编辑器侧不存在「逐子对象覆盖」。
+- **对象模型直写扩展成员不置脏**，`save` 会静默跳过（P8-0 的老坑在扩展属性上复现）；
+  走文档模型层则写入自己会置脏。Bridge 因此固定走文档模型层。
+- **`titleColor` / `titleFontSize` 是「开关 + 参数」结构**：不先置 `titleColorSet` /
+  `titleFontSizeSet` 就不落盘（与 P9-1 的描边/投影同构），写序固定为先开关后参数。
+  Bridge 收到这两个属性时自动开开关。
+- **颜色只保留 RGB 六位**，编辑器会丢掉 alpha，所以带 alpha 的输入直接拒绝。
+- **源组件没有扩展时，`SetExtensionProperty` 是静默 no-op**（不抛异常也不落盘），
+  Bridge 必须自己拦住，否则就是「返回成功但什么都没写」的假成功。
+- 本机三个生产工程（many_tradition / CleanCommando / youdoo_boxing_jab）共 174 个真实
+  override 实例，tag 只有 `Button`（33）、`ProgressBar`（8）、`Slider`（9），
+  **没有任何一个普通子对象（text/image）的 override 样本**——真人在编辑器里也只产出扩展级覆盖。
+
+### 语义边界
+
+- **只支持扩展级 override**。改实例内部的普通子对象（普通 `<text>`、`<image>` 等）
+  在 FairyGUI Editor 6.1.4 上做不到：编辑器不产出这种节点，运行时也不消费。
+  这类需求请用 `fgui_insert_text` 直接建对象，或把样式固化成组件类型。
+- 覆盖的是**文案**（title）与**字号/颜色**（titleFontSize/titleColor），
+  覆盖不了普通文本子对象的其它样式（描边、投影、对齐等仍属组件定义）。
+- 根组件是组件定义本身，不接受实例级 override；`set_property` 仍是对普通对象属性的入口。
+- 撤销只能把值写回旧值：写入前并不存在的键没有 unset 入口，撤销后保留当前值，
+  响应里的 `notRestored` 会列出这些键。
+
+### 验证状态
+
+模拟宿主 257 项（含 9 项新用例）、Python 58 项、tsc 0 error。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p9-2-override-live.json`）：
+对 `BridgeTextTest`（Button 扩展，含 title 文本子对象）的实例写
+`title=轻松 / titleFontSize=28 / titleColor=#333333`，`save + external_reload` 后
+`strength=reload`——关闭并重开文档后三个值都还在；磁盘形态是
+`<Button title="轻松" titleColor="#333333" titleFontSize="28"/>`，源组件
+`BridgeTextTest.xml` 未被污染。六条负路径（不支持的属性、非法颜色、根组件、非实例、
+无扩展源组件、非法字号）全部在写入前拒绝，不留半写入；Agent 撤销可把值写回旧值。
+
+**未在真机验证**：Windows 版 Editor；Label 扩展的可落盘样本（示例工程的
+`create-component --extension label` 产出的是未被注册的扩展，`extentionId` 为空），
+Label 的属性名按 FairyGUI-unity `GLabel.Setup_AfterAdd` 核对，标注为「机制支持、未真机落盘验证」；
+发布产物未逐字节核对。
+
+## 0.8.21（续）：组件实例换源组件（P9-3）
+
+### 行为
+
+- `fgui_replace_object_resource`（`replace_object_resource`）放宽到**组件实例**：
+  目标是组件实例时，替换资源可以是另一个组件资源，走编辑器原生命令
+  `Document.ReplaceSelection(url)`。
+- 保留：实例的 `id`、`name`、`xy`、relation 绑定、**显式** `size` 属性。
+- 跟随新源组件：实例**没有**显式 `size` 时，尺寸取新源组件的自然尺寸（FGUI 本来的语义）。
+- 响应新增 `layout`（`before`/`after` 的 x/y/width/height/relationCount）与 `notes`，
+  明确写出「组件实例的尺寸按 FGUI 语义处理，`preserve_size` 对组件实例不适用」——
+  不做静默的尺寸改写。
+- 实例上的扩展 override（P9-2 的 `<Button title="..."/>`）在替换后**存续**；
+  换成没有扩展的源组件时，编辑器会自己丢弃不适用的 override。
+- `expected_type` 语义改为：**省略则按目标对象推导**（Image/Loader→image，组件实例→component），
+  显式传入则作为断言。之前默认写死 `image`，会把组件替换挡在门外。
+
+### 6.1.4 运行时事实（活体探针 + 真机，证据 `tests/reports/p9-3-replace-instance-live.json`）
+
+- `Document.ReplaceSelection` 对组件实例**完全可用**，不需要退化成「换资源 + 回写布局属性」：
+  原生命令一次就把 id/name/xy/relation/显式 size 全部保住并落盘。
+- `FObject.resourceURL` 是只读 getter，实例节点的 `src` 只存在于文档模型层——
+  组件替换只能走文档模型层（与 P8-0「既有节点走 DocElement」一致）。
+- 落盘形态：`<component id="..." name="..." src="<新 itemId>" fileName="<新文件名>.xml" xy="..."/>`。
+
+### 语义边界
+
+- 根组件是组件定义本身，不是实例，不接受替换（报 `unsupported_property`）。
+- 组件实例只能换**组件**资源，Image/Loader 只能换 image 资源——类型不匹配在写入前拒绝。
+- 源组件的内部结构（Button 状态图、控制器等）按新源组件重建，Bridge 不做逐项核对。
+
+### 验证状态
+
+模拟宿主 264/264（含 7 项新用例）、Python 58 项、tsc 0 error。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**：把 `BridgeTestButton`（Button 扩展，200x80）实例换成
+`BridgeTextTest`（Button 扩展，240x100）实例，`save + external_reload` 后 `strength=reload`——
+关文档重开后新 `src` 仍在；xy 与 relation 保留；带扩展 override 的实例替换后 override 存续；
+四条负路径（换错资源类型、expected_type 断言不符、根组件、图片对象换组件）全部写入前拒绝。
+
+**未在真机验证**：Windows 版 Editor；跨包替换（源组件在另一个包，编辑器会写 `pkg=` 与 `fileName=`）。

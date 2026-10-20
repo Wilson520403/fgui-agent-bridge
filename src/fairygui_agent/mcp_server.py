@@ -767,12 +767,17 @@ def fgui_set_property(
 
 
 @mcp.tool()
-def fgui_replace_object_resource(resource_url: str, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected_type: str = "image", state: str | None = None, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
-    """通过 Editor API 替换 Image/Loader 图片引用；保存后默认比对磁盘 XML。Button 状态暂不支持。
+def fgui_replace_object_resource(resource_url: str, object_id: str | None = None, object_path: str | None = None, object_name: str | None = None, expected_type: str | None = None, state: str | None = None, save: bool = False, verify: bool = True, external_reload: bool = False) -> dict[str, Any]:
+    """通过 Editor API 替换 Image/Loader 图片引用或**组件实例的源组件**（0.8.21+）；保存后默认比对磁盘 XML。Button 状态暂不支持。
+
+    组件实例换源组件走编辑器原生命令 Document.ReplaceSelection：id/name/xy/relation/显式 size 全部保留，
+    没有显式 size 时尺寸跟随新源组件（FGUI 语义，preserve_size 对组件实例不适用）。
+    expected_type 省略时按目标对象推导（image/loader→image，组件实例→component），显式传入则作为断言。
 
     external_reload=True 会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证；需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
     """
-    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "resourceURL": resource_url, "expectedType": expected_type, "save": save, "verify": verify, "externalReload": external_reload}
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "resourceURL": resource_url, "save": save, "verify": verify, "externalReload": external_reload}
+    if expected_type: params["expectedType"] = expected_type
     if state: params["state"] = state
     return _client.call("replace_object_resource", params)
 
@@ -919,6 +924,43 @@ def fgui_set_text_style(style: dict[str, Any], object_id: str | None = None, obj
     external_reload=True 会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」的验证；需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
     """
     return _client.call("set_text_style", {"target": _target(object_id, object_path, object_name), "style": style, "save": save, "verify": verify, "externalReload": external_reload})
+
+
+@mcp.tool()
+def fgui_set_instance_override(
+    properties: dict[str, Any],
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """写组件实例的扩展级 override（同一个组件、不同实例不同文案/样式）。
+
+    只支持**扩展级**覆盖，这是编辑器与 FGUI 运行时共同支持的那一层：
+    源组件是 Button 扩展时可写 title（text 是别名）、icon、selectedTitle、selectedIcon、
+    titleColor（#RRGGBB 六位，alpha 会被编辑器丢掉）、titleFontSize；Label 扩展可写
+    title、icon、titleColor、titleFontSize。落盘形态是实例节点里的扩展子节点
+    `<component ...><Button title="..."/></component>`，运行时按同一组字段消费。
+
+    边界（真机 6.1.4 实测）：编辑器**不支持**逐子对象覆盖——改实例内部子对象只改到内存，
+    磁盘不落盘；这类需求请改用 insert_text 直接建对象，或把样式固化成组件类型。
+    源组件没有扩展时也会被拒绝。
+
+    external_reload=True 会在保存后关闭并重新打开文档再比对，是唯一能证明「重新载入时值不丢」
+    的验证；需要 save=True。响应中的 strength 字段标明验证强度：reload / disk / none。
+    """
+    return _client.call(
+        "set_instance_override",
+        {
+            "target": _target(object_id, object_path, object_name),
+            "properties": properties,
+            "save": save,
+            "verify": verify,
+            "externalReload": external_reload,
+        },
+    )
 
 
 @mcp.tool()
