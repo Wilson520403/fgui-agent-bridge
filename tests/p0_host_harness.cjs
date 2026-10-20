@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const cp = require('node:child_process');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const fixture = fs.readFileSync(path.join(__dirname, 'fixtures/p0-persistence/initial.xml'), 'utf8');
 function parseXML(text) {
@@ -34,8 +35,12 @@ const tests=[];
 let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
+let branches,branchRoots,branchItems,branchDirectories;
 let controllers,refRegistry,depRegistry;
 let globalSettings;
+// 打开的组件文档（url -> 文档对象）。clear_atlas_markers 用它判断包内是否有
+// 打开的文档；不建模的话，「有文档却直接 Dispose 重开包」会在测试里一路绿灯。
+let openDocs;
 // 原生 ReplaceReferences 的调用轨迹：写侧用例要钉住「只调一次」「调的是本实例
 // 查出来的那批」，否则「预览复用旧列表」这类错误在测试里看不出来。
 let replaceCallCount,lastReplace;
@@ -242,6 +247,9 @@ function reopenPackageFromDisk(){
  }
  const reopened=makePackage();
  reopened.publishSettings=decodePublishXml(attrs);
+ // 重开后的包重新拥有这些资源，否则 items 枚举会漏掉它们——真机重开是从磁盘
+ // 重建资源表的，不会把资源留在旧对象上。
+ packageItems.forEach(i=>{i.owner=reopened;});
  reopened.isReopened=true;
  return reopened;
 }
@@ -259,6 +267,39 @@ function makePackageItem(name,type,ext){
  packageItems.push(it);
  resources[it.GetURL()]=it;
  return it;
+}
+// 分支资源在编辑器里是独立的包条目：pkg.items 看不到，必须从分支根
+// GetItemListing 枚举。夹具把 resource 登记到 project.GetItemByURL，但
+// 不放进主干 packageItems，否则「主干列表混入分支资源」会在测试里通过假象。
+function branchFromFolderPath(path){
+ const m=/^\/:([^/]+)\/?$/.exec(String(path||''));
+ return m?m[1]:'';
+}
+function makeBranchRoot(name){
+ const root={id:`/:${name}/`,name:':branch',type:'folder',title:':branch',path:'/',branch:String(name),isBranchRoot:true,
+  exported:false,file:null,folderAtlas:'',_children:[],
+  get children(){return {Count:root._children.length,get_Item:i=>root._children[i]};},
+  GetURL:()=>`ui://branch/${name}`};
+ return root;
+}
+function makeBranchItem(name,type,ext,branch){
+ const it=makePackageItem(name,type,ext);
+ packageItems.pop();
+ delete resources[it.GetURL()];
+ it.id='br'+(branchItems.length+1);
+ it.branch=String(branch);
+ it.path=`/:${branch}/`;
+ it.file=`/pkg/assets_${branch}/Fixture/${it.name}`;
+ it.GetURL=()=>`ui://${pkg.id}${it.id}`;
+ it.owner=pkg;
+ branchItems.push(it);
+ resources[it.GetURL()]=it;
+ if(branchRoots[branch])branchRoots[branch]._children.push(it);
+ return it;
+}
+function serializeBranchPackageXml(branch){
+ return `<branchDescription><resources>${branchItems.filter(i=>i.branch===branch)
+  .map(i=>`<${i.type} id="${i.id}" name="${i.name}" path="/" exported="${i.exported}"/>`).join('')}</resources></branchDescription>`;
 }
 // 发布设置夹具。字段名照 6.1.4 真实声明（GlobalPublishSettings / PublishSettings /
 // AtlasSettings / PackSettings），形状不同是真实的：全局只有 AtlasSetting
@@ -312,16 +353,28 @@ function makePackage(){
   rootItem:{type:'folder',path:'/'},
   EnsureOpen(){this.opened=true;},SetChanged(){this.changed=true;},
   Dispose(){this.disposed=true;},
-  Save(){if(pkgSaveMode==='throw')throw Error('disk full');if(pkgSaveMode==='stale')return;flushFolderAtlasToDisk();files['/pkg/package.xml']=serializePackageXml();this.changed=false;},
+  Save(){if(pkgSaveMode==='throw')throw Error('disk full');if(pkgSaveMode==='stale')return;flushFolderAtlasToDisk();files['/pkg/package.xml']=serializePackageXml();
+   for(const branch of branches){const manifest=`/pkg/assets_${branch}/Fixture/package_branch.xml`;if(branchDirectories.has(`/pkg/assets_${branch}/Fixture`)||manifest in files)files[manifest]=serializeBranchPackageXml(branch);}
+   this.changed=false;},
   GetItemByPath(p){return p==='/'?this.rootItem:null;},
+  GetItem(path){return branchRoots[String(path).replace(/^\/:([^/]+)\/$/,'$1')]||packageItems.find(i=>i.id===path)||null;},
   EnsurePathExists(p){return this.rootItem;},
-  GetItemByName(folder,name){return packageItems.find(i=>(i.name===name||i.name===`${name}.png`||i.name===`${name}.xml`||i.name===`${name}.jta`)&&i.path===folder.path)||null;},
-  GetItem(id){return packageItems.find(i=>i.id===id)||null;},
-  CreateComponentItem(name,w,h,folderPath,extensionId,exported){const it=makePackageItem(name,'component','.xml');it.exported=exported;files[it.file]='<component/>';return it;},
-  ImportResource(sourcePath,folderPath,fileName){const it=makePackageItem(fileName.replace(/\.[^.]+$/,''),'image',fileName.slice(fileName.lastIndexOf('.')));files[it.file]=files[sourcePath];return it;},
+  GetItemByName(folder,name){if(folder&&folder.branch)return branchItems.find(i=>i.branch===folder.branch&&(i.name===name||i.name===`${name}.png`||i.name===`${name}.xml`||i.name===`${name}.jta`))||null;
+   return packageItems.find(i=>(i.name===name||i.name===`${name}.png`||i.name===`${name}.xml`||i.name===`${name}.jta`)&&i.path===folder.path)||null;},
+  GetItem(id){return packageItems.find(i=>i.id===id)||branchItems.find(i=>i.id===id)||null;},
+  GetItemListing(folder){const list=folder&&folder.isBranchRoot?branchItems.filter(i=>i.branch===folder.branch):packageItems.slice();return {Count:list.length,get_Item:i=>list[i]};},
+  GetBranchRootItem(name){return branchRoots[String(name)]||null;},
+  GetBranchPath(name){return `/pkg/assets_${name}/Fixture`;},
+  CreateBranch(name){if(!branchRoots[name])branchRoots[name]=makeBranchRoot(name);if(branches.indexOf(String(name))<0)branches.push(String(name));
+   branchDirectories.add(`/pkg/assets_${name}`);branchDirectories.add(`/pkg/assets_${name}/Fixture`);
+   files[`/pkg/assets_${name}/Fixture/package_branch.xml`]=serializeBranchPackageXml(name);return branchRoots[name];},
+  CreateFolder(name,path){const branch=branchFromFolderPath(path);const folder={id:'folder'+packageItems.length+'-'+branchItems.length,name:String(name).replace(/\/$/,''),type:'folder',title:String(name),path:path||'/',file:null,exported:false,folderAtlas:'',_children:[]};
+   if(branch){folder.branch=branch;if(branchRoots[branch])branchRoots[branch]._children.push(folder);branchItems.push(folder);}else packageItems.push(folder);return folder;},
+  CreateComponentItem(name,w,h,folderPath,extensionId,exported){const branch=branchFromFolderPath(folderPath);const it=branch?makeBranchItem(name,'component','.xml',branch):makePackageItem(name,'component','.xml');it.exported=exported;files[it.file]='<component/>';return it;},
+  ImportResource(sourcePath,folderPath,fileName){const branch=branchFromFolderPath(folderPath);const ext=fileName.slice(fileName.lastIndexOf('.'));const it=branch?makeBranchItem(fileName.replace(/\.[^.]+$/,''),'image',ext,branch):makePackageItem(fileName.replace(/\.[^.]+$/,''),'image',ext);files[it.file]=files[sourcePath];return it;},
   UpdateResource(item,sourcePath){files[item.file]=files[sourcePath];return item;},
-  CreateMovieClipItem(name,folderPath){const it=makePackageItem(name,'movieclip','.jta');return it;},
-  DeleteItem(item){const i=packageItems.indexOf(item);if(i>=0)packageItems.splice(i,1);delete resources[item.GetURL()];delete files[item.file];}
+  CreateMovieClipItem(name,folderPath){const branch=branchFromFolderPath(folderPath);return branch?makeBranchItem(name,'movieclip','.jta',branch):makePackageItem(name,'movieclip','.jta');},
+  DeleteItem(item){const i=packageItems.indexOf(item);if(i>=0)packageItems.splice(i,1);const b=branchItems.indexOf(item);if(b>=0)branchItems.splice(b,1);delete resources[item.GetURL()];delete files[item.file];}
  };
 }
 // The inner child of the comp1 fixture component; rebuilt on reload so the
@@ -373,7 +426,8 @@ function setup() {
  files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
  transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
- replaceCallCount=0;lastReplace=null;
+ branches=[];branchRoots={};branchItems=[];branchDirectories=new Set(['/pkg']);
+ replaceCallCount=0;lastReplace=null;openDocs=new Map();
  controllers=[makeController('c1',['page0','page1'])];
  globalSettings=makeGlobalPublishSettings();
  pkg=makePackage();
@@ -426,20 +480,26 @@ function setup() {
   'ui://fixture0red':{3:[]}
  };
  const docView={
-  CloseDocuments(url){ if(closeMode==='plural-throw'||closeMode==='none')throw Error('invalid arguments ... or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocuments');closeAndReload(); },
-  CloseDocument(url){ if(closeMode==='none')throw Error('or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocument');closeAndReload(); },
-  OpenDocument(url){ if(openMode==='throw')throw Error('open failed'); if(openMode==='null')return null; doc=makeDoc(); return doc; }
+  // 真机声明是 CloseDocuments(pkg) / CloseDocument(doc?) / FindDocument(url)；
+  // 旧夹具按 url 建模关闭，两者都接住，才能同时服务 external reload 与新 Action。
+  FindDocument(url){ return openDocs.get(String(url))||null; },
+  CloseDocuments(target){ if(closeMode==='plural-throw'||closeMode==='none')throw Error('invalid arguments ... or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocuments'); if(typeof target==='string')openDocs.delete(target);else openDocs.clear(); closeAndReload(); },
+  CloseDocument(url){ if(closeMode==='none')throw Error('or the overload is striped by unity'); closeCount++;closeUsed.push('CloseDocument'); if(typeof url==='string')openDocs.delete(url); closeAndReload(); },
+  OpenDocument(url){ if(openMode==='throw')throw Error('open failed'); if(openMode==='null')return null; doc=makeDoc(); openDocs.set(String(url),doc); return doc; }
  };
- const app={activeDoc:null,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
+ const app={activeDoc:doc,project:{opened:true,id:'fixture0',name:'Fixture',basePath:'/pkg',assetsPath:'/pkg',type:'Normal',allPackages:{get Count(){return 1},get_Item:()=>pkg},
   // get_publish_settings / publish 都要读这两个；缺失时前者会在 stringListToArray
   // 上抛 TypeError，于是「设置读取」这条路径在夹具里根本没被跑过。
-  activeBranch:'',allBranches:{get Count(){return 0},get_Item:()=>''},
+  activeBranch:'',
+  get allBranches(){return {Count:branches.length,get_Item:i=>branches[i]};},
+  ScanBranches(){return false;},
+  CreateBranch(name){const n=String(name);if(branches.indexOf(n)<0)branches.push(n);branchDirectories.add(`/pkg/assets_${n}`);return true;},
   GetItemByURL:url=>resources[url] || null,
   // Dispose 之后再取包返回「从磁盘重建」的实例：这是 reload 语义的真实形态，
   // 内存对象不重建就等于假装 reload 什么都没发生。
-  GetPackage:id=>{if(pkg.disposed){pkg.disposed=false;const r=reopenPackageFromDisk();pkg=r;return r;}return pkg;},
-  GetPackageByName:name=>name===pkg.name?pkg:null,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||null,GetSettings:name=>name==='Publish'?globalSettings:null,SetChanged(){},Save(){}},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},AtlasSettings:function(){return makeAtlasSettings('');},PackSettings:function(){return makePackSettings();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{IO:{File:{Exists:p=>p in files,ReadAllText:p=>files[p]},Directory:{GetFiles:()=>({Length:0,get_Item:()=>null})},Path:{Combine:(a,b)=>`${a}/${b}`,GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:{},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
+  GetPackage:id=>{if(String(id)!==pkg.id)return null;if(pkg.disposed){pkg.disposed=false;const r=reopenPackageFromDisk();pkg=r;return r;}return pkg;},
+  GetPackageByName:name=>name===pkg.name?pkg:null,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||branchItems.find(i=>i.id===id)||null,GetSettings:name=>name==='Publish'?globalSettings:null,SetChanged(){},Save(){}},docView};
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},BuilderUtil:{GetMD5HashFromFile:p=>{const key=String(p);if(!(key in files))throw Error('file not readable: '+key);return crypto.createHash('md5').update(Buffer.from(String(files[key]),'utf8')).digest('hex');}},AssetSizeUtil:{GetSize:p=>{const key=String(p);const item=[...packageItems,...branchItems].find(i=>i&&i.file===key);if(!(key in files)||!item)throw Error('image not readable: '+key);return {width:Number(item.width)||0,height:Number(item.height)||0,type:'png',bitDepth:8,colorType:6};}},AtlasSettings:function(){return makeAtlasSettings('');},PackSettings:function(){return makePackSettings();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{Text:{UTF8Encoding:function(bom){this.bom=!!bom;}},IO:{File:{Exists:p=>p in files,ReadAllText:p=>String(files[p]||'').replace(/^\uFEFF/,''),ReadAllBytes:p=>{const b=Buffer.from(String(files[p]||''),'utf8');return {Length:b.length,get_Item:i=>b[i]};},WriteAllText:(p,t)=>{files[p]=String(t);}},Directory:{Exists:p=>branchDirectories.has(String(p)),GetDirectories:p=>{const prefix=String(p).replace(/\/$/,'')+'/';const found=[...branchDirectories].filter(d=>d.startsWith(prefix)&&d.slice(prefix.length).indexOf('/')<0);return {Length:found.length,get_Item:i=>found[i],GetValue:i=>found[i]};},GetFiles:()=>({Length:0,get_Item:()=>null,GetValue:()=>null}),CreateDirectory:p=>{branchDirectories.add(String(p).replace(/\/$/,''));return {};}},Path:{Combine:(...parts)=>parts.join('/'),GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:function(p){const key=String(p);Object.defineProperty(this,'Length',{get(){if(!(key in files))throw Error('file not found: '+key);return Buffer.byteLength(String(files[key]),'utf8');}});},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  ctx.getActiveDocument=()=>doc;
@@ -455,6 +515,7 @@ function makeDoc(){
   AddController(c){controllers.push(c);return c;},
   RemoveController(c){const i=controllers.indexOf(c);if(i>=0)controllers.splice(i,1);}};
  const d={content,docURL:'ui://fixture0component',dead:false,
+  packageItem:{id:'component0',name:'component',branch:''},
   timelineMode:false,editingTransition:null,head:0,
   EnterTimelineMode(name){const t=transitions.find(x=>x.name===name);if(!t)throw Error('未找到 Transition：'+name);this.editingTransition=t;this.timelineMode=true;},
   ExitTimelineMode(){this.timelineMode=false;this.editingTransition=null;},
@@ -989,6 +1050,75 @@ test('import_image without save does not claim persistence',async()=>{files['/sr
 test('import_image fails closed when the package save is stale',async()=>{files['/src/new.png']='PNGDATA';pkgSaveMode='stale';await assert.rejects(()=>importImage(),e=>e.code==='persistence_failed'&&e.details.stage==='xml');});
 test('create_component rejects externalReload before mutating',()=>{assert.throws(()=>ctx.createComponent({packageName:'Fixture',componentName:'NewC',save:true,externalReload:true}),e=>e.code==='invalid_argument'&&e.details.stage==='input');assert.equal(packageItems.filter(i=>i.name==='NewC.xml').length,0);});
 test('create_component saves the package manifest',()=>{const r=ctx.createComponent({packageName:'Fixture',componentName:'NewC',save:true});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.type,'component');assert.equal(r.saved,true);});
+test('create_branch creates the package branch root, directory and manifest',()=>{
+ const r=ctx.createBranch({name:'de'});
+ assert.equal(r.created,true);
+ assert.equal(r.branches.join(','),'de');
+ assert.equal(r.activeBranch,'');
+ assert.equal(r.packageBranches.length,1);
+ assert.equal(r.packageBranches[0].created,true);
+ assert.equal(r.packageBranches[0].rootItem.branch,'de');
+ assert.ok(branchDirectories.has('/pkg/assets_de'));
+ assert.equal(typeof files['/pkg/assets_de/Fixture/package_branch.xml'],'string');
+});
+test('create_component under an active branch writes a branch item and verifies package_branch.xml',()=>{
+ ctx.createBranch({name:'de'});
+ ctx.switchBranch({name:'de'});
+ const r=ctx.createComponent({packageName:'Fixture',componentName:'BranchComp',save:true});
+ assert.equal(r.branch,'de');
+ assert.equal(r.strength,'disk');
+ assert.equal(r.verification.file,'/pkg/assets_de/Fixture/package_branch.xml');
+ assert.equal(r.verification.xml.type,'component');
+ const item=branchItems.find(i=>i.name==='BranchComp.xml');
+ assert.ok(item,'分支组件必须是独立的分支条目');
+ assert.equal(item.branch,'de');
+ assert.equal(packageItems.some(i=>i.name==='BranchComp.xml'),false);
+ assert.ok(files['/pkg/assets_de/Fixture/BranchComp.xml']);
+ assert.ok(files['/pkg/assets_de/Fixture/package_branch.xml'].includes('BranchComp.xml'));
+});
+test('list_items branch view overlays trunk items with branch resources',()=>{
+ ctx.createBranch({name:'de'});
+ ctx.switchBranch({name:'de'});
+ ctx.createComponent({packageName:'Fixture',componentName:'BridgeFixture'});
+ ctx.createComponent({packageName:'Fixture',componentName:'BranchOnly'});
+ const view=ctx.handleCommand({action:'list_items',params:{packageName:'Fixture',branch:'de'}});
+ assert.equal(view.branch,'de');
+ assert.equal(view.branchItemCount,2);
+ assert.ok(view.items.some(i=>i.branch==='de'&&i.name==='BridgeFixture.xml'),'同名分支资源必须覆盖主干');
+ assert.equal(view.items.filter(i=>i.branch===''&&i.name==='BridgeFixture.xml').length,0);
+ assert.ok(view.items.some(i=>i.branch===''&&i.name==='BridgeFixture.xml')===false);
+ assert.ok(view.items.some(i=>i.branch==='de'&&i.name==='BranchOnly.xml'));
+ assert.ok(view.effectiveCount<view.trunkItemCount+view.branchItemCount,'被覆盖的主干条目不应重复出现');
+});
+test('read-only branch views can target a non-active branch without switching',()=>{
+ ctx.createBranch({name:'de'});
+ ctx.switchBranch({name:'de'});
+ ctx.createComponent({packageName:'Fixture',componentName:'BranchOnly'});
+ const activeView=ctx.handleCommand({action:'list_items',params:{packageName:'Fixture'}});
+ assert.equal(activeView.branch,'de','省略 branch 时必须按活跃分支列出视图');
+ ctx.switchBranch({name:''});
+ const view=ctx.handleCommand({action:'list_items',params:{packageName:'Fixture',branch:'de'}});
+ assert.equal(view.branch,'de');
+ assert.ok(view.items.some(i=>i.branch==='de'&&i.name==='BranchOnly.xml'));
+ const trunk=ctx.handleCommand({action:'list_items',params:{packageName:'Fixture',branch:''}});
+ assert.equal(trunk.branch,null);
+ assert.ok(trunk.items.some(i=>i.name==='BridgeFixture.xml'));
+ assert.equal(trunk.items.some(i=>i.branch),false,'主干视图不能混入分支根或分支资源');
+});
+test('document writes are rejected when the open document belongs to another branch',()=>{
+ ctx.createBranch({name:'de'});
+ ctx.switchBranch({name:'de'});
+ rejects(()=>set('text1','x',42),'branch_mismatch','branch');
+ rejects(()=>ctx.handleCommand({action:'clear_atlas_markers',params:{}}),'branch_mismatch','branch');
+});
+test('switching back to trunk lets trunk documents be written again',()=>{
+ ctx.createBranch({name:'de'});
+ ctx.switchBranch({name:'de'});
+ ctx.switchBranch({name:''});
+ const r=set('text1','x',42);
+ assert.equal(r.persisted,true);
+ assert.match(r.verification.file,/fixture\.xml$/);
+});
 test('remove_movieclip verifies absence in package.xml after save',async()=>{const r=await ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:true});assert.equal(r.persisted,true);assert.equal(r.strength,'disk');assert.equal(r.verification.xml.present,false);assert.ok(!files['/pkg/package.xml'].includes('mc1'));});
 test('remove_movieclip rejects externalReload before deleting',async()=>{await assert.rejects(()=>ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:true,externalReload:true}),e=>e.code==='invalid_argument'&&e.details.stage==='input');assert.ok(resources['ui://fixture0mc1']);});
 test('remove_movieclip without save keeps absence unverified',async()=>{const r=await ctx.removeMovieClip({url:'ui://fixture0mc1',force:true,save:false});assert.equal(r.saved,false);assert.equal(r.persisted,false);assert.equal(r.strength,'none');});
@@ -1282,6 +1412,161 @@ test('A type change between source and target is reported, never silently applie
   assert.equal(r.typeChange.to,'component');
   assert.equal(r.from.id,'red');           // from/to 是 resolveItem 拿到的资源本身
   assert.equal(r.to.id,'panel');
+});
+
+
+// ---- P8-7 只读资源审计（0.8.19） ----
+// 原生 FindUnusedResource / FindDuplicateResource 是 Pro 功能，非 Pro 真机会弹授权框
+// 并把请求挂死；这里的实现只组合 DependencyQuery 与内容哈希，用例同样只钉只读语义：
+// 不改引用图、不改磁盘、不宣称删得掉。
+const findUnused=(extra={})=>ctx.handleCommand({action:'find_unused',params:{...extra}});
+const findDup=(extra={})=>ctx.handleCommand({action:'find_duplicate',params:{...extra}});
+const addAuditItem=(name,type,ext,content,opts={})=>{
+ const it=makePackageItem(name,type,ext);
+ Object.assign(it,opts);
+ files[it.file]=content;
+ return it;
+};
+
+test('find_unused reports zero-reference items without touching the reference graph',()=>{
+  const used=addAuditItem('used','image','.png','USED',{exported:false});
+  refRegistry[used.GetURL()]=[{}];
+  const orphan=addAuditItem('orphan','image','.png','ORPHAN-12345',{exported:false,width:32,height:16});
+  const before=JSON.stringify(Object.keys(refRegistry).sort());
+  const r=findUnused({types:['image']});
+  assert.equal(r.ok,true);
+  assert.equal(r.readOnly,true);
+  assert.equal(r.scope,'project');
+  assert.equal(r.candidateCount,2);
+  assert.equal(r.scannedCount,2);
+  assert.equal(r.unusedCount,1);
+  assert.equal(r.exportedUnusedCount,0);
+  assert.equal(r.truncated,false);
+  const names=r.items.map(x=>x.item.name);
+  assert.ok(names.includes('orphan.png'));
+  assert.ok(!names.includes('used.png'));
+  const out=r.items.find(x=>x.item.id===orphan.id);
+  assert.equal(out.packageId,'fixture0');
+  assert.equal(out.packageName,'Fixture');
+  assert.equal(out.fileBytes,Buffer.byteLength('ORPHAN-12345'));
+  assert.equal(out.assetSize.width,32);
+  assert.equal(out.assetSize.height,16);
+  assert.equal(out.assetSize.bitDepth,8);
+  assert.equal(JSON.stringify(Object.keys(refRegistry).sort()),before);
+  assert.equal(refRegistry[used.GetURL()].length,1);
+  assert.match(r.note,/只读/);
+});
+
+test('skipExported keeps exported resources out of the scan and says how many it skipped',()=>{
+  const exported=addAuditItem('exportedArt','image','.png','EXPORTED',{exported:true});
+  addAuditItem('localArt','image','.png','LOCAL',{exported:false});
+  const r=findUnused({types:['image'],skipExported:true});
+  assert.equal(r.candidateCount,2);
+  assert.equal(r.exportedSkipped,1);
+  assert.equal(r.scannedCount,1);
+  assert.equal(r.unusedCount,1);
+  assert.equal(r.items[0].item.name,'localArt.png');
+  assert.notEqual(r.items[0].item.id,exported.id);
+});
+
+test('includeBranches enumerates branch listings instead of scanning trunk twice',()=>{
+  pkg.CreateBranch('de');
+  const branchArt=makeBranchItem('branchArt','image','.png','de');
+  files[branchArt.file]='BRANCH';
+  // 真机 6.1.4 的 pkg.items 同时列出分支资源；分支根的 GetItemListing 也会返回同一项。
+  // 枚举两条路径时必须按 URL 去重，--no-branches 也必须真的把它排除。
+  packageItems.push(branchArt);
+  addAuditItem('trunkArt','image','.png','TRUNK');
+  const all=findUnused({types:['image']});
+  assert.equal(all.candidateCount,2);
+  assert.deepEqual(Array.from(all.branches),['de']);
+  assert.ok(all.items.some(x=>x.item.id===branchArt.id&&x.item.branch==='de'));
+  const trunkOnly=findUnused({types:['image'],includeBranches:false});
+  assert.equal(trunkOnly.candidateCount,1);
+  assert.equal(trunkOnly.branches.length,0);
+  assert.ok(!trunkOnly.items.some(x=>x.item.branch==='de'));
+});
+
+test('audit filters select packages and types, and reject unknown packages',()=>{
+  addAuditItem('photo','image','.png','PHOTO');
+  addAuditItem('widget','component','.xml','<component/>');
+  const r=findUnused({packages:['Fixture'],types:'IMAGE'});
+  assert.equal(r.scope,'selected');
+  assert.deepEqual(Array.from(r.packages.names),['Fixture']);
+  assert.equal(r.candidateCount,1);
+  assert.equal(r.items[0].item.name,'photo.png');
+  rejects(()=>findUnused({packages:['missing']}),'target_not_found','input');
+});
+
+test('find_unused truncates the item list but keeps the real totals',()=>{
+  for(let i=0;i<3;i++)addAuditItem('orphan'+i,'image','.png','X'+i);
+  const r=findUnused({types:['image'],maxItems:2});
+  assert.equal(r.unusedCount,3);
+  assert.equal(r.items.length,2);
+  assert.equal(r.truncated,true);
+  assert.equal(r.maxItems,2);
+  rejects(()=>findUnused({maxItems:0}),'invalid_argument','input');
+  rejects(()=>findUnused({maxItems:5001}),'invalid_argument','input');
+});
+
+test('find_duplicate groups identical content and reports wasted bytes',()=>{
+  addAuditItem('a','image','.png','A'.repeat(120));
+  addAuditItem('b','image','.png','A'.repeat(120));
+  addAuditItem('c','image','.png','B'.repeat(30));
+  addAuditItem('d','image','.png','B'.repeat(30));
+  addAuditItem('e','image','.png','B'.repeat(30));
+  addAuditItem('unique','image','.png','UNIQUE');
+  const r=findDup({types:['image']});
+  assert.equal(r.ok,true);
+  assert.equal(r.readOnly,true);
+  assert.equal(r.hashedCount,6);
+  assert.equal(r.unreadableCount,0);
+  assert.equal(r.duplicateGroupCount,2);
+  assert.equal(r.duplicateItemCount,5);
+  assert.equal(r.wastedBytes,180);
+  assert.equal(r.groups[0].fileBytes,120);
+  assert.equal(r.groups[0].itemCount,2);
+  assert.equal(r.groups[0].wastedBytes,120);
+  assert.equal(r.groups[1].itemCount,3);
+  assert.equal(r.groups[1].wastedBytes,60);
+  assert.equal(r.groups[0].items[0].fileBytes,120);
+  assert.equal(r.truncated,false);
+  assert.match(r.note,/MD5/);
+});
+
+test('find_duplicate reports unreadable files instead of silently dropping them',()=>{
+  const r=findDup({types:['component']});   // 夹具里 BridgeFixture.xml 没有登记内容
+  assert.equal(r.candidateCount,1);
+  assert.equal(r.hashedCount,0);
+  assert.equal(r.unreadableCount,1);
+  assert.equal(r.errorCount,1);
+  assert.equal(r.groups.length,0);
+  assert.equal(r.errors[0].itemName,'BridgeFixture.xml');
+});
+
+test('Audit error counts stay true even when only samples are returned',()=>{
+  for(let i=0;i<21;i++)makePackageItem('missing'+i,'component','.xml');
+  const r=findDup({types:['component']});
+  assert.equal(r.candidateCount,22);        // 21 个新条目 + 夹具里的 BridgeFixture.xml
+  assert.equal(r.unreadableCount,22);
+  assert.equal(r.errorCount,22);            // 计数是真实总数
+  assert.equal(r.errors.length,20);         // 明细只保留样本
+});
+
+test('find_duplicate truncates groups and per-group items with explicit flags',()=>{
+  for(let i=0;i<3;i++)addAuditItem('same'+i,'image','.png','A'.repeat(50));
+  for(let i=0;i<2;i++)addAuditItem('other'+i,'image','.png','B'.repeat(40));
+  let r=findDup({types:['image'],maxGroups:1});
+  assert.equal(r.duplicateGroupCount,2);
+  assert.equal(r.groups.length,1);
+  assert.equal(r.truncated,true);
+  r=findDup({types:['image'],maxItemsPerGroup:1});
+  assert.equal(r.duplicateGroupCount,2);
+  assert.equal(r.groups[0].itemCount,3);
+  assert.equal(r.groups[0].items.length,1);
+  assert.equal(r.groups[0].truncated,true);
+  rejects(()=>findDup({maxGroups:0}),'invalid_argument','input');
+  rejects(()=>findDup({maxItemsPerGroup:501}),'invalid_argument','input');
 });
 
 // ---------------------------------------------------------------- analyze_atlas_fit
@@ -1685,6 +1970,140 @@ test('Package-level settings are not judged by the global atlas setting once opt
  assert.equal(e.retiredRuleWouldAssignAlone,true);
  assert.equal(e.wouldAssignAlone,true);  // 包级约束同样判它装不下 → 要标 alone
  assert.equal(e.disagrees,true);         // 磁盘上还没有这个标记，正是待施加的那一张
+});
+
+
+// ------------------------------------------------------------ clear_atlas_markers
+// 0.8.17：6.1.4 已证伪 folderAtlas="" 清除路线，唯一可行的是带外改 package.xml。
+// 这一组钉住：只清装得下的 alone、预览不写盘、执行前备份、写后回读、Dispose 重开，
+// 以及打开/未保存文档的拒绝边界。
+const clearAtlas=(params={})=>ctx.handleCommand({action:'clear_atlas_markers',params:Object.assign({packageName:'Fixture'},params)});
+function seedAtlasMarkers(){
+ const hd=addImage('hd',1920,1080); hd._persistedAtlas='alone';
+ const huge=addImage('huge',4096,4096); huge._persistedAtlas='alone';
+ const clean=addImage('clean',64,64);
+ files['/pkg/package.xml']=serializePackageXml();
+ return {hd,huge,clean};
+}
+test('Clearing atlas markers previews only the images that actually fit',()=>{
+ const {hd,huge,clean}=seedAtlasMarkers();
+ const before=files['/pkg/package.xml'];
+ const r=clearAtlas();
+ assert.equal(r.mode,'preview');
+ assert.equal(r.candidates.length,1);
+ assert.equal(r.candidates[0].id,hd.id);
+ assert.equal(r.candidates[0].folderAtlasOnDisk,'alone');
+ assert.equal(r.held.find(h=>h.id===huge.id).reason,'already-alone');   // 4096 确实装不下
+ assert.equal(r.held.find(h=>h.id===clean.id).reason,'not-marked-alone');
+ assert.equal(r.summary.markedAloneOnDisk,2);
+ assert.equal(r.summary.wouldClear,1);
+ assert.equal(r.writePath,null);
+ assert.equal(files['/pkg/package.xml'],before);   // 预览不写盘
+});
+test('Clearing atlas markers removes only the target attribute and keeps a backup',()=>{
+ const {hd,huge}=seedAtlasMarkers();
+ const before=files['/pkg/package.xml'];
+ const r=clearAtlas({execute:true});
+ assert.equal(r.mode,'execute');
+ assert.equal(r.changed.length,1);
+ assert.equal(r.writePath,'out-of-band-xml');
+ assert.equal(r.undoable,false);
+ assert.equal(r.strength,'disk');
+ assert.equal(r.reloaded,true);
+ assert.equal(r.reloadStrategy,'package-dispose-open');
+ assert.equal(r.savedPackageBeforeEdit,true);
+ // 备份是执行前内容（本次 Save 未改变任何资源，所以与 seed 后逐字相同）
+ assert.equal(files[r.backupPath],before);
+ const xml=files['/pkg/package.xml'];
+ assert.ok(!new RegExp(`<image id="${hd.id}"[^>]*\\batlas=`).test(xml),'目标标记应被删除');
+ assert.ok(new RegExp(`<image id="${huge.id}"[^>]*\\batlas="alone"`).test(xml),'装不下的标记必须保留');
+ // 跨 realm 的数组不能用 deepEqual（Prototype 不同），逐项断言
+ assert.equal(r.verification.remainingAloneInPackage.length,1);
+ assert.equal(r.verification.remainingAloneInPackage[0],huge.id);
+ assert.equal(r.verification.targetsCleared,1);
+ assert.equal(r.verification.contentOutsideTargetsUnchanged,true);
+});
+test('Clearing atlas markers does not add a UTF-8 BOM the file never had',()=>{
+ seedAtlasMarkers();
+ const r=clearAtlas({execute:true});
+ assert.equal(r.verification.bomPreserved,true);
+ assert.equal(files['/pkg/package.xml'].charCodeAt(0)===0xFEFF,false);
+ assert.equal(files[r.backupPath].charCodeAt(0)===0xFEFF,false);
+});
+test('Clearing atlas markers preserves an existing UTF-8 BOM',()=>{
+ seedAtlasMarkers();
+ pkg.Save=function(){files['/pkg/package.xml']='\uFEFF'+serializePackageXml();this.changed=false;};
+ const r=clearAtlas({execute:true});
+ assert.equal(r.verification.bomPreserved,true);
+ assert.equal(files['/pkg/package.xml'].charCodeAt(0),0xFEFF);
+ assert.notEqual(files['/pkg/package.xml'].charCodeAt(1),0xFEFF);   // 不是双 BOM
+ assert.equal(files[r.backupPath].charCodeAt(0),0xFEFF);
+});
+test('Clearing atlas markers can target one image by name or id',()=>{
+ const {hd}=seedAtlasMarkers();
+ const r=clearAtlas({execute:true,itemNames:['hd']});
+ assert.equal(r.changed.length,1);
+ assert.equal(r.changed[0].id,hd.id);
+ // 资源名可以带扩展名，也可以不带；两种都按同一个资源解析
+ const preview=clearAtlas({itemNames:['hd.png','hd']});
+ assert.equal(preview.candidates.length,0);   // 已经清掉，没有候选
+ assert.equal(preview.held.length,1);         // 同一资源的两种写法不构成歧义，其他图不入报告
+ assert.equal(preview.held[0].id,hd.id);
+ assert.equal(preview.held[0].reason,'not-marked-alone');
+});
+test('An unknown explicit target is rejected instead of silently doing nothing',()=>{
+ seedAtlasMarkers();
+ rejects(()=>clearAtlas({execute:true,itemNames:['no-such-image']}),'target_not_found','input');
+ assert.equal(files['/pkg/package.xml'].includes('atlas="alone"'),true);
+});
+test('A name matching several images is rejected instead of clearing all of them',()=>{
+ seedAtlasMarkers();
+ addImage('dup',64,64); addImage('dup',64,64);
+ rejects(()=>clearAtlas({execute:true,itemNames:['dup']}),'invalid_argument','input');
+ assert.equal(files['/pkg/package.xml'].includes('atlas="alone"'),true);
+});
+test('Clearing atlas markers refuses an open document unless explicitly allowed',()=>{
+ const {hd}=seedAtlasMarkers();
+ openDocs.set('ui://fixture0fix01',{docURL:'ui://fixture0fix01',isModified:false});
+ const before=files['/pkg/package.xml'];
+ rejects(()=>clearAtlas({execute:true}),'invalid_argument','precheck');
+ assert.equal(files['/pkg/package.xml'],before);
+ // 允许关闭已保存的文档后可以执行，并在响应里交代关了哪些
+ const r=clearAtlas({execute:true,closeOpenDocuments:true});
+ assert.equal(r.closedDocuments.length,1);
+ assert.equal(r.closedDocuments[0].url,'ui://fixture0fix01');
+ assert.equal(openDocs.size,0);
+ assert.equal(r.changed[0].id,hd.id);
+});
+test('An unsaved open document is always refused, even with closeOpenDocuments',()=>{
+ seedAtlasMarkers();
+ openDocs.set('ui://fixture0fix01',{docURL:'ui://fixture0fix01',isModified:true});
+ const before=files['/pkg/package.xml'];
+ rejects(()=>clearAtlas({execute:true,closeOpenDocuments:true}),'invalid_argument','precheck');
+ assert.equal(files['/pkg/package.xml'],before);
+});
+test('A package save failure stops the out-of-band edit before touching package.xml',()=>{
+ seedAtlasMarkers();
+ const before=files['/pkg/package.xml'];
+ pkgSaveMode='throw';
+ rejects(()=>clearAtlas({execute:true}),'persistence_failed','save');
+ assert.equal(files['/pkg/package.xml'],before);
+});
+test('Executing with no candidates is a no-op with no backup',()=>{
+ addImage('clean',64,64);
+ files['/pkg/package.xml']=serializePackageXml();
+ const r=clearAtlas({execute:true});
+ assert.equal(r.changed.length,0);
+ assert.equal(r.writePath,null);
+ assert.equal(r.backupPath,undefined);
+ assert.equal(r.summary.wouldClear,0);
+});
+test('Clearing atlas markers holds branch-scoped items instead of guessing',()=>{
+ const {hd}=seedAtlasMarkers();
+ hd.branch='release';
+ const r=clearAtlas();
+ assert.equal(r.candidates.length,0);
+ assert.equal(r.held.find(h=>h.id===hd.id).reason,'branch-scope-unsupported');
 });
 
 

@@ -7,7 +7,7 @@ FairyGUI Agent Bridge 在 FairyGUI Editor 和 AI 编程助手之间架了一座�
 [![CI](https://github.com/Wilson520403/fgui-agent-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Wilson520403/fgui-agent-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`v0.8.16` · 队列协议 `1.0` · 基于 FairyGUI Editor `6.1.4` 开发与验证
+`v0.8.19` · 队列协议 `1.0` · 基于 FairyGUI Editor `6.1.4` 开发与验证
 
 > 本仓库只包含 Bridge 本身。FairyGUI 工程里只安装一个轻量插件，MCP/CLI 始终从本仓库运行。如果使用支持 Skill 的 Agent，还可以额外安装 Skill，让 AI 更熟悉 FairyGUI 的操作约定。
 
@@ -19,6 +19,7 @@ FairyGUI Agent Bridge 在 FairyGUI Editor 和 AI 编程助手之间架了一座�
 - **导入资源**：从本地导入图片、字体、声音，或用图片序列生成 MovieClip 动画。
 - **做动效**：读取、创建和修改 Transition，支持全部原生轨道，可逐关键帧调整，也能在编辑器里直接预览。
 - **整理资源关系**：替换图片引用，查询「谁引用了它」和「它依赖了谁」。
+- **分支协作**：列出、创建和切换工程分支，让试验性的改动落在独立目录里，不影响主干。
 - **验证改动**：保存后比对文档与磁盘 XML，确认内容真的写进去了。
 - **发布**：按活动包、指定包或全部包发布，并在发布前按真实图集约束处理大图。
 
@@ -198,6 +199,17 @@ uv run fgui-agent ping
 uv run fgui-agent packages
 uv run fgui-agent tree
 
+# 分支
+uv run fgui-agent branches
+uv run fgui-agent create-branch feature-login --switch
+uv run fgui-agent items Package1 --branch feature-login
+uv run fgui-agent switch-branch ""   # 空名称表示主干
+
+# 查找冗余资源
+uv run fgui-agent find-unused
+uv run fgui-agent find-unused --skip-exported --type image
+uv run fgui-agent find-duplicate
+
 # 保存与发布
 uv run fgui-agent save
 uv run fgui-agent publish --scope active
@@ -209,11 +221,12 @@ uv run fgui-agent publish --scope active
 
 ## MCP 工具一览
 
-共 57 个工具，按用途分组：
+共 63 个工具，按用途分组：
 
 | 类别 | 工具名称 | 功能描述 |
 | :--- | :--- | :--- |
-| **连接与定位** | `fgui_status`、`fgui_ping`、`fgui_use_project`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items` | 检查连接状态、切换工程、查看包列表与包内资源 |
+| **连接与定位** | `fgui_status`、`fgui_ping`、`fgui_use_project`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items` | 检查连接状态、切换工程、查看包列表与包内资源（`fgui_list_items` 可指定 `branch`） |
+| **分支** | `fgui_list_branches`、`fgui_create_branch`、`fgui_switch_branch` | 列出、创建和切换工程分支，切换后读写都会落在对应分支 |
 | **文档与对象** | `fgui_open_document`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_select_object`、`fgui_insert_object`、`fgui_set_property`、`fgui_remove_object` | 打开组件、查看对象树、选中元件、修改属性及增删显示对象 |
 | **资源创建/导入** | `fgui_create_component`、`fgui_create_button`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound` | 新建组件/按钮，从本地绝对路径导入图片、字体与声音 |
 | **MovieClip 序列帧** | `fgui_create_movieclip`、`fgui_get_movieclip`、`fgui_update_movieclip`、`fgui_remove_movieclip` | 从本地图片序列创建或更新序列帧动画（帧直接嵌入 `.jta`） |
@@ -221,8 +234,9 @@ uv run fgui-agent publish --scope active
 | **动画预览** | `fgui_preview_animation` | 在编辑器中实时播放、暂停、停止、跳帧预览 Transition 或 MovieClip |
 | **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 撤销/重做、保存文档或放弃未保存修改 |
 | **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`、`fgui_replace_references`、`fgui_query_references`、`fgui_query_dependencies`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树、替换资源引用、查询引用图、读写文本样式 |
+| **冗余资源** | `fgui_find_unused`、`fgui_find_duplicate` | 找出没有被引用的资源，以及内容完全重复的文件（只读） |
 | **布局与控制器** | `fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 修改 List/Group 布局、替换 Relation 绑定、设置 gearDisplay 联动、增删改 Controller |
-| **图集与发布** | `fgui_get_publish_settings`、`fgui_set_publish_settings`、`fgui_analyze_atlas_fit`、`fgui_publish` | 查询或修改发布设置、分析图片的图集归属、执行资源发布 |
+| **图集与发布** | `fgui_get_publish_settings`、`fgui_set_publish_settings`、`fgui_analyze_atlas_fit`、`fgui_clear_atlas_markers`、`fgui_publish` | 查询或修改发布设置、判断图片能否放进图集、修正图集标记、执行资源发布 |
 
 ---
 
@@ -240,11 +254,24 @@ uv run fgui-agent publish --scope active
 
 属性修改和 Transition 编辑会进入 Agent 撤销栈，可以用 `fgui_undo` / `fgui_redo` 回退。结构创建、删除和资源导入不属于可逆操作；`discard` 只放弃当前文档未保存的修改，不能替代 `undo` 或 `save`。
 
+### 查找冗余资源
+
+- `fgui_find_unused` 会沿着引用关系，找出工程里没有被任何地方引用的资源，返回包名、路径、大小，图片还带尺寸。导出资源默认也会列出来并标记 `exported=true`，因为运行时可能按 URL 直接加载它们；确认不需要后，可以用 `skip_exported=true` 把它们排除。
+- `fgui_find_duplicate` 按文件内容分组，找出完全相同的图片、字体、音效和组件 XML，并按浪费的空间从大到小排序，方便优先清理大头。同名但内容不同不算重复。
+- 两个工具都是只读的，不会改动或保存工程。可以用 `packages` / `types` 缩小范围，传 `include_branches=false` 只看主干。编辑器自带的同类功能需要 Pro 授权，Bridge 的实现不依赖它，装好就能用。
+
 ### 改资源引用之前
 
 - `fgui_query_references` 查「谁引用了这个资源」，`fgui_query_dependencies` 查「这个资源依赖了谁」。两者都是只读的，不会修改文档。
 - 单个对象换图用 `fgui_replace_object_resource`，支持 Image 和 Loader，可撤销、可验证。Button 的状态图替换不在支持范围内。
 - 全工程批量换图用 `fgui_replace_references`。它**默认只预览**，确认 `totalCount` 和明细后再传 `execute=True`。执行后立即落盘、不进入 Agent 撤销栈，调用前请确认这是你想要的。替换完成后建议按引用图再查一次，确认源资源的残留引用为 0。
+
+### 分支
+
+- 用 `fgui_list_branches` 查看现有分支，`fgui_create_branch` 新建，`fgui_switch_branch` 切换（传空名称回到主干）。创建和切换都会立即写入磁盘、不能撤销；默认不处理已打开的文档，需要时传 `save_open_documents=true`。
+- 读写工具省略 `branch` 时跟随当前活跃分支，传 `branch=""` 明确表示主干。支持 `branch` 的读取工具可以直接指向任意分支，写入则要求目标分支正处于活跃状态，避免改动落到错误的地方。分支资源放在 `assets_<branch>/<包名>/` 下，不会混进主干的 `package.xml`。
+- 在 FairyGUI 6.1.4 上，保存仍然跟着文档本身：分支文档需要对应分支活跃时才能保存，主干文档在分支活跃时也会拒绝保存。切换前先保存并关闭文档，可以少走弯路。`fgui_replace_references` 和 `fgui_clear_atlas_markers` 只支持主干，分支活跃时会被拒绝。
+- 重启编辑器后会回到主干，但分支内容都还在磁盘上，用 `fgui_switch_branch` 切回去就能继续。
 
 ### 动效
 
@@ -258,7 +285,7 @@ uv run fgui-agent publish --scope active
 
 - `fgui_analyze_atlas_fit` 按图集打包器的真实约束（包级 `PackSettings` 或全局 `AtlasSetting`）判断每张图能否放进图集，不再依赖猜测。`fit=unknown` 表示约束信息不足，不代表通过。`summary.assignedAloneButFits` 可以帮你发现磁盘上被标成 `alone`、但实际装得下的图片。
 - `fgui_import_image` 和 `fgui_publish` 使用与 `fgui_analyze_atlas_fit` 相同的判定逻辑，所以「分析说装得下、导入却标了 alone」不会发生。执行结果会放在 `atlasAssignment` 里，说明这次是写入了标记、已有标记无需重复写入，还是因为约束不足没有下结论。
-- 已经存在于包内的图片资源，其 `atlas` 标记无法通过编辑器 API 清除。遇到 `alone-not-needed` 时，Bridge 只会如实上报，不会自动修改；需要纠正时请改 `package.xml` 或重新导入图片。
+- 包内已有图片的 `atlas` 标记没法通过编辑器 API 改掉。分析报出 `alone-not-needed` 时，可以用 `fgui_clear_atlas_markers` 修正：它默认只预览，确认后再执行。这个工具会直接写 `package.xml`，执行前自动备份，写入后重新加载包检查结果；该操作不可撤销，执行前请先关闭这些包里的文档（或允许 Bridge 代为关闭已保存的文档）。
 - `fgui_set_publish_settings` 修改包级发布与图集设置。它只写你显式提供的字段，`atlasList` 是全量替换语义；`atlasList` 不能传空数组（FairyGUI 6.1.4 会报错并影响该包后续保存）；`padding`、`square` 等部分 `packSettings` 字段无法跨编辑器重启保留，这类设置建议直接在编辑器界面里改。
 - 发布期间 Bridge 会封锁大部分写操作。发布前先调 `fgui_get_publish_settings` 确认输出目录与图集配置，发布后检查返回的文件变更清单。
 

@@ -60,6 +60,11 @@ def _write_verify_params(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _branch_param(args: argparse.Namespace) -> dict[str, Any]:
+    value = getattr(args, "branch", None)
+    return {} if value is None else {"branch": value}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="通过本地队列操作 FairyGUI Editor")
     parser.add_argument("--project", help=".fairy 文件、FairyGUI 工程目录或仓库目录")
@@ -72,13 +77,28 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("project", help="读取当前工程")
     subparsers.add_parser("packages", help="列出所有包")
 
+    branches_parser = subparsers.add_parser("branches", help="列出 FairyGUI 分支")
+    branches_parser.add_argument("--refresh", action="store_true", help="先从磁盘重扫分支")
+    branches_parser.add_argument("--packages", dest="include_packages", action="store_true", help="包含每个包的分支根信息")
+    branches_parser.add_argument("--items", dest="include_items", action="store_true", help="与 --packages 一起列出分支资源")
+    create_branch_parser = subparsers.add_parser("create-branch", help="创建分支；立即落盘，不可撤销")
+    create_branch_parser.add_argument("name")
+    create_branch_parser.add_argument("--switch", action="store_true", help="创建后切换为活跃分支")
+    create_branch_parser.add_argument("--save-open-documents", action="store_true", help="切换前保存全部文档")
+    create_branch_parser.add_argument("--no-verify", action="store_true")
+    switch_branch_parser = subparsers.add_parser("switch-branch", help="切换活跃分支；空字符串切回主干")
+    switch_branch_parser.add_argument("name")
+    switch_branch_parser.add_argument("--save-open-documents", action="store_true", help="切换前保存全部文档")
+
     items_parser = subparsers.add_parser("items", help="列出包内资源")
     items_parser.add_argument("package_name")
     items_parser.add_argument("--type", dest="item_type")
+    items_parser.add_argument("--branch", help="分支名；省略时列活跃分支视图，空字符串表示主干；可读取非活跃分支")
 
     open_parser = subparsers.add_parser("open", help="打开组件文档")
     open_parser.add_argument("package_name")
     open_parser.add_argument("item_name")
+    open_parser.add_argument("--branch", help="分支名；省略时跟随活跃分支，空字符串表示主干")
 
     create_component_parser = subparsers.add_parser("create-component", help="新建组件文档")
     create_component_parser.add_argument("package_name")
@@ -91,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_component_parser.add_argument("--auto-rename", action="store_true")
     create_component_parser.add_argument("--no-create-folders", action="store_true")
     create_component_parser.add_argument("--no-open", action="store_true")
+    create_component_parser.add_argument("--branch", help="写入指定分支；省略时使用活跃分支")
     _add_write_verify_arguments(create_component_parser)
 
     import_image_parser = subparsers.add_parser("import-image", help="从本地路径导入图片")
@@ -106,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     import_image_parser.add_argument("--not-exported", action="store_true")
     import_image_parser.add_argument("--no-create-folders", action="store_true")
+    import_image_parser.add_argument("--branch", help="导入指定分支；省略时使用活跃分支")
     import_image_parser.add_argument("--import-timeout", type=float, default=120.0)
     _add_write_verify_arguments(import_image_parser, external_reload=True)
 
@@ -122,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     import_font_parser.add_argument("--not-exported", action="store_true")
     import_font_parser.add_argument("--no-create-folders", action="store_true")
+    import_font_parser.add_argument("--branch", help="导入指定分支；省略时使用活跃分支")
     import_font_parser.add_argument("--import-timeout", type=float, default=120.0)
     _add_write_verify_arguments(import_font_parser, external_reload=True)
 
@@ -147,6 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_button_parser.add_argument("--no-create-folders", action="store_true")
     create_button_parser.add_argument("--no-open", action="store_true")
     create_button_parser.add_argument("--extension", dest="extension_id")
+    create_button_parser.add_argument("--branch", help="写入指定分支；省略时使用活跃分支")
     _add_write_verify_arguments(create_button_parser)
 
     import_sound_parser = subparsers.add_parser("import-sound", help="从本地路径导入声音")
@@ -157,6 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_sound_parser.add_argument("--conflict", dest="conflict_policy", choices=("error", "auto_rename", "replace"), default="error")
     import_sound_parser.add_argument("--not-exported", action="store_true")
     import_sound_parser.add_argument("--no-create-folders", action="store_true")
+    import_sound_parser.add_argument("--branch", help="导入指定分支；省略时使用活跃分支")
     import_sound_parser.add_argument("--import-timeout", type=float, default=120.0)
     _add_write_verify_arguments(import_sound_parser, external_reload=True)
 
@@ -172,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_movieclip_parser.add_argument("--conflict", dest="conflict_policy", choices=("error", "auto_rename", "replace"), default="error")
     create_movieclip_parser.add_argument("--not-exported", action="store_true")
     create_movieclip_parser.add_argument("--no-create-folders", action="store_true")
+    create_movieclip_parser.add_argument("--branch", help="写入指定分支；省略时使用活跃分支")
     create_movieclip_parser.add_argument("--animation-timeout", type=float, default=120.0)
     _add_write_verify_arguments(create_movieclip_parser, external_reload=True)
 
@@ -255,6 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     tree_parser = subparsers.add_parser("tree", help="读取当前组件对象树")
     tree_parser.add_argument("--max-depth", type=int, default=12)
+    tree_parser.add_argument("--branch", help="要求当前文档属于该分支")
 
     select_parser = subparsers.add_parser("select", help="选择对象")
     _add_target_arguments(select_parser)
@@ -292,6 +319,22 @@ def build_parser() -> argparse.ArgumentParser:
     replace_refs_parser.add_argument("--execute", action="store_true", help="真正执行替换；缺省只出预览。原生替换立即落盘且不可撤销")
     replace_refs_parser.add_argument("--max-items", type=int, help=f"最多返回条数（默认 200，上限 2000）")
     replace_refs_parser.add_argument("--skip-package-open", action="store_true", help="不预先打开未打开的包；更快，但可能少算未打开包里的引用")
+
+    # P8-7 资源审计（只读）。扫描耗时随资源数量增长，单独提供更宽松的超时。
+    find_unused_parser = subparsers.add_parser("find-unused", help="找出工程内没有任何引用的资源（只读，0.8.19）")
+    find_unused_parser.add_argument("--package", dest="packages", action="append", help="只扫描指定包，可重复；省略扫描全工程")
+    find_unused_parser.add_argument("--type", dest="types", action="append", help="只扫描指定资源类型，可重复，例如 image / font / component")
+    find_unused_parser.add_argument("--no-branches", action="store_true", help="不扫描分支资源，只看主干")
+    find_unused_parser.add_argument("--skip-exported", action="store_true", help="排除导出资源（导出资源可能被运行时按 URL 使用）")
+    find_unused_parser.add_argument("--max-items", type=int, help="最多返回明细条数（默认 500，上限 5000）")
+    find_unused_parser.add_argument("--audit-timeout", type=float, default=120.0, help="审计超时秒数，默认 120")
+    find_duplicate_parser = subparsers.add_parser("find-duplicate", help="找出文件内容完全相同的资源（只读，0.8.19）")
+    find_duplicate_parser.add_argument("--package", dest="packages", action="append", help="只扫描指定包，可重复；省略扫描全工程")
+    find_duplicate_parser.add_argument("--type", dest="types", action="append", help="只扫描指定资源类型，可重复")
+    find_duplicate_parser.add_argument("--no-branches", action="store_true", help="不扫描分支资源，只看主干")
+    find_duplicate_parser.add_argument("--max-groups", type=int, help="最多返回组数（默认 100，上限 1000）")
+    find_duplicate_parser.add_argument("--max-items-per-group", type=int, help="每组最多返回条目数（默认 50，上限 500）")
+    find_duplicate_parser.add_argument("--audit-timeout", type=float, default=120.0, help="审计超时秒数，默认 120")
 
     text_get_parser = subparsers.add_parser("get-text-style", help="读取文本样式")
     _add_target_arguments(text_get_parser)
@@ -379,6 +422,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     atlas_fit_parser = subparsers.add_parser("analyze-atlas-fit", help="按真实图集约束分析每张图能否入图集（只读）")
     atlas_fit_parser.add_argument("package_name", nargs="?")
+
+    clear_atlas_parser = subparsers.add_parser(
+        "clear-atlas-markers",
+        help="清除磁盘 package.xml 上错误的 atlas=alone 标记（默认只预览，带外写入）",
+    )
+    clear_atlas_parser.add_argument("package_name", help="包名")
+    clear_atlas_parser.add_argument("--execute", action="store_true", help="实际写入；省略时只预览候选")
+    clear_atlas_parser.add_argument("--item-id", dest="item_ids", action="append", help="只处理指定资源 id，可重复")
+    clear_atlas_parser.add_argument("--item-name", dest="item_names", action="append", help="只处理指定资源名，可重复")
+    clear_atlas_parser.add_argument(
+        "--close-open-documents",
+        action="store_true",
+        help="允许关闭该包已保存的打开文档以完成包重开；有未保存文档时始终拒绝",
+    )
 
     set_publish_parser = subparsers.add_parser(
         "set-publish-settings",
@@ -475,14 +532,32 @@ def main() -> int:
             action = "get_project"
         elif args.command == "packages":
             action = "list_packages"
+        elif args.command == "branches":
+            action = "list_branches"
+            params = {
+                "refresh": args.refresh,
+                "includePackages": args.include_packages,
+                "includeItems": args.include_items,
+            }
+        elif args.command == "create-branch":
+            action = "create_branch"
+            params = {
+                "name": args.name,
+                "switch": args.switch,
+                "saveOpenDocuments": args.save_open_documents,
+                "verify": not args.no_verify,
+            }
+        elif args.command == "switch-branch":
+            action = "switch_branch"
+            params = {"name": args.name, "saveOpenDocuments": args.save_open_documents}
         elif args.command == "items":
             action = "list_items"
-            params = {"packageName": args.package_name}
+            params = {"packageName": args.package_name, **_branch_param(args)}
             if args.item_type:
                 params["type"] = args.item_type
         elif args.command == "open":
             action = "open_document"
-            params = {"packageName": args.package_name, "itemName": args.item_name}
+            params = {"packageName": args.package_name, "itemName": args.item_name, **_branch_param(args)}
         elif args.command == "create-component":
             action = "create_component"
             params = {
@@ -496,6 +571,7 @@ def main() -> int:
                 "createFolders": not args.no_create_folders,
                 "openAfterCreate": not args.no_open,
                 **_write_verify_params(args),
+                **_branch_param(args),
             }
             if args.extension_id:
                 params["extensionId"] = args.extension_id
@@ -510,6 +586,7 @@ def main() -> int:
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
                 **_write_verify_params(args),
+                **_branch_param(args),
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
@@ -525,6 +602,7 @@ def main() -> int:
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
                 **_write_verify_params(args),
+                **_branch_param(args),
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
@@ -548,6 +626,7 @@ def main() -> int:
                 "createFolders": not args.no_create_folders,
                 "openAfterCreate": not args.no_open,
                 **_write_verify_params(args),
+                **_branch_param(args),
             }
             if args.extension_id:
                 params["extensionId"] = args.extension_id
@@ -561,6 +640,7 @@ def main() -> int:
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
                 **_write_verify_params(args),
+                **_branch_param(args),
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
@@ -579,6 +659,7 @@ def main() -> int:
                 "exported": not args.not_exported,
                 "createFolders": not args.no_create_folders,
                 **_write_verify_params(args),
+                **_branch_param(args),
             }
             if args.frame_delays:
                 params["frameDelays"] = json.loads(args.frame_delays)
@@ -679,7 +760,7 @@ def main() -> int:
             action = "get_active_document"
         elif args.command == "tree":
             action = "get_tree"
-            params = {"maxDepth": args.max_depth}
+            params = {"maxDepth": args.max_depth, **_branch_param(args)}
         elif args.command == "select":
             action = "select_object"
             params = {"target": target_from_args(args)}
@@ -695,6 +776,28 @@ def main() -> int:
             action = "query_dependencies"
             params = {"url": args.url, "seekLevel": args.seek_level, "skipPackageOpen": args.skip_package_open}
             if args.max_items is not None: params["maxItems"] = args.max_items
+        elif args.command == "find-unused":
+            action = "find_unused"
+            params = {"includeBranches": not args.no_branches, "skipExported": args.skip_exported}
+            if args.packages:
+                params["packages"] = args.packages
+            if args.types:
+                params["types"] = args.types
+            if args.max_items is not None:
+                params["maxItems"] = args.max_items
+            command_timeout = args.audit_timeout
+        elif args.command == "find-duplicate":
+            action = "find_duplicate"
+            params = {"includeBranches": not args.no_branches}
+            if args.packages:
+                params["packages"] = args.packages
+            if args.types:
+                params["types"] = args.types
+            if args.max_groups is not None:
+                params["maxGroups"] = args.max_groups
+            if args.max_items_per_group is not None:
+                params["maxItemsPerGroup"] = args.max_items_per_group
+            command_timeout = args.audit_timeout
         elif args.command == "replace-references":
             action = "replace_references"
             params = {"url": args.url, "newUrl": args.new_url, "mode": "execute" if args.execute else "preview", "skipPackageOpen": args.skip_package_open}
@@ -782,6 +885,17 @@ def main() -> int:
             action = "analyze_atlas_fit"
             if args.package_name:
                 params["packageName"] = args.package_name
+        elif args.command == "clear-atlas-markers":
+            action = "clear_atlas_markers"
+            params = {
+                "packageName": args.package_name,
+                "execute": args.execute,
+                "closeOpenDocuments": args.close_open_documents,
+            }
+            if args.item_ids:
+                params["itemIds"] = args.item_ids
+            if args.item_names:
+                params["itemNames"] = args.item_names
         elif args.command == "set-publish-settings":
             action = "set_publish_settings"
             params = {

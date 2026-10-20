@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-publish-handler-steps-probe",
+  "capturedAt": "2026-10-20T11:37:41+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.17（含未提交的一次性规则探测 Action，已撤回）",
+  "protocolVersion": "1.0",
+  "project": "sample (Package1)",
+  "question": "计划 P8-5 还剩一项：暴露 PublishHandler 的分步导出能力（ExportBinaryDesc / ExportDescZip / ExportResZip / ExportResFiles / ClearOldResFiles），以便只导描述或只导资源。这些声明为 public 的方法能否脱离 Run() 独立使用？",
+  "verdict": "不能。PublishHandler 的公开 Export* 方法不是可独立调用的 API，而是 Run() 内部流水线的一段：它们依赖 Run() 期间建立的 items、图集与描述文件字典。Run() 之前调用 ExportBinaryDesc 会因缺少内部字典条目崩溃；Run() 之后重复调用 ExportResFiles 会写出 0 字节文件并把编辑器主线程挂死。真正需要的准备步骤（CollectItems / LoadImages / CreateBins / CreateOutput）全部是 private，且 IL2CPP/Puerts 裁剪了 MethodInfo.Invoke，插件侧无法驱动。结论：不暴露分步导出；Run() 是唯一安全入口，现有 publishDescOnly 已覆盖“只导描述”，“只导资源”无安全的原生路径。",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app (bundle com.fairygui.FairyGUIEditor，AppTranslocation 运行)",
+    "launchProcedure": "osascript quit → open -a ~/Downloads/FairyGUI-Editor.app sample/sample.fairy → 等待心跳",
+    "probeDelivery": "临时在 plugin/main.ts 增加 probe_publish_handler Action，编译并 sync_to_project 后用 fgui-agent call 调用；验证结束已从插件中撤回并重新同步/编译。",
+    "focusNote": "每次调用前用 osascript activate 把编辑器置前台，否则后台节流会让 onUpdate 停摆。"
+  },
+  "reflection": {
+    "publicMethods": [
+      { "name": "ExportBinaryDesc", "args": [["descFile", "String"]], "returns": "Void" },
+      { "name": "ExportDescZip", "args": [["zipArchive", "ZipStorer"]], "returns": "Void" },
+      { "name": "ExportResZip", "args": [["zipArchive", "ZipStorer"], ["compress", "Boolean"]], "returns": "Void" },
+      { "name": "ExportResFiles", "args": [["resPrefix", "String"]], "returns": "Task" },
+      { "name": "ClearOldResFiles", "args": [["folder", "String"]], "returns": "Void" },
+      { "name": "CollectClasses", "args": [["stripMember", "Boolean"], ["stripClass", "Boolean"], ["fguiNamespace", "String"]], "returns": "List`1" },
+      { "name": "SetupCodeFolder", "args": [["path", "String"], ["codeFileExtensions", "String"]], "returns": "Void" },
+      { "name": "SetupCodeFolder", "args": [["path", "String"], ["codeFileExtensions", "String"], ["fileMark", "String"]], "returns": "Void" },
+      { "name": "GetScriptData", "args": [["item", "FPackageItem"]], "returns": "XML" },
+      { "name": "Run", "args": [], "returns": "Task" },
+      { "name": "Exit", "args": [], "returns": "Void" }
+    ],
+    "privatePipelineMethods": ["CollectItems", "LoadImages", "CreateBins", "CreateOutput", "ExportDefault", "Export", "ExportUnity", "Cleanup"],
+    "privateStateFields": ["_items", "_atlases", "_descFiles", "_resFiles", "_binMap", "_publishDescOnly", "_exportPath", "_useAtlas", "_fileName", "_fileExtension"],
+    "constructedState": {
+      "exportPath": "",
+      "fileName": "Package1",
+      "fileExtension": "bytes",
+      "useAtlas": true,
+      "genCode": false,
+      "publishDescOnly": false,
+      "itemsCount": 0
+    }
+  },
+  "experiments": [
+    {
+      "id": "E1",
+      "title": "Run() 之前直接调用 ExportBinaryDesc",
+      "command": "probe_publish_handler mode=invoke method=ExportBinaryDesc args=[\"/tmp/fgui-publish-probe/Package1.bytes\"]",
+      "observed": "编辑器抛 c# exception：The given key 'package.xml' was not present in the dictionary.",
+      "stack": "FairyEditor.PublishHandler.EncodeBinary(Boolean compress) → FairyEditor.PublishHandler.ExportBinaryDesc(String descFile)",
+      "interpretation": "ExportBinaryDesc 不是独立的序列化入口，它依赖 Run() 内部建立的描述文件字典。构造后 items.Count=0，也没有 package.xml 条目。"
+    },
+    {
+      "id": "E2",
+      "title": "反射调用私有准备方法",
+      "command": "probe_publish_handler mode=sequence steps=[CollectItems, LoadImages, CreateBins, CreateOutput, ExportBinaryDesc, ExportResFiles]",
+      "observed": "第一步 CollectItems 即失败：invalid arguments to Invoke or the overload is striped by unity；显式构造 object[] 时先遇到 invalid arguments to CreateInstance or the overload is striped by unity。",
+      "interpretation": "私有方法只能通过 MethodInfo.Invoke 调用，而该重载被 IL2CPP/Puerts 裁剪；插件侧无法复现 Run() 的私有准备步骤。构造 JS 数组或 object[] 均不可用。"
+    },
+    {
+      "id": "E3",
+      "title": "Run(publishDescOnly=true) 后单独导出资源",
+      "command": "exportPath=/tmp/fgui-publish-probe/desc-run, publishDescOnly=true → Run() → ExportResFiles(\"/tmp/fgui-publish-probe/res-after-desc/Package1\")",
+      "observed": {
+        "runMs": 290,
+        "itemsAfterRun": 10,
+        "filesAfterRun": ["/tmp/fgui-publish-probe/desc-run/Package1_fui.bytes (3091 bytes)"],
+        "exportResFilesMs": 28,
+        "filesAfterExportResFiles": ["同上，没有新增资源文件"]
+      },
+      "interpretation": "desc-only Run() 会填好 items 并只写描述文件，但不会准备图集/资源数据；随后 ExportResFiles 正常返回却不产出任何文件，不能据此实现“只导资源”。"
+    },
+    {
+      "id": "E4",
+      "title": "完整 Run() 后再次调用分步导出",
+      "command": "exportPath=/tmp/fgui-publish-probe/full-run → Run() → ExportBinaryDesc(\"/tmp/fgui-publish-probe/re-export/Package1.bytes\") → ExportResFiles(\"/tmp/fgui-publish-probe/re-export/Package1\")",
+      "observed": {
+        "fullRunFiles": [
+          "/tmp/fgui-publish-probe/full-run/Package1_fui.bytes (3091 bytes)",
+          "/tmp/fgui-publish-probe/full-run/Package1_atlas0.png (5078 bytes)",
+          "/tmp/fgui-publish-probe/full-run/Package1_atlas_x5h76.png (54764 bytes)",
+          "/tmp/fgui-publish-probe/full-run/Package1_atlas_x5h77.png (58689 bytes)"
+        ],
+        "exportBinaryDesc": "成功，/tmp/fgui-publish-probe/re-export/Package1.bytes (3091 bytes)",
+        "exportResFiles": "创建了 /tmp/fgui-publish-probe/re-export/Package1atlas0.png (0 bytes) 后不再返回；请求在 240 秒超时，编辑器心跳在 11:33:29 停止，必须重启编辑器才恢复。"
+      },
+      "interpretation": "完整 Run() 后描述字典仍在，所以 ExportBinaryDesc 可重复调用；但资源/图集状态已被 Run() 的流水线消费或清理，ExportResFiles 会写出半截文件并卡死主线程。把这种路径暴露给 Agent 等于提供一个必挂的写操作。"
+    }
+  ],
+  "safety": {
+    "projectChanges": "无。所有写操作都指向 /tmp/fgui-publish-probe；sample/assets/Package1/package.xml 的 sha256 在实验前后均为 021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2（与仓库基线一致）。",
+    "editorRecovery": "E4 挂死后通过 AppleScript quit + SIGTERM 结束进程，清理 processing 队列，重新打开 sample 工程；心跳与插件 0.8.17 均恢复正常。",
+    "probeWithdrawn": "probe_publish_handler 已从 plugin/main.ts 删除，重新编译并同步回 sample/plugins/agent-bridge；工作区只保留 0.8.17 的正式改动。"
+  },
+  "conclusion": {
+    "planItem": "P8-5：暴露 PublishHandler 的分步导出能力，便于“只导描述/只导资源”",
+    "status": "不可行，关闭",
+    "reason": "公开 Export* 方法依赖 Run() 的私有流水线状态；私有方法又无法通过 Puerts 反射调用；Run() 之后重复导出资源会把编辑器挂死。",
+    "keptCapability": "publish 的 publishDescOnly=true 已覆盖“只导描述”；完整 publish 仍是唯一安全的资源导出路径。",
+    "notDoing": "不暴露 ExportBinaryDesc/ExportDescZip/ExportResZip/ExportResFiles/ClearOldResFiles；不实现基于私有反射或半截文件清理的伪分步导出。",
+    "next": "P8-5 可视为全部完成。下一批按计划是 P8-6 分支能力；若后续确有“只导资源”需求，应另立一个明确标注为 wrapper 的 Action，用完整 Run() 输出到临时目录再筛选资源，而不是伪装成原生分步导出。"
+  },
+  "reproduction": {
+    "note": "探针代码已撤回。复现所需的关键事实：先用 puerts.$typeof(FairyEditor.PublishHandler).GetMethods(62) 读取公开/私有方法；公开方法可直接调用，私有方法只能 MethodInfo.Invoke（被裁剪）。",
+    "commands": [
+      "npx -y -p typescript@5.4.5 tsc -p plugin/tsconfig.json --pretty false",
+      "uv run python scripts/sync_to_project.py --project sample/sample.fairy --apply",
+      "open -a ~/Downloads/FairyGUI-Editor.app sample/sample.fairy",
+      "uv run fgui-agent --project sample/sample.fairy --timeout 240 call probe_publish_handler --params '{...}'"
+    ]
+  }
+}

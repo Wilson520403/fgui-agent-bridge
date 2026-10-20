@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from fairygui_agent import __version__
-from fairygui_agent.bridge_client import REQUIRED_CAPABILITIES, BridgeClient
+from fairygui_agent.bridge_client import REQUIRED_CAPABILITIES, BridgeClient, BridgeError
 from fairygui_agent.project_locator import ProjectLocator
 
 
@@ -89,6 +89,23 @@ class TestBridgeClientTimeout(unittest.TestCase):
             finally:
                 thread.join()
             self.assertEqual(result, {"late": True})
+
+
+    def test_branch_actions_require_the_branch_capability(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            client = _make_client(root)
+            with self.assertRaisesRegex(BridgeError, r"分支管理.*0\.8\.18"):
+                client.call("list_branches")
+            self.assertEqual(list((root / ".agent" / "requests").glob("*.json")), [])
+
+    def test_audit_actions_require_the_audit_capability(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            client = _make_client(root)
+            with self.assertRaisesRegex(BridgeError, r"资源审计.*0\.8\.19"):
+                client.call("find_unused")
+            self.assertEqual(list((root / ".agent" / "requests").glob("*.json")), [])
 
 
 if __name__ == "__main__":

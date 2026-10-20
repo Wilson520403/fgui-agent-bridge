@@ -1,0 +1,532 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-6-branches-live",
+  "capturedAt": "2026-10-20T12:25:22+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.18",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离副本 /tmp/fgui-p8-6-probe/sample，Package1）",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app",
+    "runFromAppTranslocation": true,
+    "launchProcedure": "pkill 编辑器 → scripts/sync_to_project.py --project /tmp/fgui-p8-6-probe/sample --apply → open -a ~/Downloads/FairyGUI-Editor.app /tmp/fgui-p8-6-probe/sample/sample.fairy → 等待心跳",
+    "pluginSnapshot": "仓库 0.8.18 插件经同步脚本写入隔离工程；每轮改插件后都完整退出并重开编辑器",
+    "heartbeat": "重开后 status 返回 online=true、pluginVersion=0.8.18、versionMatch=true",
+    "repoSampleGuard": "仓库 sample/ 26 个文件验收前后 sha256 完全一致"
+  },
+  "summary": {
+    "actionsVerified": [
+      "list_branches",
+      "create_branch",
+      "switch_branch",
+      "list_items(branch)",
+      "open_document(branch)",
+      "get_tree(branch)",
+      "import_image(branch)",
+      "create_component(branch)",
+      "set_property(branch document)"
+    ],
+    "branchesOnDisk": [
+      {
+        "name": "de",
+        "active": false,
+        "disk": {
+          "directory": "/private/tmp/fgui-p8-6-probe/sample/assets_de",
+          "exists": true,
+          "packageCount": 1,
+          "packages": [
+            "Package1"
+          ]
+        }
+      },
+      {
+        "name": "qa",
+        "active": false,
+        "disk": {
+          "directory": "/private/tmp/fgui-p8-6-probe/sample/assets_qa",
+          "exists": true,
+          "packageCount": 1,
+          "packages": [
+            "Package1"
+          ]
+        }
+      }
+    ],
+    "trunkItems": 10,
+    "trunkItemsWhileQaActive": 10,
+    "qaView": {
+      "effectiveCount": 12,
+      "trunkItemCount": 10,
+      "branchItemCount": 2
+    },
+    "branchDocumentWidths": {
+      "de": 421,
+      "qa": 360
+    },
+    "restartActiveBranch": "",
+    "readDefaults": {
+      "omitted": "activeBranch",
+      "emptyString": "trunk",
+      "deOmittedViewItems": 14,
+      "deExplicitTrunkItems": 10,
+      "qaOmittedViewItems": 12
+    },
+    "sampleUnchanged": true
+  },
+  "checks": [
+    {
+      "id": "version",
+      "status": "pass",
+      "detail": "客户端与插件均为 0.8.18，versionMatch=true；capabilities 包含 list_branches/create_branch/switch_branch",
+      "evidence": [
+        "list_branches",
+        "create_branch",
+        "switch_branch"
+      ]
+    },
+    {
+      "id": "branch-scope.write-rejected-under-trunk",
+      "status": "pass",
+      "detail": "打开 de 分支文档但活跃分支为主干时，set_property 在写入前以 branch_mismatch 拒绝",
+      "error": {
+        "code": "branch_mismatch",
+        "message": "文档分支与请求作用域不一致：文档 de，请求 (trunk)",
+        "stack": "Error: 文档分支与请求作用域不一致：文档 de，请求 (trunk)\n    at verificationError (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:1218:19)\n    at assertDocumentBranchScope (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:803:9)\n    at handleCommand (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7175:9)\n    at processRequestFile (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7653:24)\n    at pollRequests (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7673:9)\n    at onUpdate (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7686:9)",
+        "details": {
+          "stage": "branch",
+          "action": "set_property",
+          "documentBranch": "de",
+          "requestedBranch": "",
+          "hint": "分支文档要求该分支为活跃分支；Bridge 无法把主干文档的保存改道到分支"
+        }
+      },
+      "response": {
+        "id": "1792469910390-c228125b",
+        "ok": false,
+        "action": "set_property",
+        "error": {
+          "code": "branch_mismatch",
+          "message": "文档分支与请求作用域不一致：文档 de，请求 (trunk)",
+          "stack": "Error: 文档分支与请求作用域不一致：文档 de，请求 (trunk)\n    at verificationError (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:1218:19)\n    at assertDocumentBranchScope (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:803:9)\n    at handleCommand (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7175:9)\n    at processRequestFile (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7653:24)\n    at pollRequests (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7673:9)\n    at onUpdate (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7686:9)",
+          "details": {
+            "stage": "branch",
+            "action": "set_property",
+            "documentBranch": "de",
+            "requestedBranch": "",
+            "hint": "分支文档要求该分支为活跃分支；Bridge 无法把主干文档的保存改道到分支"
+          }
+        },
+        "timestamp": "2026-10-20T04:18:30.493Z"
+      }
+    },
+    {
+      "id": "branch.switch",
+      "status": "pass",
+      "detail": "switch_branch(de) 将 activeBranch 从主干切到 de，writePath=project-native、undoable=false",
+      "response": {
+        "ok": true,
+        "previousBranch": "",
+        "activeBranch": "de",
+        "switched": true,
+        "branches": [
+          "de"
+        ],
+        "documents": {
+          "unsavedBefore": false,
+          "activeDocumentBefore": "ui://qsezbqtwjjv29",
+          "activeDocumentAfter": "ui://qsezbqtwjjv29",
+          "activeDocumentBranch": "de"
+        },
+        "writePath": "project-native",
+        "undoable": false,
+        "requiresSave": false,
+        "note": "切换活跃分支只改变编辑器分支上下文；真机 6.1.4 上文档保存与资源创建不会自动改道，Bridge 的写操作按 branch 参数或活跃分支显式寻址。"
+      }
+    },
+    {
+      "id": "branch-document.write-reload",
+      "status": "pass",
+      "detail": "de/BranchComp 根宽度 420 → 421，external_reload 后 persisted=true、strength=reload",
+      "response": {
+        "before": 420,
+        "after": 421,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model"
+      },
+      "xmlWidth": 421,
+      "file": "/tmp/fgui-p8-6-probe/sample/assets_de/Package1/BranchComp.xml"
+    },
+    {
+      "id": "branch.create-and-switch",
+      "status": "pass",
+      "detail": "create_branch(qa, switch_to=true) 创建分支根与 assets_qa 目录，并切到 qa",
+      "response": {
+        "created": true,
+        "switched": true,
+        "previousBranch": "de",
+        "activeBranch": "qa",
+        "branches": [
+          "de",
+          "qa"
+        ],
+        "disk": {
+          "directory": "/private/tmp/fgui-p8-6-probe/sample/assets_qa",
+          "exists": true,
+          "packageCount": 1,
+          "packages": [
+            "Package1"
+          ]
+        }
+      }
+    },
+    {
+      "id": "branch.import-image",
+      "status": "pass",
+      "detail": "ProbeBlueQA 导入 qa，item.path=/:qa/、file 位于 assets_qa；图集判定 leave-as-is/fits",
+      "response": {
+        "operation": "imported",
+        "item": {
+          "id": "fz7hc",
+          "name": "ProbeBlueQA",
+          "title": "ProbeBlueQA",
+          "type": "image",
+          "path": "/:qa/",
+          "file": "/private/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/ProbeBlueQA.png",
+          "width": 64,
+          "height": 64,
+          "exported": true,
+          "folderAtlas": "",
+          "branch": "qa",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwfz7hc"
+        },
+        "atlasAssignment": {
+          "verdict": "leave-as-is",
+          "applied": false,
+          "shouldBeAlone": false,
+          "reason": "fits",
+          "fit": "fits",
+          "binding": "",
+          "constraintsSource": "global",
+          "atlas": "",
+          "width": 64,
+          "height": 64,
+          "folderAtlasInMemory": "",
+          "folderAtlasOnDisk": "",
+          "retiredRuleWouldAssignAlone": false,
+          "requiredWidth": 64,
+          "requiredHeight": 64,
+          "limitWidth": 2048,
+          "limitHeight": 2048,
+          "padding": 0,
+          "square": false,
+          "rotation": false
+        }
+      }
+    },
+    {
+      "id": "branch.create-component",
+      "status": "pass",
+      "detail": "BranchCompQA 创建在 qa，写验证比对 package_branch.xml，主干 package.xml 不含该条目",
+      "response": {
+        "operation": "created",
+        "item": {
+          "id": "fz7hd",
+          "name": "BranchCompQA",
+          "title": "BranchCompQA",
+          "type": "component",
+          "path": "/:qa/",
+          "file": "/private/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/BranchCompQA.xml",
+          "width": 300,
+          "height": 200,
+          "exported": true,
+          "folderAtlas": "",
+          "branch": "qa",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwfz7hd"
+        },
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": true,
+          "externalReload": false,
+          "expected": {
+            "present": true,
+            "id": "fz7hd",
+            "name": "BranchCompQA"
+          },
+          "editor": {
+            "present": true,
+            "id": "fz7hd",
+            "name": "BranchCompQA",
+            "type": "component",
+            "exported": true,
+            "file": "/private/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/BranchCompQA.xml",
+            "fileExists": true
+          },
+          "xml": {
+            "present": true,
+            "id": "fz7hd",
+            "name": "BranchCompQA",
+            "type": "component",
+            "file": "/private/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/BranchCompQA.xml"
+          },
+          "file": "/private/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/package_branch.xml",
+          "reload": null
+        }
+      },
+      "trunkManifestMatches": 0
+    },
+    {
+      "id": "branch.view-overlay",
+      "status": "pass",
+      "detail": "qa 视图 = 10 项主干 + 2 项分支；分支资源在视图中遮蔽同名主干资源",
+      "response": {
+        "effectiveCount": 12,
+        "trunkItemCount": 10,
+        "branchItemCount": 2,
+        "branchItems": [
+          "ProbeBlueQA",
+          "BranchCompQA"
+        ]
+      }
+    },
+    {
+      "id": "trunk-view.excludes-branch-items",
+      "status": "pass",
+      "detail": "6.1.4 的 pkg.items 含分支条目；修正后主干视图稳定为 10 项且不混入任何分支资源",
+      "itemCount": 10,
+      "branchItemCount": 0
+    },
+    {
+      "id": "read-only.cross-branch",
+      "status": "pass",
+      "detail": "活跃分支为 qa 时，list_items(branch=\"\") 仍可只读主干，返回 10 项主干资源",
+      "activeBranch": "qa",
+      "branch": null,
+      "itemCount": 10
+    },
+    {
+      "id": "trunk-only.rejected-under-branch",
+      "status": "pass",
+      "detail": "qa 活跃时 clear_atlas_markers 以 branch_mismatch 拒绝，未触碰磁盘",
+      "error": {
+        "code": "branch_mismatch",
+        "message": "clear_atlas_markers 只作用于主干，当前活跃分支为 qa",
+        "stack": "Error: clear_atlas_markers 只作用于主干，当前活跃分支为 qa\n    at verificationError (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:1218:19)\n    at handleCommand (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7177:9)\n    at processRequestFile (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7653:24)\n    at pollRequests (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7673:9)\n    at onUpdate (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7686:9)",
+        "details": {
+          "stage": "branch",
+          "action": "clear_atlas_markers",
+          "activeBranch": "qa",
+          "hint": "先 switch_branch 切回主干（name 为空字符串）"
+        }
+      }
+    },
+    {
+      "id": "branch-document.write-reload-qa",
+      "status": "pass",
+      "detail": "qa/BranchCompQA 根宽度 300 → 360，external_reload 后 persisted=true、strength=reload",
+      "response": {
+        "before": 300,
+        "after": 360,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model"
+      },
+      "xmlWidth": 360,
+      "file": "/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/BranchCompQA.xml"
+    },
+    {
+      "id": "restart.persistence",
+      "status": "pass",
+      "detail": "完整退出并重启编辑器后 de/qa 目录、资源、package_branch.xml 与文档宽度全部保持；activeBranch 回到主干",
+      "branches": [
+        {
+          "name": "de",
+          "active": false,
+          "disk": {
+            "directory": "/private/tmp/fgui-p8-6-probe/sample/assets_de",
+            "exists": true,
+            "packageCount": 1,
+            "packages": [
+              "Package1"
+            ]
+          }
+        },
+        {
+          "name": "qa",
+          "active": false,
+          "disk": {
+            "directory": "/private/tmp/fgui-p8-6-probe/sample/assets_qa",
+            "exists": true,
+            "packageCount": 1,
+            "packages": [
+              "Package1"
+            ]
+          }
+        }
+      ],
+      "activeBranch": "",
+      "treeQa": {
+        "branch": "qa",
+        "width": 360
+      },
+      "treeDe": {
+        "branch": "de",
+        "width": 421
+      }
+    },
+    {
+      "id": "read-default.active-branch",
+      "status": "pass",
+      "detail": "省略 branch 时读取跟随活跃分支：de 活跃时 items 返回 de 视图（14 项），open(BranchComp) 打开 de 文档；qa 活跃时 items 返回 12 项、open(BranchCompQA) 打开 qa 文档",
+      "de": {
+        "viewBranch": "de",
+        "effectiveCount": 14,
+        "openedBranch": "de"
+      },
+      "qa": {
+        "viewBranch": "qa",
+        "effectiveCount": 12,
+        "openedBranch": "qa"
+      }
+    },
+    {
+      "id": "read-default.explicit-trunk",
+      "status": "pass",
+      "detail": "branch=\"\" 明确走主干：de 活跃时 items 返回 10 项主干资源；open(BranchComp, branch=\"\") 因主干无该组件而 target_not_found，不会静默打开 de 的同名文档",
+      "items": {
+        "branch": null,
+        "itemCount": 10,
+        "branchItemCount": 0
+      },
+      "openError": {
+        "code": "target_not_found",
+        "message": "主干中没有匹配的资源：BranchComp",
+        "stack": "Error: 主干中没有匹配的资源：BranchComp\n    at verificationError (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:1255:19)\n    at resolveTrunkItem (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:393:5)\n    at openDocument (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:1142:16)\n    at handleCommand (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7310:37)\n    at processRequestFile (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7702:24)\n    at pollRequests (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7722:9)\n    at onUpdate (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7735:9)",
+        "details": {
+          "stage": "branch",
+          "branch": "",
+          "itemName": "BranchComp",
+          "itemId": null,
+          "itemPath": null
+        }
+      }
+    },
+    {
+      "id": "switch.unsaved-documents-rejected",
+      "status": "pass",
+      "detail": "主干文档有未保存修改时 switch_branch 返回 invalid_argument/unsavedDocuments=true，未切换；discard 后同一请求成功切到 de，再切回主干",
+      "error": {
+        "code": "invalid_argument",
+        "message": "有未保存文档，切换分支前必须先保存",
+        "stack": "Error: 有未保存文档，切换分支前必须先保存\n    at verificationError (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:1255:19)\n    at switchBranch (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:661:9)\n    at handleCommand (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7240:20)\n    at processRequestFile (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7702:24)\n    at pollRequests (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7722:9)\n    at onUpdate (/private/tmp/fgui-p8-6-probe/sample/plugins/agent-bridge/main.js:7735:9)",
+        "details": {
+          "stage": "input",
+          "unsavedDocuments": true,
+          "hint": "传 saveOpenDocuments:true 让 Bridge 先保存全部文档，或手动保存后重试"
+        }
+      },
+      "afterDiscard": {
+        "previousBranch": "",
+        "activeBranch": "de"
+      }
+    },
+    {
+      "id": "branch.manifests",
+      "status": "pass",
+      "detail": "分支清单只列本分支资源；主干 package.xml 不含 BranchCompQA/ProbeBlueQA",
+      "manifests": {
+        "de": {
+          "path": "/tmp/fgui-p8-6-probe/sample/assets_de/Package1/package_branch.xml",
+          "resources": [
+            "BranchComp.xml",
+            "ImplicitBranchComp.xml",
+            "RedBranch.png"
+          ]
+        },
+        "qa": {
+          "path": "/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/package_branch.xml",
+          "resources": [
+            "ProbeBlueQA.png",
+            "BranchCompQA.xml"
+          ]
+        }
+      }
+    }
+  ],
+  "runtimeFindings": [
+    {
+      "id": "P8-6-L1",
+      "title": "activeBranch 不会重定向文档保存",
+      "detail": "分支文档打开、活跃分支却为主干时，set_property 若继续保存会把改动写进错误作用域。Bridge 在写入前比对文档 branch 与请求作用域，返回 branch_mismatch。",
+      "fix": "assertDocumentBranchScope；真机负路径已验证。0.8.18 行为不变。"
+    },
+    {
+      "id": "P8-6-L2",
+      "title": "只读视图不应强制先切分支",
+      "detail": "最初的统一 assertBranchScope 让 items --branch \"\" 在 qa 活跃时失败；分支视图只是磁盘/对象模型读取，不依赖 activeBranch。",
+      "fix": "0.8.18 将 list_items/open_document/get_tree 放入 BRANCH_READ_ACTIONS，允许跨分支只读；写入仍 fail-closed。真机复验 items(branch=\"\") 在 qa 活跃时返回 10 项主干资源。"
+    },
+    {
+      "id": "P8-6-L3",
+      "title": "pkg.items 会包含分支根与分支资源",
+      "detail": "6.1.4 上创建 de/qa 后，主干 list_items 曾返回 18 项，混入两个分支的条目；真实主干只有 10 项。",
+      "fix": "主干视图过滤 item.isBranchRoot 与 item.branch 非空的条目；模拟宿主补断言，真机复验主干 10 项、qa 视图 12 项。"
+    },
+    {
+      "id": "P8-6-L4",
+      "title": "重启后 activeBranch 回主干，但编辑器会恢复分支文档",
+      "detail": "重启后 branches 显示 activeBranch=\"\"，activeDocument 却可能是 BranchComp(de)。这种分叉状态合法存在，因此每次写入都必须按文档 branch 与请求作用域校验，不能依赖 activeBranch 推断文档归属。",
+      "fix": "文档写操作统一走 assertDocumentBranchScope；负路径与重启后跨分支只读均已真机验证。"
+    },
+    {
+      "id": "P8-6-L6",
+      "title": "显式 branch=\"\" 必须绕过编辑器的活跃分支解析",
+      "detail": "FindItemByName 在 de 活跃时会把 BranchComp 解析到 de；即使请求显式传了 branch=\"\"，直接走 resolveItem 仍会打开 de 文档，违背「空字符串表示主干」的契约。",
+      "fix": "0.8.18 增加 resolveTrunkItem：先按 branch 字段过滤，必要时扫描 pkg.items 中的主干条目；真机复验 open(BranchComp, branch=\"\") 返回 target_not_found，items(branch=\"\") 返回 10 项主干资源。"
+    },
+    {
+      "id": "P8-6-L5",
+      "title": "分支路径必须带 /:branch/ 且 GetItemByPath 无法解析",
+      "detail": "CreateComponentItem/CreateFolder/ImportResource/CreateMovieClipItem 的分支地址必须是 /:branch/ 或 /:branch/Sub/；GetItemByPath 对分支路径返回空，读取必须走 GetBranchRootItem + GetItemListing/GetItemByName。",
+      "fix": "分支写入统一经 resolveWriteFolder、读取统一经 resolveBranchItem；证据来自本轮之前的活体探针与本次真机运行。"
+    }
+  ],
+  "limitations": [
+    "create_branch / switch_branch 是立即落盘、不可撤销的工程原生操作，不进 Agent 撤销栈。",
+    "RenameBranch / RemoveBranch / 分支发布与 seperatedAtlasForBranch 未暴露；删除分支仍只能用编辑器。",
+    "本次只验证 macOS + FairyGUI Editor 6.1.4；Windows 与其他 6.x 未做真机矩阵。",
+    "activeBranch 的跨重启行为只验证了本机 6.1.4；跨机/跨版本持久化不在本轮范围。"
+  ],
+  "artifacts": {
+    "probeProject": "/tmp/fgui-p8-6-probe/sample",
+    "branches": {
+      "de": {
+        "directory": "/tmp/fgui-p8-6-probe/sample/assets_de/Package1",
+        "resources": [
+          "BranchComp.xml",
+          "ImplicitBranchComp.xml",
+          "Atlas/RedBranch.png"
+        ],
+        "manifest": "/tmp/fgui-p8-6-probe/sample/assets_de/Package1/package_branch.xml"
+      },
+      "qa": {
+        "directory": "/tmp/fgui-p8-6-probe/sample/assets_qa/Package1",
+        "resources": [
+          "BranchCompQA.xml",
+          "ProbeBlueQA.png"
+        ],
+        "manifest": "/tmp/fgui-p8-6-probe/sample/assets_qa/Package1/package_branch.xml"
+      }
+    },
+    "widths": {
+      "de": "421,240",
+      "qa": "360,200"
+    },
+    "stepCount": 79,
+    "rawSteps": "/tmp/p8-6-live-final/steps.json"
+  }
+}

@@ -122,6 +122,33 @@ PUBLISH_SETTINGS_CAPABILITIES = frozenset(
     }
 )
 
+# Phase 8 / P8-5 (0.8.17)：带外清除错误的 alone 标记。它直接改 package.xml 并重开包，
+# 不走验证梯子、不可撤销；最低版本单独提示，不能混进 0.8.13 的包级设置写入。
+ATLAS_MARKER_CAPABILITIES = frozenset(
+    {
+        "clear_atlas_markers",
+    }
+)
+
+# Phase 8 / P8-6 (0.8.18)：分支管理。创建与切换走工程原生 API，立即落盘且不可撤销；
+# 写操作与读取的分支寻址另由 branch 参数驱动，最低版本单独提示。
+BRANCH_CAPABILITIES = frozenset(
+    {
+        "list_branches",
+        "create_branch",
+        "switch_branch",
+    }
+)
+
+# Phase 8 / P8-7 (0.8.19)：只读资源审计。编辑器自带的审计入口是 Pro 功能，
+# 这里改由引用图与文件哈希实现，最低版本单独提示。
+AUDIT_CAPABILITIES = frozenset(
+    {
+        "find_unused",
+        "find_duplicate",
+    }
+)
+
 
 class BridgeError(RuntimeError):
     """桥接器连接、协议或命令错误。"""
@@ -273,6 +300,9 @@ class BridgeClient:
             REFERENCE_CAPABILITIES: ("资源引用图", "0.8.10"),
             REFERENCE_REPLACE_CAPABILITIES: ("全工程引用替换", "0.8.11"),
             PUBLISH_SETTINGS_CAPABILITIES: ("包级发布设置写入", "0.8.13"),
+            ATLAS_MARKER_CAPABILITIES: ("图集标记纠正", "0.8.17"),
+            BRANCH_CAPABILITIES: ("分支管理", "0.8.18"),
+            AUDIT_CAPABILITIES: ("资源审计", "0.8.19"),
         }
         for capability_set, (label, minimum) in optional.items():
             if action in capability_set:

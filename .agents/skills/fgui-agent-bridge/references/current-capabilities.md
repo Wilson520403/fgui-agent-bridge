@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.16`
+- Bridge 版本：`0.8.19`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：57，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、Transition 只读校验与关键帧写入工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：63，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -22,17 +22,21 @@
 | --- | --- | --- |
 | `fgui_status` / `fgui_ping` / `fgui_use_project` | — / — / `project_path` | 读取状态、握手或选择工程 |
 | `fgui_get_project` / `fgui_list_packages` | 无 | 读取工程或包 |
-| `fgui_list_items` | `package_name`, `item_type?` | 列出包内资源 |
-| `fgui_open_document` | `package_name`, `item_name` | 打开已有组件文档 |
-| `fgui_create_component` | 包、名称、尺寸、目录、扩展、导出、重名策略、`save?`、`verify?` | 新建组件资源 |
-| `fgui_import_image` / `fgui_import_font` / `fgui_import_sound` | 包、绝对路径、目录、名称、冲突策略、导出、`save?`、`verify?`、`external_reload?` | 导入或替换本地资源 |
-| `fgui_create_button` | 包、名称、尺寸、模式、状态图片、目录、`save?`、`verify?` | 创建 Common/Check/Radio 标准 Button |
-| `fgui_create_movieclip` | 包、名称、有序 `frame_paths`、FPS、延迟、Swing、目录、`save?`、`verify?`、`external_reload?` | 从本地图片序列创建/替换 MovieClip |
+| `fgui_list_branches` | `refresh?`、`include_packages?`、`include_items?` | 列出工程分支；可选附带每个分支的包与资源 |
+| `fgui_create_branch` / `fgui_switch_branch` | `name`、`switch_to?`、`save_open_documents?`、`verify?` / `name`、`save_open_documents?` | 创建或切换工程分支（工程原生 Action，立即落盘、不可撤销） |
+| `fgui_list_items` | `package_name`, `item_type?`, `branch?` | 列出包内资源；传 `branch` 时读取该分支视图 |
+| `fgui_open_document` | `package_name`, `item_name`, `branch?` | 打开已有组件文档 |
+| `fgui_create_component` | 包、名称、尺寸、目录、扩展、导出、重名策略、`branch?`、`save?`、`verify?` | 新建组件资源 |
+| `fgui_import_image` / `fgui_import_font` / `fgui_import_sound` | 包、绝对路径、目录、名称、冲突策略、导出、`branch?`、`save?`、`verify?`、`external_reload?` | 导入或替换本地资源 |
+| `fgui_create_button` | 包、名称、尺寸、模式、状态图片、目录、`branch?`、`save?`、`verify?` | 创建 Common/Check/Radio 标准 Button |
+| `fgui_create_movieclip` | 包、名称、有序 `frame_paths`、FPS、延迟、Swing、目录、`branch?`、`save?`、`verify?`、`external_reload?` | 从本地图片序列创建/替换 MovieClip |
 | `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing、`save?`、`verify?`、`external_reload?`（删除不支持 external_reload） | 读取、更新或显式强制删除 MovieClip |
-| `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth` | 读取活动文档或对象树 |
+| `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth`、`branch?` | 读取活动文档或对象树 |
 | `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
 | `fgui_replace_object_resource` | target、resource_url、expected_type、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用（Button 状态显式拒绝） |
 | `fgui_query_references` / `fgui_query_dependencies` | `resource_url`、`max_items?`、`skip_package_open?` / 另加 `seek_level?` | 只读引用图：谁引用了这个资源 / 这个资源依赖了谁，精确到 packageId/itemId/propKey/arrayIndex/valueType；`seek_level` 取 `selection`/`samePackageButNotExported`/`samePackage`（默认）/`all`，`max_items` 默认 200、上限 2000 |
+| `fgui_find_unused` | `packages?`、`types?`、`include_branches?`、`skip_exported?`、`max_items?` | 只读资源审计：按引用图找出零引用资源，返回包、路径、文件大小与图片尺寸；导出资源默认列出并标记 `exported`，`skip_exported=true` 可排除；`max_items` 默认 500、上限 5000 |
+| `fgui_find_duplicate` | `packages?`、`types?`、`include_branches?`、`max_groups?`、`max_items_per_group?` | 只读资源审计：按文件内容 MD5 + 字节数分组，返回每组条目、浪费字节数；`max_groups` 默认 100、上限 1000，`max_items_per_group` 默认 50、上限 500 |
 | `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读 |
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态；expected 含 children 时执行递归对象树比对 |
 | `fgui_set_list_layout` | target、`fields`（布局字段集）、save?、verify?、external_reload? | 修改 List 布局：`layout`/`selectionMode`/`lineGap`/`columnGap`/`defaultItem`/`autoItemSize`/`align`/`vAlign`/`selectionController`/`foldInvisibleItems`/`clearOnPublish`/`scrollItemToViewOnClick`/`overflow`/`margin` |
@@ -52,6 +56,7 @@
 | `fgui_undo` / `fgui_redo` / `fgui_get_history` | 无 | Agent 事务优先的回退和历史读取 |
 | `fgui_save_document` / `fgui_save_all` / `fgui_discard_document` | 无 | 保存、全部保存或放弃当前文档修改 |
 | `fgui_get_publish_settings` / `fgui_publish` | 包名? / 范围、包、分支、保存策略 | 读取或执行现有发布配置；发布前按 `fgui_analyze_atlas_fit` 的真实约束判定 `alone` 纹理集归属，装不下的才标记 |
+| `fgui_clear_atlas_markers` | `package_name`、`execute?`、`item_ids?`、`item_names?`、`close_open_documents?` | 带外清除磁盘上错误写入的 `atlas="alone"`；默认只预览，执行前保存并备份 `package.xml`，写入后回读并重开包 |
 
 ## 动画语义
 
@@ -85,12 +90,20 @@
 - 所有本地导入路径均必须是绝对路径；导入和替换是磁盘写入。
 - `fgui_save_document` / `fgui_save_all` 保存文档和包改动；`fgui_discard_document` 只放弃当前文档未保存改动。
 - 发布前先用 `fgui_get_publish_settings`。发布期间桥接会阻止资源、动画及文档写操作。
+- `publish` 是唯一安全的发布入口，`--desc-only` 只导描述文件。`PublishHandler` 的
+  `Export*` 分步方法依赖 `Run()` 的私有流水线，不能独立调用；不要用 `call` 直接驱动
+  分步导出（2026-10-20 真机探针：`Run()` 前会崩，完整 `Run()` 后再导资源会挂死编辑器）。
+- 分支（0.8.18）：`fgui_list_branches` / `fgui_create_branch` / `fgui_switch_branch` 管理工程分支；
+  `fgui_list_items`、`fgui_open_document`、`fgui_get_tree` 与全部包资源创建/导入 Action 接受
+  `branch` 参数。分支资源落在 `assets_<branch>/<pkg>/`，清单是 `package_branch.xml`；
+  写验证比对的是这份清单，而不是主干 `package.xml`。
 
 ## CLI 映射
 
 正式子命令包括：
 
 - 基础：`status`、`ping`、`project`、`packages`、`items`、`open`、`active`、`tree`、`select`；`set`、`insert`、`remove` 支持 `--save` / `--no-verify` / `--external-reload`
+- 分支（0.8.18）：`branches`（`--refresh` / `--packages` / `--items`）、`create-branch`（`--switch` / `--save-open-documents` / `--no-verify`）、`switch-branch`（`--save-open-documents`，空名称切回主干）；`items`、`open`、`tree` 与包资源创建/导入命令支持 `--branch`
 - 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`；均支持 `--save` / `--no-verify`，image/font/sound/movieclip 另支持 `--external-reload`（asset 重载）
 - Transition：`transitions`、`get-transition`、`verify-transition`（可选 `--no-bounds`）、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`、`add-keyframes`、`set-keyframe`（`--item-index` 或 `--target-id`+`--type`+`--frame`）、`duplicate-transition`（`--new-name`）；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
@@ -104,6 +117,8 @@
 ## 关键限制
 
 - 兼容基线是 FairyGUI Editor `6.1.4`；其他 6.x 尚未完成真实环境矩阵验证。
+- 发布只有 `publish` 与 `publish --desc-only`；`PublishHandler` 的分步导出方法不可独立调用
+  （证据 `tests/reports/p8-5-publish-steps-probe.json`）。
 - 本版本不包含 Spine、DragonBones、Loader3D、SWF 或运行时游戏代码层动画控制。
 - 通用包资源的删除、移动、重命名仍未开放；只提供带 `force` 和引用检查的 MovieClip 删除。
 - Windows 尚未完成真实环境端到端验证。
@@ -685,3 +700,196 @@ Transition 的情况）。`add_keyframes` 会逐帧设置 `doc.head` 再创建�
 - 写后 `verify_transition` 两份均 `valid:true`、`clean:true`（error 0、warning 0）；
   完整退出并重启编辑器后从磁盘读回全部值与标签。
 - 仓库 `sample/` 夹具 md5 验收前后未变，所有写入只发生在隔离副本。
+
+## 0.8.17：图集 alone 标记带外纠正（P8-5 收尾）
+
+### 为什么必须改 package.xml
+
+0.8.14 起导入与发布已按真实约束判定归属，但**此前已经写进磁盘**的
+`<image atlas="alone">` 仍然存在。6.1.4 活体探针
+（`tests/reports/p8-5-atlas-marker-clear-probe.json`）证明编辑器没有可用的清除路径：
+
+- `item.folderAtlas = ""` 在对象上看似生效，`Save()` 后 `package.xml` 的 `atlas`
+  属性原样保留；`Dispose()` + 重开后又读回 `alone`。
+- `set_publish_settings` 改的是图集配置，不碰资源级 `atlas` 属性。
+
+所以唯一可行的路线是**带外编辑 `package.xml`**：删掉目标 `<image>` 节点上的
+`atlas` 属性，再 `Dispose()` + `GetPackage().EnsureOpen()` 让编辑器从磁盘重建包对象。
+若只改文件不重开，内存里的旧 XML 节点会在下一次保存时把属性写回来。
+
+### 行为
+
+`fgui_clear_atlas_markers`（`clear_atlas_markers`）：
+
+- **默认只预览**：返回 `mode:"preview"`、逐项 `candidates` / `held` 与
+  `summary.wouldClear`，`writePath:null`、`strength:"none"`，不写文档也不落盘。
+- **只清 `alone-not-needed`**：目标必须同时满足「磁盘 `atlas="alone"`」与
+  「`decideAtlasAssignment` 判定装得下」。`already-alone`（真实装不下）、
+  `not-marked-alone`、`different-atlas`、`branch-scope-unsupported`、
+  `not-atlasable` 都进 `held`，附带原因与约束来源，不改写。
+- **可限定目标**：`item_ids` / `item_names` 支持按 id 或名称过滤；名称比较忽略扩展名
+  （`hd` 与 `hd.png` 等价）。显式目标不存在报 `target_not_found`；一个名称匹配到多张图
+  报 `invalid_argument`（附 `matches`），不会「顺手清掉两张」。
+- **执行顺序**：预检打开文档 → `pkg.Save()`（先固定内存状态，备份才有意义）→
+  重新读磁盘 XML 并复核目标仍是 `alone` → 备份到 `.agent/backups/` → 正则只删目标
+  `<image>` 节点的 `atlas` 属性 → 回读全文比对 → 确认目标属性消失 → `Dispose` 重开包 →
+  再次读盘统计剩余 `alone`。
+- **打开文档策略**：包内只要有文档打开就拒绝执行；传 `close_open_documents=true`
+  才由 Action 调 `docView.CloseDocuments(pkg)`，并在 `closedDocuments` 交代关了哪些。
+  **未保存的文档永远拒绝**，即使传了该开关——带外改文件 + 重开包会丢改动。
+  关闭后仍能查到打开文档、或编辑器未暴露 `FindDocument`，都按预检失败处理。
+- **失败即停**：保存失败、备份失败、XML 预检发现重复 id / 节点缺失 / 属性值不是
+  `alone`、写入失败、回读不一致，都返回结构化错误；除写入阶段外不会留下半修改。
+  写入阶段失败时响应显式带 `mutationMayHaveOccurred:true` 与 `backupPath`。
+
+### 语义边界
+
+- 响应 `writePath: "out-of-band-xml"`、`undoable:false`、`strength:"disk"`。
+  **不进 Agent 撤销栈，不能靠 undo 回退**；回退方式是把 `backupPath` 指回的备份覆盖回去
+  后重开包。
+- `persistence.crossRestartVerified:false` 是固定声明：本 Action 只证明磁盘回读与同进程
+  重开包；跨完整重启的持久化由真机报告单独验证。
+- 只处理 `IMAGE` 类型且 `supportAtlas !== false` 的资源；分支资源（`item.branch` 非空）
+  一律不改，避免在分支语义不明时写错节点。
+- 写入保留文件原有 BOM（用 `UTF8Encoding(true)` 写回），避免整文件因编码变化产生无意义 diff。
+- 执行期间与其他写操作一样受发布封锁（`actionsBlockedDuringPublish`）。
+
+### 验证状态
+
+模拟宿主 224 项、Python 50 项、tsc 0 error。模拟宿主覆盖：只预览不写盘、只删目标属性并
+保留装不下的标记、备份内容等于执行前、按名称/id 过滤、未知目标拒绝、同名多图拒绝、
+打开文档拒绝与显式关闭、未保存文档始终拒绝、保存失败不落盘、无候选项空操作、
+分支资源 held、无 BOM 文件不新增 BOM、有 BOM 文件不产生双 BOM。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p8-5-atlas-marker-clear-live.json`）：
+预览仅列出 1920x1080 的 HD、Huge 保持 `already-alone`；文档打开时执行被拒且磁盘未变；
+显式关闭文档后执行，`package.xml` 只少一个 `atlas` 属性、Huge 标记保留、备份与执行前
+逐字节相同；`save-all` 后标记未被写回；完整退出并重启编辑器后 HD 仍无标记，
+再预览 `wouldClear:0`。验收后仓库 `sample` 已恢复基线。
+
+**未在真机触发**：分支资源、同名多图歧义、未保存文档拒绝、已有 BOM 的保留
+（均由模拟宿主覆盖）；跨机/跨版本重启不在本轮范围。
+
+## 0.8.18：分支能力（P8-6）
+
+### 行为
+
+- `fgui_list_branches`：`refresh` 重新扫描磁盘分支，`include_packages` / `include_items`
+  附带分支内的包与资源。只读，不切换分支、不唤醒编辑器文档。
+- 只读视图允许跨分支：`list_items` / `open_document` / `get_tree` 的 `branch` 可以指向
+  非活跃分支，不必先切换。包资源写入仍要求 `branch` 与活跃分支一致。
+- 6.1.4 的 `pkg.items` 会包含分支根与分支资源；`list_items` 的主干视图必须把它们滤掉，
+  否则主干列表会混入另外两个分支的条目（真机实测 18 项 vs 真实主干 10 项）。
+- `fgui_create_branch`：工程原生创建分支，默认留在当前分支，`switch_to=true` 创建后立即切换。
+- `fgui_switch_branch`：切换 `FProject.activeBranch`；空名称表示切回主干。
+- 读写都接受 `branch` 参数，省略时跟随当前活跃分支（`get_tree` 读取当前文档），
+  `branch=""` 明确表示主干。只读视图（`list_items` / `open_document` / `get_tree`）
+  可以显式读取非活跃分支，不必先切换；包资源写入要求 `branch` 与活跃分支一致，否则拒绝。
+- 分支清单为 `assets_<branch>/<pkg>/package_branch.xml`，写验证比对这份清单；
+  分支资源不会出现在主干 `package.xml`。
+
+### 6.1.4 运行时事实（活体探针 + 真机）
+
+- 创建分支资源时，`CreateComponentItem` / `CreateFolder` / `ImportResource` /
+  `CreateMovieClipItem` 的路径必须是 `/:branch/` 或 `/:branch/Sub/`，
+  末尾斜杠不可省略；`GetItemByPath` 无法解析分支路径，分支内资源要用
+  `GetBranchRootItem` + `GetItemListing` / `GetItemByName` 定位。
+- `activeBranch` 决定分支地址下的默认写入目标，但**不会重定向主干文档的保存**：
+  分支内文档要求该分支是活跃分支，否则 `branch_mismatch` 拒绝；主干文档在分支活跃时
+  也拒绝保存，必须显式切回主干。
+- 分支资源落在 `assets_<branch>/<pkg>/`，分支清单是 `package_branch.xml`；
+  同名资源在两个分支中互不覆盖，分支视图会遮蔽同名的主干资源。
+- `FindItemByName` 在活跃分支下会命中分支资源。显式 `branch=""` 必须绕过该解析、
+  按 `item.branch` 过滤回主干，否则「明确要求主干」会静默打开另一分支的同名文档
+  （0.8.18 已改为 `resolveTrunkItem`，真机负路径验证）。
+- `activeBranch` 不跨编辑器重启保留：重启后回到主干，但分支目录、资源与清单仍在磁盘上。
+- `replace_references` 与 `clear_atlas_markers` 是主干专用；分支活跃时调用直接拒绝，
+  避免把跨包引用或带外 XML 批量写到错误的分支视图。
+
+### 语义边界
+
+- `create_branch` / `switch_branch` 走工程原生 API，响应 `writePath:"project-native"`、
+  `undoable:false`、`strength:"disk"`；不进 Agent 撤销栈，创建的分支只能用编辑器删除。
+- `create_branch` 与 `switch_branch` 在 `save_open_documents=true` 时会先保存全部打开文档；
+  默认不保存。切换前若存在未保存文档，切换会拒绝而不是静默丢弃。
+- 分支内文档的持久化验证与主干一致，支持 `save` / `verify` / `external_reload`；
+  `external_reload` 为关闭重开文档，能证明分支 XML 的真实落盘。
+- 资源导入、组件创建等包资源写操作的分支寻址与图集归属判定（0.8.14）共用同一套
+  磁盘清单读取逻辑；分支里的图片同样按真实 `PackSettings` 判定 `alone`。
+
+### 验证状态
+
+模拟宿主 230 项、Python 54 项、tsc 0 error。模拟宿主覆盖：分支根目录与清单创建、
+分支组件写入只进 `package_branch.xml`、分支视图遮蔽同名主干资源、主干视图不混入分支条目、
+跨分支只读、分支/主干文档作用域不匹配拒绝、切回主干后写入恢复。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p8-6-branches-live.json`）：
+在隔离工程副本中创建分支 `de` 与 `qa`，分别导入图片、创建分支组件并写入分支文档；
+`de/BranchComp` 根宽度 421、`qa/BranchCompQA` 根宽度 360，均在 `external_reload` 级别验证通过，
+落盘到各自 `assets_<branch>/Package1/` 与 `package_branch.xml`。完整退出并重启编辑器后
+两个分支的目录、资源、清单与宽度均保持，`activeBranch` 回到主干；主干 `items` 只含 10 项主干资源，
+在 `qa` 活跃时仍可只读主干视图（10 项），分支视图为 12 项。省略 `branch` 时读取跟随活跃分支
+（de 视图 14 项 / qa 视图 12 项），`branch=""` 明确返回主干（10 项）；de 活跃时
+`open(BranchComp, branch="")` 按预期 `target_not_found`，不会误开 de 文档；文档有未保存修改时
+`switch_branch` 返回 `invalid_argument`（`unsavedDocuments:true`），`discard` 后才允许切换。
+仓库 `sample/` 验收前后未变。
+
+## 0.8.19：只读资源审计（P8-7 首个切片）
+
+### 行为
+
+- `fgui_find_unused`（`find_unused`）：遍历工程内的资源，对每个资源调用
+  `DependencyQuery.QueryReferences`，引用数为 0 即视为「当前工程内未使用」。
+  返回 `unusedCount`、`exportedUnusedCount`、`candidateCount`、`scannedCount`、
+  `errorCount` 与逐项明细；图片附带真实尺寸（`AssetSizeUtil.GetSize`）。
+- `fgui_find_duplicate`（`find_duplicate`）：用 `BuilderUtil.GetMD5HashFromFile`
+  计算每个资源文件的 MD5，以 `MD5 + 字节数` 为键分组，组内至少 2 项才算重复。
+  返回 `duplicateGroupCount`、`duplicateItemCount`、`wastedBytes`，组按浪费体积降序；
+  每组的 `wastedBytes = fileBytes × (itemCount - 1)`。
+- 范围：`packages` 接受包名或包 ID，省略时扫描全工程；`types` 可按 `image` /
+  `font` / `sound` / `movieclip` / `component` 过滤，大小写不敏感，也接受逗号分隔字符串。
+- 分支：`includeBranches` 默认 `true`。6.1.4 的 `pkg.items` 本身就会列出分支资源，
+  分支根的 `GetItemListing` 也会返回同一批条目；枚举时按 URL 去重，所以不会重复计数。
+  `include_branches=false` 会显式过滤 `item.branch` 非空的条目，只看主干。
+- 截断：`find_unused` 的 `maxItems` 与 `find_duplicate` 的 `maxGroups` /
+  `maxItemsPerGroup` 只限制返回明细，`unusedCount` / `duplicateGroupCount` /
+  `wastedBytes` 等计数始终是完整统计；截断时对应 `truncated:true`。
+- 只读：两个 Action 都返回 `readOnly:true`，不保存、不置脏、不修改引用图或磁盘，
+  也没有 `save` / `external_reload` 参数，不进入发布期间的写操作封锁表。
+
+### 6.1.4 运行时事实（活体探针 + 真机）
+
+- 编辑器原生的 `FindUnusedResource.Start`、`FindDuplicateResource.Start`、
+  `FullSearch.Start` 都需要 Pro 授权。非 Pro 环境会弹出模态授权框，插件请求会一直等不到
+  返回（真机上表现为心跳继续但请求超时）。因此 Bridge **不暴露**这些原生入口。
+- 免授权替代路径已实测可用：`DependencyQuery.QueryReferences` 提供引用计数；
+  `BuilderUtil.GetMD5HashFromFile` 读取文件内容哈希；`AssetSizeUtil.GetSize` 返回图片
+  宽高、类型、位深与颜色类型。三者组合出的结果与原生审计语义一致，但不会触发授权框。
+- `BuilderUtil.GetMD5HashFromFile` 对不可读文件会抛错，单条失败计入 `errors` 与
+  `unreadableCount`，不会让整次审计失败；`errorCount` 是真实总数，`errors` 最多保留
+  20 条样本。
+- 未使用是「当前工程引用图」口径：运行时按 URL 动态加载、或通过字符串拼接访问的资源
+  不会被引用图统计。因此导出资源默认仍列出并标记 `exported`，删除前必须人工确认。
+
+### 语义边界
+
+- 两个 Action 只做分析，不提供删除、移动或自动清理；也不会替你判断某个导出资源是否
+  真的安全。它们回答的是「现在有没有引用」和「文件内容是否重复」。
+- 重复判定按文件内容，不按资源名或尺寸；同名不同内容不会误报，不同名相同内容会被找出。
+- MD5 用于工程内查重足够，但不作为密码学强度承诺；分组同时要求字节数一致。
+
+### 验证状态
+
+模拟宿主 239 项、Python 58 项、tsc 0 error。模拟宿主覆盖：零引用判定、引用图不被改写、
+`skipExported`、包/类型过滤、分支枚举与 `--no-branches` 过滤、明细截断、重复分组与
+`wastedBytes`、不可读文件错误上报、非法上限拒绝。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p8-7-audit-live.json`）：
+在隔离副本中导入两张与 `Red` 完全相同的图片、创建一个空组件后，
+`find_unused` 扫描 13 项、列出 10 个零引用资源（其中 7 个导出资源）；
+`find_duplicate` 得到 2 组、5 项重复、可回收 434 字节——`Red` / `AuditDupA` / `AuditDupB`
+按 184 字节成组，`Component1` / `AuditOrphanComp` 按 66 字节成组。5 次审计调用前后
+`package.xml` 的 SHA-256 完全一致，响应 `readOnly:true`。
+
+**未在真机触发**：分支资源审计（示例工程没有分支，由模拟宿主覆盖）、大工程耗时上限、
+运行时动态加载导致的「假未使用」（属于口径边界，不宣称能消除）。

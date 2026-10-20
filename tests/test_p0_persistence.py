@@ -65,6 +65,77 @@ class PersistenceTests(unittest.TestCase):
                 self.assertTrue(args.external_reload, f'{action} CLI 未注册 --external-reload')
                 self.assertTrue(getattr(args, 'save', False) or action == 'verify_document')
 
+    def test_mcp_branch_mapping(self):
+        with patch.object(mcp_server._client, 'call', return_value={}) as call:
+            mcp_server.fgui_list_branches(refresh=True, include_packages=True, include_items=True)
+            mcp_server.fgui_create_branch('de', switch_to=True, save_open_documents=True)
+            mcp_server.fgui_switch_branch('')
+            mcp_server.fgui_list_items('Package1', branch='de')
+            mcp_server.fgui_open_document('Package1', 'BranchComp', branch='de')
+            mcp_server.fgui_create_component('Package1', 'BranchComp', branch='de')
+            mcp_server.fgui_get_tree(branch='de')
+        calls = [(entry.args[0], entry.args[1]) for entry in call.call_args_list]
+        self.assertEqual(calls[0], ('list_branches', {'refresh': True, 'includePackages': True, 'includeItems': True}))
+        self.assertEqual(calls[1], ('create_branch', {'name': 'de', 'switch': True, 'saveOpenDocuments': True, 'verify': True}))
+        self.assertEqual(calls[2], ('switch_branch', {'name': '', 'saveOpenDocuments': False}))
+        self.assertEqual(calls[3], ('list_items', {'packageName': 'Package1', 'branch': 'de'}))
+        self.assertEqual(calls[4], ('open_document', {'packageName': 'Package1', 'itemName': 'BranchComp', 'branch': 'de'}))
+        self.assertEqual(calls[5][0], 'create_component')
+        self.assertEqual(calls[5][1]['branch'], 'de')
+        self.assertEqual(calls[6], ('get_tree', {'maxDepth': 12, 'branch': 'de'}))
+
+    def test_cli_branch_flags(self):
+        args = build_parser().parse_args(['branches', '--refresh', '--packages', '--items'])
+        self.assertEqual((args.command, args.refresh, args.include_packages, args.include_items), ('branches', True, True, True))
+        args = build_parser().parse_args(['create-branch', 'de', '--switch', '--save-open-documents'])
+        self.assertEqual((args.command, args.name, args.switch, args.save_open_documents), ('create-branch', 'de', True, True))
+        args = build_parser().parse_args(['switch-branch', ''])
+        self.assertEqual((args.command, args.name), ('switch-branch', ''))
+        for argv in (
+            ['items', 'Package1', '--branch', 'de'],
+            ['open', 'Package1', 'BranchComp', '--branch', 'de'],
+            ['tree', '--branch', 'de'],
+            ['create-component', 'Package1', 'BranchComp', '--branch', 'de'],
+            ['import-image', 'Package1', '/tmp/a.png', '--branch', 'de'],
+            ['create-movieclip', 'Package1', 'Anim', '--frame', '/tmp/a.png', '--branch', 'de'],
+        ):
+            with self.subTest(argv=argv):
+                self.assertEqual(build_parser().parse_args(argv).branch, 'de')
+
+    def test_mcp_audit_mapping(self):
+        with patch.object(mcp_server._client, 'call', return_value={}) as call:
+            mcp_server.fgui_find_unused(packages=['Package1'], types=['image'], include_branches=False, skip_exported=True, max_items=10)
+            mcp_server.fgui_find_duplicate(types=['image'], max_groups=5, max_items_per_group=3)
+        calls = [(entry.args[0], entry.args[1]) for entry in call.call_args_list]
+        self.assertEqual(calls[0], ('find_unused', {
+            'includeBranches': False, 'skipExported': True,
+            'packages': ['Package1'], 'types': ['image'], 'maxItems': 10,
+        }))
+        self.assertEqual(calls[1], ('find_duplicate', {
+            'includeBranches': True, 'types': ['image'],
+            'maxGroups': 5, 'maxItemsPerGroup': 3,
+        }))
+
+    def test_cli_audit_flags(self):
+        args = build_parser().parse_args([
+            'find-unused', '--package', 'Package1', '--package', 'Package2',
+            '--type', 'image', '--no-branches', '--skip-exported',
+            '--max-items', '10', '--audit-timeout', '5',
+        ])
+        self.assertEqual(args.command, 'find-unused')
+        self.assertEqual(args.packages, ['Package1', 'Package2'])
+        self.assertEqual(args.types, ['image'])
+        self.assertTrue(args.no_branches)
+        self.assertTrue(args.skip_exported)
+        self.assertEqual((args.max_items, args.audit_timeout), (10, 5.0))
+        args = build_parser().parse_args([
+            'find-duplicate', '--type', 'image', '--no-branches',
+            '--max-groups', '5', '--max-items-per-group', '3',
+        ])
+        self.assertEqual(args.command, 'find-duplicate')
+        self.assertTrue(args.no_branches)
+        self.assertEqual((args.max_groups, args.max_items_per_group), (5, 3))
+
     def test_error_details_survive_client(self):
         client = BridgeClient(ProjectLocator())
         details = {'stage': 'xml', 'differences': [{'property': 'fontSize', 'expected': 40, 'actual': 24}]}

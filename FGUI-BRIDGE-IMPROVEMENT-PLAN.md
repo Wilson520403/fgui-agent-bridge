@@ -22,7 +22,7 @@
 | Phase 5 | 部分完成 | Transition 类型校验、修改前快照、类型化轨道 API、**只读校验（0.8.15 `verify_transition`，已真机复验）**与**关键帧写侧（0.8.16 `add_keyframes`/`set_keyframe`/`duplicate_transition`，已真机复验）**已实现；关键帧自动跟随属性变化仍未完成；**0.8.12 已落地按真实 `PackSettings` 的图集约束分析（`analyze_atlas_fit`）并真机复验**，截图诉求由 P8-4 结论承担（Unity 侧渲染）。 |
 | Phase 6 | 未完成 | 未找到标准 Lanhu manifest 生成、匹配和映射报告工作流。 |
 | Phase 7 | 未完成 | 未找到组件截图、视觉差分或发布后 Unity 自动联调实现。**2026-10-19：Bridge 侧离屏截图路线已证伪并放弃**（见 P8-4），截图诉求改由发布后在 Unity 侧渲染承担；`preview_run` 交互预览仍待实现。 |
-| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。**0.8.12 落地 P8-5 只读切片** `analyze_atlas_fit`：按真实 `PackSettings`（`padding`／下限放大／`maxWidth/maxHeight`／`square`／`rotation`）与全局 `AtlasSetting` 逐图判定 fit 与 binding，约束缺失时报 `unknown` 拒绝下结论，主产出是与旧大图硬编码规则的差异数 `disagreements`；纯只读，`publish` 仍按旧常量标记并以 `legacyRule.stillAppliedOnPublish` 显式声明。模拟宿主 150 项与 Python 35 项全过，**真机 6.1.4 已复验全局约束路径**（证据 `tests/reports/p8-5-atlas-fit-live.json`）；包级 `PackSettings` 路径真机无实例，仅模拟宿主覆盖。P8-5 写侧 `set_publish_settings` 已于 0.8.13/0.8.14 落地并真机复验；`PublishHandler` 分步导出与 P8-4、P8-6、P8-7 未实现。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。**0.8.15 落地 P8-3 只读切片** `verify_transition`（目标/轨道/值/引用/Tween/XY 范围，模拟宿主 189 项、Python 44 项、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-3-verify-transition-live.json`）；**0.8.16 落地 P8-3 写侧** `add_keyframes` / `set_keyframe` / `duplicate_transition`（模拟宿主 212/212、Python 50/50、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-3-keyframes-live.json`）；P8-4、P8-6、P8-7 未实现。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
+| Phase 8 | 部分完成 | **0.8.9 落地 P8-0 + P8-1 并通过真机复验**（Editor 6.1.4，证据 `tests/reports/p8-0-p8-1-live.json`）：属性写入优先走 `DocElement.SetProperty`、写 Action 回报 `writePath`、`save` 前置 fail-closed 检测静默保存；`plugin/types/editor.d.ts` 改为从真实声明生成，编译期可抓成员名/参数个数错误。**0.8.10 落地 P8-2 只读部分**：`query_references` / `query_dependencies` 走原生 `DependencyQuery`，引用精确到 `propKey`/`arrayIndex`，模拟宿主 129 项与 Python 33 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-live.json`）。**0.8.11 落地 P8-2 写侧**：`replace_references` 全工程替换，默认只预览、`--execute` 才写；实测发现原生 `ReplaceReferences` 只收 new 参数且立即落盘不进撤销栈、`fileName` 不跟随更新，因此验证只能按引用图口径并显式上报半状态，模拟宿主 137 项与 Python 35 项全过，**真机 6.1.4 已复验**（证据 `tests/reports/p8-2-write-live.json`）。**0.8.12 落地 P8-5 只读切片** `analyze_atlas_fit`：按真实 `PackSettings`（`padding`／下限放大／`maxWidth/maxHeight`／`square`／`rotation`）与全局 `AtlasSetting` 逐图判定 fit 与 binding，约束缺失时报 `unknown` 拒绝下结论，主产出是与旧大图硬编码规则的差异数 `disagreements`；纯只读，`publish` 仍按旧常量标记并以 `legacyRule.stillAppliedOnPublish` 显式声明。模拟宿主 150 项与 Python 35 项全过，**真机 6.1.4 已复验全局约束路径**（证据 `tests/reports/p8-5-atlas-fit-live.json`）；包级 `PackSettings` 路径真机无实例，仅模拟宿主覆盖。P8-5 写侧 `set_publish_settings` 已于 0.8.13/0.8.14 落地并真机复验；P8-5 剩余的分步导出已于 2026-10-20 经活体探针证伪（公开 `Export*` 依赖 `Run()` 的私有流水线，不暴露；证据 `tests/reports/p8-5-publish-steps-probe.json`），P8-4、P8-7 未实现（当时）。原始发现：编辑器通过 Puerts 暴露的完整 API（`editor.d.ts`，FairyEditor.* 合计 184 类 / 2222 成员）已提取，Bridge 实际只用 18 个类型，计划中多项"未完成"能力编辑器原生就有入口。**0.8.15 落地 P8-3 只读切片** `verify_transition`（目标/轨道/值/引用/Tween/XY 范围，模拟宿主 189 项、Python 44 项、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-3-verify-transition-live.json`）；**0.8.16 落地 P8-3 写侧** `add_keyframes` / `set_keyframe` / `duplicate_transition`（模拟宿主 212/212、Python 50/50、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-3-keyframes-live.json`）；**0.8.17 落地 P8-5 收尾** `clear_atlas_markers`：带外删除磁盘上错误的 `atlas="alone"`，默认预览、执行前保存并备份、回读校验、`Dispose` 重开包，模拟宿主 224/224、Python 50/50、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p8-5-atlas-marker-clear-live.json`），P8-5 已全部完成；**0.8.18 落地 P8-6 分支能力** `list_branches` / `create_branch` / `switch_branch` 与分支寻址读写（模拟宿主 230/230、Python 54/54、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-6-branches-live.json`）；**0.8.19 落地 P8-7 资源审计切片** `find_unused` / `find_duplicate`：原生审计入口经活体探针确认是 Pro 功能（非 Pro 会弹授权框并挂起），改由引用图与文件内容哈希实现（模拟宿主 239/239、Python 58/58、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机验收**，证据 `tests/reports/p8-7-audit-live.json`）；P8-4 已放弃，P8-7 其余项（i18n / 原生撤销栈 / 控制台可见性 / 全文搜索）未实现。证据与 API 依据见 `docs/fgui-editor-api-capability-map.md`。 |
 
 > **重排说明（2026-10-19）：** 本轮据此新增 Phase 8，并在 §7.1 给出按"能否清偿既有技术债"
 > 重排的当前实际待办；Phase 6（Lanhu 工作流）顺延。证据、边界与 API 依据见
@@ -627,7 +627,7 @@ list_controllers   # 附加的只读 Action
 
 ## Phase 8：编辑器原生能力复用（2026-10-19 逆向分析新增）
 
-**状态：P8-0、P8-1 已落地（0.8.9，模拟宿主 118/118、Python 31/31、tsc 0 error，**并已在 FairyGUI Editor 6.1.4 真机复验**）；P8-2 只读部分已落地（0.8.10，模拟宿主 129/129、Python 33/33、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-2-live.json`）；**P8-2 写侧已落地（0.8.11，模拟宿主 137/137、Python 35/35、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-2-write-live.json`）**；P8-5 已落地（0.8.12 只读分析 / 0.8.13 写侧 / 0.8.14 判定侧，均真机复验）；**P8-3 只读切片已落地（0.8.15 `verify_transition`，模拟宿主 189/189、Python 44/44、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-3-verify-transition-live.json`）；P8-3 写侧已落地（0.8.16 `add_keyframes`/`set_keyframe`/`duplicate_transition`，模拟宿主 212/212、Python 50/50、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机验收，证据 `tests/reports/p8-3-keyframes-live.json`）**；P8-4、P8-6、P8-7 未实现。** 本阶段由 FairyGUI Editor 逆向分析得出，证据、
+**状态：P8-0、P8-1 已落地（0.8.9，模拟宿主 118/118、Python 31/31、tsc 0 error，**并已在 FairyGUI Editor 6.1.4 真机复验**）；P8-2 只读部分已落地（0.8.10，模拟宿主 129/129、Python 33/33、tsc 0 error，**已在 FairyGUI Editor 6.1.4 真机复验**，证据 `tests/reports/p8-2-live.json`）；**P8-2 写侧已落地（0.8.11，模拟宿主 137/137、Python 35/35、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-2-write-live.json`）**；P8-5 已落地（0.8.12 只读分析 / 0.8.13 写侧 / 0.8.14 判定侧 / 0.8.17 标记纠正，均真机复验；分步导出经 2026-10-20 活体探针证伪，不暴露）；**P8-3 只读切片已落地（0.8.15 `verify_transition`，模拟宿主 189/189、Python 44/44、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机复验，证据 `tests/reports/p8-3-verify-transition-live.json`）；P8-3 写侧已落地（0.8.16 `add_keyframes`/`set_keyframe`/`duplicate_transition`，模拟宿主 212/212、Python 50/50、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机验收，证据 `tests/reports/p8-3-keyframes-live.json`）**；**P8-6 已落地（0.8.18 `list_branches`/`create_branch`/`switch_branch` 与分支寻址读写，模拟宿主 230/230、Python 54/54、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机验收，证据 `tests/reports/p8-6-branches-live.json`）**；**P8-7 资源审计切片已落地（0.8.19 `find_unused`/`find_duplicate`，模拟宿主 239/239、Python 58/58、tsc 0 error，已在 FairyGUI Editor 6.1.4 真机验收，证据 `tests/reports/p8-7-audit-live.json`）**；P8-4 已放弃，P8-7 其余项（i18n / 原生撤销栈 / 控制台可见性 / 全文搜索）未实现。** 本阶段由 FairyGUI Editor 逆向分析得出，证据、
 能力差集与 API 依据见 `docs/fgui-editor-api-capability-map.md`。
 
 ### 背景
@@ -886,9 +886,9 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, 
       同名替换返回 `already-alone` 不再重复施加（0.8.13 缺陷闭合）、发布三类回报真实触发。
       真机另查出一处模拟宿主查不到的谎报：曾把 `wouldAssignAlone` 定义成「本次是否写入」，
       导致已正确标记的 4096 图误报 `disagrees=true`，已拆出独立的 `shouldBeAlone` 修正。
-      **未做**：磁盘上已存在的多余 `folderAtlas=alone` **只上报不自动清除**——
-      原因已由 2026-10-19 的活体探针查清，不是「尚未验证」，见下一条。
-- [ ] 纠正磁盘上已存在的错误 `folderAtlas=alone`（输入已就位：`analyze_atlas_fit` 与
+      **当时未做**：磁盘上已存在的多余 `folderAtlas=alone` 只上报不自动清除——
+      原因已由 2026-10-19 的活体探针查清（见下一条），0.8.17 已用带外改 XML 补齐。
+- [x] 纠正磁盘上已存在的错误 `folderAtlas=alone`（输入已就位：`analyze_atlas_fit` 与
       `publish` 的 `aloneNotNeeded` 列表）。**前置已闭合且结论为否**（证据
       `tests/reports/p8-5-atlas-marker-clear-probe.json`，2026-10-19 真机探针）：
       `folderAtlas=""` **清不掉**已存在的 `alone` 标记。四组实测——
@@ -902,10 +902,26 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles, 
       带外改 `package.xml`（由 ①② 可知编辑器保存时原样保留该属性、不会改写回来，故带外
       修改能真正留存）或删除后重新导入（会换 item id、须重建引用）。在真正动手前维持
       「只上报不自动改」。另记一个副作用：对无属性的干净资源调 `SetChanged` 会往磁盘塞
-      `atlas=""` 噪声属性。
-- [ ] 暴露 `PublishHandler` 的分步导出能力，便于"只导描述/只导资源"。
+      `atlas=""` 噪声属性。**0.8.17 已落地并真机验收**：路径确认为带外编辑 `package.xml`
+      （`clear_atlas_markers`）。默认只预览；执行前 `pkg.Save()`、备份原文件、按 id 定向删除
+      目标 `<image>` 的 `atlas` 属性、回读全文、`Dispose()` + `EnsureOpen()` 重开包，再读盘
+      确认剩余 alone。只清 `alone-not-needed`，`already-alone` 等进 `held`；包内有文档默认
+      拒绝，未保存文档永远拒绝。模拟宿主 224/224、Python 50/50、tsc 0 error，**已在
+      FairyGUI Editor 6.1.4 真机验收**（证据 `tests/reports/p8-5-atlas-marker-clear-live.json`）：
+      预览只列 HD、打开文档执行被拒、执行后 diff 仅一行、`save-all` 不回写、完整重启后标记
+      仍消失，验收后 sample 已恢复基线。真机还查出一处模拟宿主未覆盖的缺陷：写回时无条件加
+      BOM 会让无 BOM 文件产生整文件 diff，已改为按原始字节检测后还原，并补了两条模拟用例。
+- [x] ~~暴露 `PublishHandler` 的分步导出能力~~（2026-10-20 活体探针证伪，不实现，证据
+      `tests/reports/p8-5-publish-steps-probe.json`）：公开 `Export*` 方法依赖 `Run()`
+      期间建立的私有流水线状态——`Run()` 前调 `ExportBinaryDesc` 因缺少 `package.xml`
+      字典条目崩溃；`Run(publishDescOnly=true)` 后 `ExportResFiles` 不产出任何文件；
+      完整 `Run()` 后再调 `ExportResFiles` 会写 0 字节文件并挂死编辑器主线程（240 秒
+      超时、心跳停止、需重启）。准备步骤 `CollectItems` / `LoadImages` / `CreateBins` /
+      `CreateOutput` 均为 private，且 `MethodInfo.Invoke` 被 IL2CPP/Puerts 裁剪，无法从
+      插件侧驱动。结论：`Run()` 是唯一安全入口；`publishDescOnly` 已覆盖“只导描述”，
+      “只导资源”没有安全的原生路径。
 
-### P8-6 分支（完全空白的能力域）
+### P8-6 分支（0.8.18 已落地）
 
 ```csharp
 FProject { activeBranch, allBranches, CreateBranch, RenameBranch, RemoveBranch, ScanBranches }
@@ -913,8 +929,23 @@ FPackage { GetBranchRootItem, CreateBranch, GetBranchPath }
 FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, GetStdResolution }
 ```
 
-- [ ] 新增 `list_branches`、`create_branch`、`switch_branch`；
-- [ ] 让 `list_items` / `get_tree` / 写操作能按分支限定范围。
+- [x] 新增 `list_branches`、`create_branch`、`switch_branch`；
+- [x] 让 `list_items` / `get_tree` / `open_document` 与包资源写操作能按分支限定范围。
+
+实现与验收（0.8.18，模拟宿主 230/230、Python 54/54、tsc 0 error，真机证据
+`tests/reports/p8-6-branches-live.json`）：
+
+- 创建与切换走工程原生 API，立即落盘、不可撤销；默认不保存打开文档，
+  `save_open_documents=true` 才显式保存。
+- 分支资源位于 `assets_<branch>/<pkg>/`，清单为 `package_branch.xml`；写验证比对分支清单。
+  分支视图会遮蔽同名主干资源。
+- 6.1.4 活体事实：创建路径必须是 `/:branch/` 或 `/:branch/Sub/`（末尾斜杠不可省略）；
+  `GetItemByPath` 无法解析分支路径；`activeBranch` **不会**重定向主干文档保存，
+  分支文档要求该分支活跃，主干文档在分支活跃时也拒绝保存；重启后 `activeBranch` 回到主干，
+  但分支磁盘内容保留。
+- `replace_references` / `clear_atlas_markers` 保持主干专用，分支活跃时拒绝。
+- 未实现：`RenameBranch` / `RemoveBranch` / 分支发布与 `seperatedAtlasForBranch`；
+  分支删除仍只能在编辑器内完成。
 
 ### P8-7 其他可直接复用域（单点成本低，收益立竿见影）
 
@@ -928,6 +959,17 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 | 自定义属性 | `ComExtention`、`ComProperty`、`CustomProps`、`FProject.RegisterComExtension` | 自定义组件属性读写 |
 | 事件驱动 | `App.On/Off/Dispatch`、`App.add_onProjectOpened/onValidate` | 评估替代部分轮询 |
 
+**已实现（0.8.19）**：`find_unused` / `find_duplicate` 只读资源审计。
+真机探针确认 `FindUnusedResource.Start` / `FindDuplicateResource.Start` / `FullSearch.Start`
+都会走 `CheckProLicense`，非 Pro 环境弹出模态授权框并让请求永久挂起，因此不复用原生入口；
+改为 `DependencyQuery.QueryReferences` + `BuilderUtil.GetMD5HashFromFile` + `IOFileInfo.Length`，
+图片尺寸用免授权的 `AssetSizeUtil.GetSize`。`full_text_search` 仍需另找免授权路径，未暴露。
+真机验收证据 `tests/reports/p8-7-audit-live.json`。
+
+**P8-7 剩余**：i18n（`import_strings` / `export_strings` / `list_langs`）、原生撤销栈评估、
+控制台可见性（`ConsoleView`）、`full_text_search`，以及 `Document.CreateGroup` /
+`FComponent.CreateChild` 等组件原语。
+
 > Phase 0 记录的夹具缺口（"Bridge 无创建 List/Group/Controller/Loader 节点的 Action"）
 > 由 P8-7 的 `Document.CreateGroup` 与 `FComponent.CreateChild` 直接解决。
 
@@ -937,9 +979,9 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 | --- | --- | --- |
 | 1 | P8-0 + P8-1 | 先把写入路径纠正到文档模型层并获得编译期保护，否则新 Action 会复制现有坑 |
 | 2 | P8-2 | 直接清偿 §1.1 的技术债，是计划里最明确的一条 |
-| 3 | ~~P8-4~~ + P8-5 | **2026-10-19：P8-4 放弃**（见下节），本批只剩 P8-5 解锁 Phase 5 的硬骨头；`preview_run` 并入后续批次。**0.8.12：P8-5 只读切片完成**（`analyze_atlas_fit`），写侧 `set_publish_settings` 与 `PublishHandler` 分步导出仍在本批 |
-| 4 | P8-3 + P8-6 | 动画深入与新能力域。**2026-10-20：P8-3 只读切片（0.8.15 `verify_transition`）与写侧关键帧 API（0.8.16）均已落地并真机验收** |
-| 5 | P8-7 批量 | 审计 / i18n / 原生撤销栈 / 可见性 |
+| 3 | ~~P8-4~~ + P8-5 | **2026-10-19：P8-4 放弃**（见下节），本批只剩 P8-5 解锁 Phase 5 的硬骨头；`preview_run` 并入后续批次。**0.8.12：P8-5 只读切片完成**（`analyze_atlas_fit`），写侧 `set_publish_settings` 于 0.8.13/0.8.14 落地，**0.8.17 `clear_atlas_markers` 完成既有多余 `alone` 标记的带外纠正并真机验收**；`PublishHandler` 分步导出于 2026-10-20 经活体探针证伪，不暴露（证据 `tests/reports/p8-5-publish-steps-probe.json`），本批完成 |
+| 4 | P8-3 + P8-6 | 动画深入与新能力域。**2026-10-20：P8-3 只读切片（0.8.15 `verify_transition`）与写侧关键帧 API（0.8.16）均已落地并真机验收；P8-6 分支能力（0.8.18 `list_branches` / `create_branch` / `switch_branch` 与分支寻址读写）已落地并真机验收** |
+| 5 | P8-7 批量 | 审计 / i18n / 原生撤销栈 / 可见性。**2026-10-20：资源审计切片已落地（0.8.19 `find_unused` / `find_duplicate`，模拟宿主 239/239、Python 58/58，真机证据 `tests/reports/p8-7-audit-live.json`）；其余项待做** |
 
 ---
 
@@ -1072,10 +1114,10 @@ Bridge 改进应在独立仓库完成：
 | 2 | ~~用真实声明生成类型 stub，接入编译期校验~~ **0.8.9 已完成** | P8-1 | 成本极低，且是 1 和后续所有项的安全网 |
 | 3 | ~~引用图（只读 + 全工程替换语义）~~ **0.8.10 + 0.8.11 已完成** | P8-2 | 直接清偿 §1.1 这条挂了两轮的技术债；写侧 `replace_references` 默认只预览、立即落盘不可撤销、`fileName` 半状态显式上报 |
 | 4 | ~~离屏渲染截图~~ **2026-10-19 已放弃**（`CaptureCamera` 对工程组件只出全透明空图，根因是编辑器不把组件交给 FairyGUI 运行时 stage 渲染）。`preview_run` 从本项剥离，仍待实现 | P8-4 | 解锁 Phase 7 的前提不成立，继续投入没有回报；证据见 `tests/reports/p8-4-render-feasibility.json` |
-| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧均已真机复验，0.8.14 判定侧已落地** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：`folderAtlas` 清空语义已真机证伪（置空清除走不通，需换带外改 XML 或删除重导入）+ `PublishHandler` 分步导出 |
+| 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧 + 0.8.14 判定侧均已真机复验；0.8.17 `clear_atlas_markers` 完成既有错误 `alone` 标记的带外纠正并真机验收（模拟宿主 224/224，证据 `tests/reports/p8-5-atlas-marker-clear-live.json`）** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：无；`PublishHandler` 分步导出经 2026-10-20 活体探针证伪，不暴露 |
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备。**0.8.15 只读 `verify_transition` 与 0.8.16 写侧 `add_keyframes`/`set_keyframe`/`duplicate_transition` 均已落地并真机验收（模拟宿主 212/212，证据 `tests/reports/p8-3-keyframes-live.json`）** |
-| 7 | 分支能力 | P8-6 | 新增域，多端/多版本项目价值高 |
-| 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影 |
+| 7 | ~~分支能力~~ **0.8.18 已完成** | P8-6 | 新增域，多端/多版本项目价值高。`list_branches` / `create_branch` / `switch_branch` 与分支寻址读写均已落地并真机验收（模拟宿主 230/230，证据 `tests/reports/p8-6-branches-live.json`）；剩余仅 `RenameBranch` / `RemoveBranch` / 分支发布 |
+| 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影。**0.8.19 已完成审计切片 `find_unused` / `find_duplicate`（免 Pro 授权，真机证据 `tests/reports/p8-7-audit-live.json`）**；i18n / 原生撤销栈 / 控制台可见性 / 全文搜索待做 |
 | 9 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 8 项提供可靠写能力后再做，否则返工 |
 
 **Phase 6 顺延到第 9 位**是本轮重排的主要变化：Lanhu 工作流的价值取决于 Bridge 写能力

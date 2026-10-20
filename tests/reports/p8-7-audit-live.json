@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-7-audit-live",
+  "capturedAt": "2026-10-20T13:16:00+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.19",
+  "protocolVersion": "1.0",
+  "project": "sample（Phase 0 隔离副本 /tmp/fgui-p8-7-sandbox/sample，Package1）",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app",
+    "launchProcedure": "scripts/sync_to_project.py --project /tmp/fgui-p8-7-sandbox/sample --apply → 只结束隔离实例 PID → open -n -a ~/Downloads/FairyGUI-Editor.app /tmp/fgui-p8-7-sandbox/sample/sample.fairy → 等待心跳",
+    "pluginSnapshot": "仓库 0.8.19 插件经同步脚本写入隔离工程，完整重启编辑器后加载",
+    "heartbeat": "status 返回 online=true、pluginVersion=0.8.19，capabilities 含 find_unused / find_duplicate",
+    "repoSampleGuard": "仓库 sample/assets/Package1/package.xml sha256 验收前后一致（021202c2fd96a13e…）",
+    "sandboxIsolation": "主编辑器实例与仓库 sample 未被改动；探针只在隔离副本中进行"
+  },
+  "setup": {
+    "note": "为了让审计有真实对象，先在隔离副本中造出确定性数据：两张与 Red 完全相同的图片、一个空组件；只有这些写操作会落盘。",
+    "operations": [
+      {
+        "operation": "import_image",
+        "source": "assets/Package1/Red.png",
+        "resourceName": "AuditDupA",
+        "exported": false
+      },
+      {
+        "operation": "import_image",
+        "source": "assets/Package1/Red.png",
+        "resourceName": "AuditDupB",
+        "exported": false
+      },
+      {
+        "operation": "create_component",
+        "componentName": "AuditOrphanComp",
+        "exported": false
+      }
+    ]
+  },
+  "readOnlyVerified": {
+    "packageXmlSha256Before": "ea80626b987b8a452a6b905124860c0ef9562621b1c458d6cd2d9a0fceb11428",
+    "packageXmlSha256After": "ea80626b987b8a452a6b905124860c0ef9562621b1c458d6cd2d9a0fceb11428",
+    "unchanged": true,
+    "responseReadOnlyFlags": {
+      "find_unused": true,
+      "find_duplicate": true
+    },
+    "note": "5 次审计调用（含打开包与读取全部资源）结束后 package.xml 字节级未变；响应同时声明 readOnly=true。"
+  },
+  "summary": {
+    "passed": 5,
+    "total": 5,
+    "status": "pass"
+  },
+  "checks": [
+    {
+      "id": "find_unused.project",
+      "status": "pass",
+      "request": {
+        "action": "find_unused",
+        "params": {
+          "includeBranches": true,
+          "skipExported": false
+        }
+      },
+      "summary": {
+        "scope": "project",
+        "includeBranches": true,
+        "branches": [],
+        "candidateCount": 13,
+        "scannedCount": 13,
+        "unusedCount": 10,
+        "exportedUnusedCount": 7,
+        "exportedSkipped": 0,
+        "errorCount": 0,
+        "truncated": false,
+        "items": [
+          "Component1",
+          "BridgeTextTest",
+          "BridgeFixture",
+          "AtlasFixture_Small",
+          "AtlasFixture_HD",
+          "AtlasFixture_Huge",
+          "AtlasFixture_Probe",
+          "AuditDupA",
+          "AuditDupB",
+          "AuditOrphanComp"
+        ]
+      },
+      "assertions": [
+        "candidateCount=13，unusedCount=10（引用图零引用）",
+        "AuditDupA / AuditDupB / AuditOrphanComp 三个新资源均被列出",
+        "AtlasFixture_* 导出资源被列出并标记 exported=true；Red / Blue 有引用不出现"
+      ]
+    },
+    {
+      "id": "find_unused.skipExported",
+      "status": "pass",
+      "request": {
+        "action": "find_unused",
+        "params": {
+          "skipExported": true
+        }
+      },
+      "summary": {
+        "scope": "project",
+        "includeBranches": true,
+        "branches": [],
+        "candidateCount": 13,
+        "scannedCount": 3,
+        "unusedCount": 3,
+        "exportedUnusedCount": 0,
+        "exportedSkipped": 10,
+        "errorCount": 0,
+        "truncated": false,
+        "items": [
+          "AuditDupA",
+          "AuditDupB",
+          "AuditOrphanComp"
+        ]
+      },
+      "assertions": [
+        "exportedSkipped=10，scannedCount=3，unusedCount=3",
+        "仅剩 3 个非导出资源，导出资源没有被误判为可删"
+      ]
+    },
+    {
+      "id": "find_unused.typeFilter",
+      "status": "pass",
+      "request": {
+        "action": "find_unused",
+        "params": {
+          "types": [
+            "image"
+          ]
+        }
+      },
+      "summary": {
+        "scope": "project",
+        "includeBranches": true,
+        "branches": [],
+        "candidateCount": 8,
+        "scannedCount": 8,
+        "unusedCount": 6,
+        "exportedUnusedCount": 4,
+        "exportedSkipped": 0,
+        "errorCount": 0,
+        "truncated": false,
+        "items": [
+          "AtlasFixture_Small",
+          "AtlasFixture_HD",
+          "AtlasFixture_Huge",
+          "AtlasFixture_Probe",
+          "AuditDupA",
+          "AuditDupB"
+        ]
+      },
+      "assertions": [
+        "candidateCount=8，unusedCount=6",
+        "组件被过滤掉，只留图片；Red / Blue 因有引用不出现"
+      ]
+    },
+    {
+      "id": "find_duplicate.project",
+      "status": "pass",
+      "request": {
+        "action": "find_duplicate",
+        "params": {
+          "includeBranches": true
+        }
+      },
+      "summary": {
+        "scope": "project",
+        "includeBranches": true,
+        "branches": [],
+        "candidateCount": 13,
+        "hashedCount": 13,
+        "unreadableCount": 0,
+        "errorCount": 0,
+        "duplicateGroupCount": 2,
+        "duplicateItemCount": 5,
+        "wastedBytes": 434,
+        "truncated": false,
+        "groups": [
+          {
+            "fileBytes": 184,
+            "itemCount": 3,
+            "wastedBytes": 368,
+            "items": [
+              "Red",
+              "AuditDupA",
+              "AuditDupB"
+            ]
+          },
+          {
+            "fileBytes": 66,
+            "itemCount": 2,
+            "wastedBytes": 66,
+            "items": [
+              "Component1",
+              "AuditOrphanComp"
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "duplicateGroupCount=2，duplicateItemCount=5，wastedBytes=434",
+        "Red / AuditDupA / AuditDupB 内容完全相同，按 184 字节成组，可回收 368 字节",
+        "Component1 / AuditOrphanComp 的组件 XML 内容相同，按 66 字节成组，可回收 66 字节"
+      ]
+    },
+    {
+      "id": "find_duplicate.typeFilter",
+      "status": "pass",
+      "request": {
+        "action": "find_duplicate",
+        "params": {
+          "types": [
+            "image"
+          ]
+        }
+      },
+      "summary": {
+        "scope": "project",
+        "includeBranches": true,
+        "branches": [],
+        "candidateCount": 8,
+        "hashedCount": 8,
+        "unreadableCount": 0,
+        "errorCount": 0,
+        "duplicateGroupCount": 1,
+        "duplicateItemCount": 3,
+        "wastedBytes": 368,
+        "truncated": false,
+        "groups": [
+          {
+            "fileBytes": 184,
+            "itemCount": 3,
+            "wastedBytes": 368,
+            "items": [
+              "Red",
+              "AuditDupA",
+              "AuditDupB"
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "duplicateGroupCount=1，wastedBytes=368",
+        "只比较图片后仅剩 Red / AuditDupA / AuditDupB 一组"
+      ]
+    }
+  ],
+  "apiFindings": [
+    {
+      "id": "P8-7-L1",
+      "severity": "high",
+      "title": "编辑器原生资源审计入口是 Pro 功能，非 Pro 会弹授权框并挂起请求",
+      "detail": "FindUnusedResource.Start / FindDuplicateResource.Start 先调用 CheckProLicense；非 Pro 环境弹出模态授权框，插件请求永久等待。FullSearch.Start 同样超时。",
+      "consequence": "不能把原生入口直接暴露为 Bridge Action，否则免费版用户会看到编辑器被卡住。",
+      "fix": "0.8.19 改为组合免授权的 DependencyQuery.QueryReferences（未使用）与 BuilderUtil.GetMD5HashFromFile（重复内容）；AssetSizeUtil.GetSize 只在真机上验证可用后用于图片尺寸。"
+    },
+    {
+      "id": "P8-7-L2",
+      "severity": "medium",
+      "title": "重复资源必须按文件内容哈希分组，不能按文件名或尺寸",
+      "detail": "Red / AuditDupA / AuditDupB 文件名不同、导入路径不同，但 MD5 与字节数一致；组件 XML 也会出现内容相同的副本。",
+      "consequence": "按名字或尺寸猜重复会漏掉真正的重复文件，也会把同名不同内容误报。",
+      "fix": "find_duplicate 以 MD5 + 字节数为键分组，wastedBytes = fileBytes × (itemCount - 1)。"
+    }
+  ],
+  "limitations": [
+    "分支资源路径只在模拟宿主覆盖（示例工程没有分支）；真机本轮只验证主干。",
+    "“未使用”是当前工程内的引用图口径；运行时按 URL 动态加载的资源不会被计数，因此导出资源默认仍列出并标记 exported。",
+    "文件内容哈希用于判重，理论上存在 MD5 碰撞；同时用字节数做辅助键，风险可接受但不宣称密码学强度。",
+    "单次审计在当前工程规模（13 项）下耗时远低于超时；大工程的耗时上限未压测。"
+  ],
+  "artifacts": {
+    "hostHarness": "node tests/p0_host_harness.cjs（模拟宿主覆盖 includeBranches / 截断 / 不可读文件）",
+    "pythonTests": "uv run --frozen python -m unittest discover -s tests"
+  }
+}

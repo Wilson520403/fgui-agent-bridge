@@ -253,7 +253,7 @@ wheels = [
 
 [[package]]
 name = "fairygui-agent-bridge"
-version = "0.8.16"
+version = "0.8.19"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },

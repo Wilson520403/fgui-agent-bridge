@@ -110,14 +110,16 @@ GlobalPublishSettings, PluginManager, PublishHandler, ReferenceInfo
 `remove_object` / `save_document` / `save_all` / `get_publish_settings` / `publish` /
 `get_history` / `discard_document` / `undo` / `redo`）。
 
-未触及且高价值的类型（节选 66 个）：`FindDuplicateResource`、`FindUnusedResource`、`FullSearch`、`ImportStringsHandler`、
+未触及且高价值的类型（节选 66 个）：`FullSearch`、`ImportStringsHandler`、
 `ExportStringsHandler`、`XMLExtension`、`PackSettings`、`AtlasSettings`、`I18nSettings`、
 `AdaptationSettings`、`PackageGroupSettings`、`ActionHistory`、`ObjectSnapshot`、
-`PreviewView`、`TestView`、`ReferenceView`、`AssetSizeUtil`、`FTree`、`MainMenu`、
+`PreviewView`、`TestView`、`ReferenceView`、`FTree`、`MainMenu`、
 `FTextField` / `FRichTextField` / `FTextInput` 的完整样式面、`CustomProps` / `ComProperty`、
 以及全部 `FButton` / `FComboBox` / `FSlider` / `FProgressBar` / `FScrollPane` 的组件级成员。
 
-> `DependencyQuery` / `ReferenceInfo` / `DepItem` 已于 0.8.10 被 `query_references` /
+> `FindDuplicateResource` / `FindUnusedResource` / `AssetSizeUtil` / `BuilderUtil` 已于
+> 0.8.19 经免授权路径触及（原生审计入口是 Pro 功能，不直接调用）；`DependencyQuery` /
+> `ReferenceInfo` / `DepItem` 已于 0.8.10 被 `query_references` /
 > `query_dependencies` 触及，**但下面的真机结论比声明可靠得多，实现 `replace_references`
 > 前必读**：
 
@@ -353,9 +355,20 @@ PublishHandler { ExportBinaryDesc, ExportDescZip, ExportResZip, ExportResFiles,
 **已实现**：`set_publish_settings`（按包设图集/代码生成/分支排除）、
 `analyze_atlas_fit`（按真实 PackSettings 判断每张图能否入图集，与写入路径同源）。
 
-### P1-D｜分支（Branch）：完全空白的能力域
+**分步导出不可用（2026-10-20 真机探针）**：`PublishHandler` 的 public
+`ExportBinaryDesc` / `ExportResFiles` 等不是独立入口，而是 `Run()` 内部流水线的
+一段。`Run()` 前调用 `ExportBinaryDesc` 会因缺少内部 `package.xml` 字典条目抛
+`KeyNotFoundException`；`Run(publishDescOnly=true)` 后 `ExportResFiles` 不产出
+文件；完整 `Run()` 后再次调用 `ExportResFiles` 会写 0 字节文件并挂死编辑器主线程。
+准备步骤 `CollectItems` / `LoadImages` / `CreateBins` / `CreateOutput` 均为
+private，且 `MethodInfo.Invoke` 被 IL2CPP/Puerts 裁剪，插件侧无法驱动。因此
+Bridge 不暴露分步导出：`publish` 的 `publishDescOnly` 是唯一安全的“只导描述”
+入口，“只导资源”没有安全的原生路径。证据
+`tests/reports/p8-5-publish-steps-probe.json`。
 
-Bridge 目前**没有任何分支相关 action**，但编辑器完整支持：
+### P1-D｜分支（Branch）：0.8.18 已落地读取、创建与写入寻址
+
+编辑器完整支持：
 
 ```csharp
 FProject  { activeBranch (get/set), allBranches, CreateBranch, RenameBranch,
@@ -365,7 +378,26 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 PublishSettings.branchPath / GlobalPublishSettings.branchProcessing / seperatedAtlasForBranch
 ```
 
-分支是 FairyGUI 的多版本并行机制，对做多端/多版本 UI 的项目价值很高。
+Bridge 已实现：
+
+- `list_branches`（只读，可附带分支内包与资源）、`create_branch`、`switch_branch`；
+  创建与切换走工程原生 API，立即落盘、不可撤销。
+- `list_items` / `open_document` / `get_tree` 与组件、按钮、图片/字体/声音、
+  MovieClip 的创建/导入 Action 支持 `branch` 参数；省略按当前活跃分支，`branch=""` 表示主干。
+- 分支资源位于 `assets_<branch>/<pkg>/`，清单为 `package_branch.xml`；写验证比对分支清单。
+- `replace_references` / `clear_atlas_markers` 保持主干专用，分支活跃时拒绝。
+
+6.1.4 真机得到的约束（详见 `tests/reports/p8-6-branches-live.json`）：
+
+- `CreateComponentItem` / `CreateFolder` / `ImportResource` / `CreateMovieClipItem`
+  的分支路径必须是 `/:branch/` 或 `/:branch/Sub/`（末尾斜杠不可省略），
+  `GetItemByPath` 无法解析分支路径，读取要走 `GetBranchRootItem` + `GetItemListing`。
+- `activeBranch` **不会**把主干文档的保存改道到分支；分支文档要求该分支活跃，
+  主干文档在分支活跃时也拒绝保存。
+- `activeBranch` 不跨编辑器重启保留，重启后回到主干，但分支磁盘内容仍在。
+
+尚未 Bridge 化：`RenameBranch` / `RemoveBranch` / `GetTrunk` / 分支发布与
+`seperatedAtlasForBranch`。分支删除仍只能在编辑器里完成。
 
 ### P2｜其余可直接复用的域
 
@@ -377,18 +409,28 @@ ExportStringsHandler { Parse, Export }
 I18nSettings { langFiles, lang, SetLangByName, LoadStrings }
 ```
 
-**工程审计（完全空白，且编辑器原生就有 UI 功能）**
+**工程审计（0.8.19 已落地免授权实现）**
 
 ```csharp
-FindUnusedResource { result, Start, Cancel }        // 找未使用资源
-FindDuplicateResource { result, GetGroup, Start, Cancel }  // 找重复资源
-FullSearch { result, Start }                          // 全文搜索
-ReferenceView { Open, FillMenuTargets }              // 引用视图
-AssetSizeUtil                                        // 资源体积统计
+FindUnusedResource { result, Start, Cancel }        // 找未使用资源（Pro）
+FindDuplicateResource { result, GetGroup, Start, Cancel }  // 找重复资源（Pro）
+FullSearch { result, Start }                          // 全文搜索（Pro，未暴露）
+ReferenceView { Open, FillMenuTargets }              // 引用视图（UI，不做）
+AssetSizeUtil { GetSize }                            // 图片尺寸/类型/位深（免授权可用）
+BuilderUtil { GetMD5HashFromFile }                   // 文件内容哈希（免授权可用）
 ```
 
-这些是编辑器右键菜单里现成的功能，Bridge 化后 Agent 就能在改动前自动体检
-（"这次替换会产生 N 个未引用"），价值很高且实现成本低。
+真机 6.1.4 实测：`FindUnusedResource.Start`、`FindDuplicateResource.Start` 都会先走
+`CheckProLicense`，非 Pro 环境弹出模态授权框，插件请求永久等不到返回；`FullSearch.Start`
+同样超时。因此 Bridge **不调用**这些原生入口，改为组合免授权 API：
+
+- `find_unused` = 遍历资源 + `DependencyQuery.QueryReferences`，引用数为 0 即未使用；
+- `find_duplicate` = `BuilderUtil.GetMD5HashFromFile` + 文件字节数分组；
+- 图片尺寸来自 `AssetSizeUtil.GetSize`（返回宽高、类型、位深、颜色类型）。
+
+这套组合与原生审计语义一致，且不会触发授权框。证据见
+`tests/reports/p8-7-audit-live.json`。`FindUnusedResource` / `FindDuplicateResource`
+的返回结构（`result` / `GetGroup`）仍未直接使用，`FullSearch` 需要另找免授权替代路径。
 
 **原生撤销栈**
 
@@ -420,8 +462,8 @@ Bridge 自己维护了 `agentUndoStack` / `agentRedoStack`。编辑器有原生�
 | 1 | P0-C（Document 层写操作）+ P0-B（真实类型校验） | 先把写入路径纠正到文档模型层，再加新能力；否则新 action 会复制现有坑 |
 | 2 | P0-A（引用图/替换语义） | 直接解决计划 §1.1，是计划里最明确的技术债 |
 | 3 | ~~P1-B（截图/预览）~~ **2026-10-19 拆分**：离屏截图路线证伪后放弃，`preview_run` 保留；P1-C（发布图集）照做 | P1-C 单独解锁 Phase 5 的硬骨头；P1-B 只剩交互预览，Phase 7 截图改走 Unity 侧 |
-| 4 | P1-A（关键帧）+ P1-D（分支） | 动画深入与新能力域 |
-| 5 | P2 批量（i18n / 审计 / 原生撤销栈） | 单个实现成本低，收益立竿见影 |
+| 4 | P1-A（关键帧）+ ~~P1-D（分支）~~ **均已完成**（0.8.16 / 0.8.18） | 动画深入与新能力域 |
+| 5 | P2 批量（i18n / 审计 / 原生撤销栈） | 单个实现成本低，收益立竿见影。审计已落地（0.8.19 `find_unused` / `find_duplicate`，免 Pro 授权），i18n / 原生撤销栈 / 控制台可见性待做 |
 
 ---
 

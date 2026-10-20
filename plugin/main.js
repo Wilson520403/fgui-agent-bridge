@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.16";
+const BRIDGE_VERSION = "0.8.19";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -157,6 +157,7 @@ function writeStatus() {
             "get_publish_settings",
             "set_publish_settings",
             "analyze_atlas_fit",
+            "clear_atlas_markers",
             "publish",
             "get_history",
             "discard_document",
@@ -165,7 +166,8 @@ function writeStatus() {
             "verify_document", "replace_object_resource", "get_text_style", "set_text_style",
             "set_list_layout", "set_group_layout", "set_relation", "set_gear_display",
             "set_controller", "list_controllers",
-            "query_references", "query_dependencies", "replace_references"
+            "query_references", "query_dependencies", "find_unused", "find_duplicate", "replace_references",
+            "list_branches", "create_branch", "switch_branch"
         ]
     });
     lastStatusWrittenMs = Date.now();
@@ -226,6 +228,9 @@ function describeItem(item) {
         height: item.height,
         exported: item.exported,
         folderAtlas: item.folderAtlas || "",
+        // 空串表示主干资源；分支资源带 assets_<branch> 归属。
+        branch: String(item.branch || ""),
+        isBranchRoot: Boolean(item.isBranchRoot),
         url: item.GetURL()
     };
 }
@@ -236,6 +241,9 @@ function describeDocument(doc) {
         itemId: doc.packageItem ? doc.packageItem.id : null,
         itemName: doc.packageItem ? doc.packageItem.name : null,
         packageName: doc.packageItem && doc.packageItem.owner ? doc.packageItem.owner.name : null,
+        // 文档实际归属的分支。切换活跃分支后，同一 URL 打开的文档可能来自分支版本。
+        branch: doc.packageItem ? String(doc.packageItem.branch || "") : null,
+        isBranchRoot: doc.packageItem ? Boolean(doc.packageItem.isBranchRoot) : null,
         modified: doc.isModified,
         savedVersion: doc.savedVersion,
         selectionCount: doc.GetSelection().Count,
@@ -353,6 +361,344 @@ function resolveItem(params) {
         throw new Error("未找到指定 FairyGUI 资源，请提供 url，或 packageName 与 itemName/itemPath");
     return item;
 }
+// 编辑器在活跃分支下会把 FindItemByName 解析到分支资源；branch="" 要求主干时
+// 必须再按 branch 字段确认，否则「显式主干」会静默打开另一分支的同名文档。
+function resolveTrunkItem(params) {
+    if (params && params.url)
+        return resolveItem({ url: params.url });
+    const item = resolveItem(params);
+    if (!String(item.branch || "") && !item.isBranchRoot)
+        return item;
+    if (params && params.packageName) {
+        const pkg = App.project.GetPackageByName(String(params.packageName));
+        if (pkg) {
+            pkg.EnsureOpen();
+            for (let i = 0; i < pkg.items.Count; i++) {
+                const candidate = pkg.items.get_Item(i);
+                if (candidate.isBranchRoot || String(candidate.branch || ""))
+                    continue;
+                if (params.itemId && String(candidate.id) === String(params.itemId))
+                    return candidate;
+                if (params.itemPath && String(candidate.path) === String(params.itemPath))
+                    return candidate;
+                if (params.itemName) {
+                    const wanted = String(params.itemName);
+                    const name = String(candidate.name);
+                    if (name === wanted || name.replace(/\.[^.]+$/, "") === wanted.replace(/\.[^.]+$/, ""))
+                        return candidate;
+                }
+            }
+        }
+    }
+    verificationError("target_not_found", `主干中没有匹配的资源：${params.itemName || params.itemId || params.itemPath || ""}`, {
+        stage: "branch", branch: "", itemName: params.itemName || null, itemId: params.itemId || null, itemPath: params.itemPath || null
+    });
+    return null;
+}
+// ------------------------------------------------------------------
+// Phase 8 / P8-6 分支
+//
+// 编辑器分支是"多态资源"：分支目录 assets_<branch> 只存与主干有差异的
+// 资源，活跃分支由 FProject.activeBranch 决定。文档打开、资源解析、保存
+// 都跟随活跃分支，因此 Bridge 不隐式改活跃分支，而是要求调用方显式
+// switch_branch 后再带 branch 参数操作，避免"以为写分支、实际写主干"。
+// ------------------------------------------------------------------
+const WRITE_PATH_PROJECT_NATIVE = "project-native";
+function normalizeBranchName(value) {
+    const name = String(value === undefined || value === null ? "" : value).trim();
+    if (!name)
+        return "";
+    if (name === "." || name === ".." || /[\\/:*?"<>|\u0000-\u001f]/.test(name))
+        throw new Error(`分支名包含非法字符：${name}`);
+    return name;
+}
+function activeBranchName() {
+    return String((App.project && App.project.activeBranch) || "");
+}
+function knownBranches(refresh) {
+    let scanChanged = null;
+    if (refresh) {
+        try {
+            scanChanged = Boolean(App.project.ScanBranches());
+        }
+        catch (_) {
+            scanChanged = null;
+        }
+    }
+    return { names: stringListToArray(App.project.allBranches), scanChanged };
+}
+function branchRequested(params) {
+    return Boolean(params) && Object.prototype.hasOwnProperty.call(params, "branch");
+}
+function branchScopeName(params) {
+    return normalizeBranchName(params.branch);
+}
+function assertBranchScope(params, action) {
+    if (!branchRequested(params))
+        return;
+    const requested = branchScopeName(params);
+    const active = activeBranchName();
+    if (requested !== active) {
+        verificationError("branch_mismatch", `分支作用域不匹配：请求 ${requested || "(trunk)"}，当前活跃分支 ${active || "(trunk)"}`, {
+            stage: "branch",
+            action,
+            requestedBranch: requested,
+            activeBranch: active,
+            hint: "先调用 switch_branch 切换活跃分支，再重试该操作"
+        });
+    }
+}
+function listToArray(list) {
+    const result = [];
+    if (!isHostObject(list))
+        return result;
+    for (let i = 0; i < list.Count; i++)
+        result.push(list.get_Item(i));
+    return result;
+}
+function describeItemSafe(item) {
+    if (!item)
+        return null;
+    try {
+        return describeItem(item);
+    }
+    catch (error) {
+        return {
+            id: item.id || null,
+            name: item.name || null,
+            type: item.type || null,
+            path: item.path || null,
+            branch: String(item.branch || ""),
+            isBranchRoot: Boolean(item.isBranchRoot),
+            url: null,
+            describeError: String(error)
+        };
+    }
+}
+function branchRootItem(pkg, branch) {
+    if (!branch || typeof pkg.GetBranchRootItem !== "function")
+        return null;
+    try {
+        return pkg.GetBranchRootItem(branch);
+    }
+    catch (_) {
+        return null;
+    }
+}
+function describeBranchPackage(pkg, branch, includeItems) {
+    let branchDirectory = null;
+    if (typeof pkg.GetBranchPath === "function") {
+        try {
+            branchDirectory = String(pkg.GetBranchPath(branch) || "");
+        }
+        catch (_) {
+            branchDirectory = null;
+        }
+    }
+    const root = branchRootItem(pkg, branch);
+    const children = listToArray(root ? root.children : null);
+    const result = {
+        package: describePackage(pkg),
+        branchDirectory,
+        branchPackagePath: branchPackagePath(branch, "/"),
+        rootItem: describeItemSafe(root),
+        childCount: children.length
+    };
+    if (includeItems)
+        result.children = children.map(describeItemSafe);
+    return result;
+}
+function branchDiskInfo(name) {
+    const directory = IOPath.Combine(String((App.project && App.project.basePath) || ""), `assets_${name}`);
+    const exists = IODirectory.Exists(directory);
+    const packages = [];
+    if (exists) {
+        const entries = IODirectory.GetDirectories(directory);
+        for (let i = 0; i < entries.Length; i++)
+            packages.push(IOPath.GetFileName(String(entries.GetValue(i))));
+    }
+    return {
+        directory,
+        exists,
+        packageCount: packages.length,
+        packages
+    };
+}
+function listBranches(params) {
+    const refresh = params.refresh === true;
+    const known = knownBranches(refresh);
+    const active = activeBranchName();
+    const includePackages = params.includePackages === true;
+    const includeItems = params.includeItems === true;
+    const branches = [];
+    for (let i = 0; i < known.names.length; i++) {
+        const name = known.names[i];
+        const entry = {
+            name,
+            active: name === active,
+            disk: branchDiskInfo(name)
+        };
+        if (includePackages) {
+            entry.packages = [];
+            for (let p = 0; p < App.project.allPackages.Count; p++)
+                entry.packages.push(describeBranchPackage(App.project.allPackages.get_Item(p), name, includeItems));
+        }
+        branches.push(entry);
+    }
+    return {
+        activeBranch: active,
+        trunkActive: active === "",
+        count: branches.length,
+        branches,
+        refresh: refresh ? { requested: true, changed: known.scanChanged } : { requested: false }
+    };
+}
+function createBranch(params) {
+    const name = normalizeBranchName(params.name);
+    if (!name)
+        verificationError("invalid_argument", "分支名不能为空", { stage: "input" });
+    if (typeof App.project.CreateBranch !== "function")
+        verificationError("unsupported_property", "编辑器未暴露 FProject.CreateBranch", { stage: "input" });
+    const before = knownBranches(false).names;
+    if (before.indexOf(name) >= 0)
+        verificationError("invalid_argument", `分支已存在：${name}`, { stage: "input", branch: name, branches: before });
+    const previousBranch = activeBranchName();
+    App.project.CreateBranch(name);
+    // 工程级 CreateBranch 只登记分支并建立 assets_<name>；每个包的 branch 根
+    // 由 FPackage.CreateBranch 建立。缺少这一步时，切到活跃分支后新资源仍会
+    // 写进主干（真机 6.1.4 已实测）。
+    const packageBranches = [];
+    for (let i = 0; i < App.project.allPackages.Count; i++) {
+        const pkg = App.project.allPackages.get_Item(i);
+        pkg.EnsureOpen();
+        let packageCreated = false;
+        let error = null;
+        if (typeof pkg.CreateBranch === "function") {
+            try {
+                pkg.CreateBranch(name);
+                packageCreated = true;
+            }
+            catch (caught) {
+                error = String(caught);
+            }
+        }
+        const root = branchRootItem(pkg, name);
+        if (!root && !error)
+            error = "GetBranchRootItem 未返回分支根";
+        packageBranches.push({
+            package: pkg.name,
+            created: packageCreated,
+            branchDirectory: typeof pkg.GetBranchPath === "function" ? String(pkg.GetBranchPath(name) || "") : null,
+            branchPackagePath: branchPackagePath(name, "/"),
+            rootItem: describeItemSafe(root),
+            error
+        });
+    }
+    // 创建后立即重扫，让 allBranches 与磁盘同步。扫描返回是否发生变化；
+    // 真机上 CreateBranch 已自行刷新时它是 false，不能据此判失败。
+    const after = knownBranches(true);
+    const appears = after.names.indexOf(name) >= 0;
+    const disk = branchDiskInfo(name);
+    if (params.verify !== false) {
+        if (!appears)
+            verificationError("persistence_failed", "创建分支后 allBranches 中未出现该分支", {
+                stage: "readback", branch: name, branches: after.names
+            });
+        if (!disk.exists)
+            verificationError("persistence_failed", "创建分支后磁盘目录不存在", {
+                stage: "disk", branch: name, directory: disk.directory
+            });
+        const packageErrors = packageBranches.filter(entry => entry.error);
+        if (packageErrors.length > 0)
+            verificationError("persistence_failed", "部分包创建分支失败", {
+                stage: "package-branch", branch: name, packages: packageErrors
+            });
+    }
+    let switched = false;
+    let switchResult = null;
+    if (params.switch === true) {
+        switchResult = switchBranch({ name, saveOpenDocuments: params.saveOpenDocuments === true });
+        switched = switchResult.switched;
+    }
+    lastWritePath = WRITE_PATH_PROJECT_NATIVE;
+    return {
+        ok: true,
+        branch: name,
+        created: true,
+        switched,
+        previousBranch: switchResult ? switchResult.previousBranch : previousBranch,
+        activeBranch: activeBranchName(),
+        branches: after.names,
+        documents: switchResult ? switchResult.documents : undefined,
+        disk,
+        packageBranches,
+        verification: {
+            editorReadback: appears,
+            disk: { performed: true, directory: disk.directory, exists: disk.exists, packageCount: disk.packageCount },
+            scanChanged: after.scanChanged
+        },
+        writePath: WRITE_PATH_PROJECT_NATIVE,
+        undoable: false,
+        requiresSave: false,
+        note: "分支创建走编辑器原生工程 API，立即落盘；不进入组件文档撤销栈。"
+    };
+}
+function switchBranch(params) {
+    if (!Object.prototype.hasOwnProperty.call(params, "name"))
+        verificationError("invalid_argument", "必须提供 name；空字符串表示切回主干", { stage: "input" });
+    const requested = normalizeBranchName(params.name);
+    const known = knownBranches(false);
+    if (requested && known.names.indexOf(requested) < 0)
+        verificationError("target_not_found", `未找到分支：${requested}`, {
+            stage: "input", branch: requested, branches: known.names
+        });
+    const previousBranch = activeBranchName();
+    const docView = App.docView;
+    const unsaved = docView && typeof docView.HasUnsavedDocuments === "function"
+        ? Boolean(docView.HasUnsavedDocuments())
+        : false;
+    if (unsaved && params.saveOpenDocuments !== true)
+        verificationError("invalid_argument", "有未保存文档，切换分支前必须先保存", {
+            stage: "input", unsavedDocuments: true,
+            hint: "传 saveOpenDocuments:true 让 Bridge 先保存全部文档，或手动保存后重试"
+        });
+    if (unsaved && params.saveOpenDocuments === true) {
+        if (typeof docView.SaveAllDocuments !== "function")
+            verificationError("unsupported_property", "编辑器未暴露 SaveAllDocuments，无法保存后切换", { stage: "input" });
+        docView.SaveAllDocuments();
+        if (typeof docView.HasUnsavedDocuments === "function" && docView.HasUnsavedDocuments())
+            verificationError("persistence_failed", "保存后仍有未保存文档，拒绝切换分支", { stage: "save" });
+    }
+    const activeDocumentBefore = App.activeDoc ? String(App.activeDoc.docURL || "") : null;
+    const changed = previousBranch !== requested;
+    if (changed)
+        App.project.activeBranch = requested;
+    const readback = activeBranchName();
+    if (readback !== requested)
+        verificationError("persistence_failed", "切换分支后 activeBranch 回读不一致", {
+            stage: "switch", requested, activeBranch: readback
+        });
+    lastWritePath = WRITE_PATH_PROJECT_NATIVE;
+    return {
+        ok: true,
+        previousBranch,
+        activeBranch: readback,
+        switched: changed,
+        branches: known.names,
+        documents: {
+            unsavedBefore: unsaved,
+            activeDocumentBefore,
+            activeDocumentAfter: App.activeDoc ? String(App.activeDoc.docURL || "") : null,
+            activeDocumentBranch: App.activeDoc && App.activeDoc.packageItem
+                ? String(App.activeDoc.packageItem.branch || "")
+                : null
+        },
+        writePath: WRITE_PATH_PROJECT_NATIVE,
+        undoable: false,
+        requiresSave: false,
+        note: "切换活跃分支只改变编辑器分支上下文；真机 6.1.4 上文档保存与资源创建不会自动改道，Bridge 的写操作按 branch 参数或活跃分支显式寻址。"
+    };
+}
 function normalizePackagePath(value) {
     const raw = String(value || "").trim().replace(/\\/g, "/");
     const normalized = raw.replace(/^\/+|\/+$/g, "");
@@ -400,6 +746,99 @@ function resolvePackageFolder(pkg, pathValue, createIfMissing) {
 function findItemInFolder(pkg, folder, name) {
     return pkg.GetItemByName(folder, name);
 }
+// 分支写入必须显式寻址到 /:branch/ 前缀：真机 6.1.4 上 activeBranch 不会把
+// CreateComponentItem / ImportResource / 文档保存改道到分支，只有包内路径能
+// 决定落盘位置。缺省使用活跃分支，显式 branch:"" 只能配合切回主干使用。
+function branchWriteName(params) {
+    return branchRequested(params) ? branchScopeName(params) : activeBranchName();
+}
+function branchPackagePath(branch, folderPath) {
+    const suffix = folderPath === "/" ? "" : String(folderPath).replace(/^\/+/, "");
+    return `/:${branch}/${suffix}`;
+}
+function logicalBranchPath(item, branch) {
+    if (!branch)
+        return String(item.path || "/");
+    const prefix = `/:${branch}/`;
+    const path = String(item.path || "/");
+    return path.indexOf(prefix) === 0 ? `/${path.slice(prefix.length)}` : path;
+}
+function resolveWriteFolder(pkg, params, folderPath, createIfMissing) {
+    const branch = branchWriteName(params);
+    if (!branch)
+        return { folder: resolvePackageFolder(pkg, folderPath, createIfMissing), path: folderPath, branch: "" };
+    const branches = knownBranches(false).names;
+    if (branches.indexOf(branch) < 0)
+        verificationError("target_not_found", `未找到分支：${branch}`, {
+            stage: "branch", branch, branches, hint: "先调用 create_branch 创建分支"
+        });
+    const root = branchRootItem(pkg, branch);
+    if (!root)
+        verificationError("branch_mismatch", `分支 ${branch} 在包 ${pkg.name} 中没有分支根`, {
+            stage: "branch", branch, package: pkg.name, hint: "重新调用 create_branch，或确认该包属于此分支"
+        });
+    pkg.EnsureOpen();
+    if (folderPath === "/")
+        return { folder: root, path: branchPackagePath(branch, "/"), branch };
+    const parts = folderPath.split("/").filter(part => !!part);
+    let current = root;
+    let currentPath = branchPackagePath(branch, "/");
+    for (let index = 0; index < parts.length; index++) {
+        const part = parts[index];
+        let next = pkg.GetItemByName(current, part);
+        if (!next && createIfMissing)
+            next = pkg.CreateFolder(part, currentPath, false);
+        if (!next)
+            throw new Error(`分支 ${branch} 中不存在目录：${folderPath}`);
+        if (next.type !== FairyEditor.FPackageItemType.FOLDER)
+            throw new Error(`分支 ${branch} 中路径不是目录：${folderPath}`);
+        current = next;
+        currentPath = branchPackagePath(branch, `/${parts.slice(0, index + 1).join("/")}/`);
+    }
+    return { folder: current, path: currentPath, branch };
+}
+function resolveBranchItem(pkg, branch, params) {
+    const root = branchRootItem(pkg, branch);
+    if (!root)
+        return null;
+    const listing = listToArray(pkg.GetItemListing(root, null, false, true, null));
+    const itemId = params.itemId ? String(params.itemId) : "";
+    const itemName = params.itemName ? String(params.itemName) : "";
+    const itemPath = params.itemPath ? normalizePackagePath(params.itemPath) : "";
+    for (let index = 0; index < listing.length; index++) {
+        const item = listing[index];
+        if (String(item.branch || "") !== branch)
+            continue;
+        if (itemId && String(item.id) === itemId)
+            return item;
+        if (itemName && String(item.name) === itemName)
+            return item;
+        if (itemPath && logicalBranchPath(item, branch) === itemPath)
+            return item;
+    }
+    return null;
+}
+function assertItemBranchScope(item, params, action) {
+    const target = branchWriteName(params);
+    const actual = String((item && item.branch) || "");
+    if (actual !== target)
+        verificationError("branch_mismatch", `资源分支与请求作用域不一致：资源 ${actual || "(trunk)"}，请求 ${target || "(trunk)"}`, {
+            stage: "branch", action, itemId: item ? String(item.id) : null, itemBranch: actual, requestedBranch: target,
+            hint: target ? "改用分支内资源，或先 create/import 到该分支" : "先 switch_branch 切回主干"
+        });
+}
+function assertDocumentBranchScope(params, action) {
+    const doc = App.activeDoc;
+    if (!doc || !doc.packageItem)
+        return;
+    const docBranch = String(doc.packageItem.branch || "");
+    const requested = branchRequested(params) ? branchScopeName(params) : activeBranchName();
+    if (docBranch !== requested)
+        verificationError("branch_mismatch", `文档分支与请求作用域不一致：文档 ${docBranch || "(trunk)"}，请求 ${requested || "(trunk)"}`, {
+            stage: "branch", action, documentBranch: docBranch, requestedBranch: requested,
+            hint: "分支文档要求该分支为活跃分支；Bridge 无法把主干文档的保存改道到分支"
+        });
+}
 function resolveNewItemName(pkg, folder, requestedName, autoRename) {
     if (!findItemInFolder(pkg, folder, requestedName))
         return requestedName;
@@ -446,19 +885,20 @@ function createComponent(params) {
     const pkg = resolvePackage(params);
     const requestedName = validateResourceName(params.componentName, "componentName");
     const folderPath = normalizePackagePath(params.folderPath);
-    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
+    const folder = target.folder;
     const actualName = resolveNewItemName(pkg, folder, requestedName, params.autoRename === true);
     const width = validateSize(params.width, 800, "width");
     const height = validateSize(params.height, 600, "height");
     const extensionId = params.extensionId ? String(params.extensionId).trim() : "";
     const exported = params.exported !== false;
-    const item = pkg.CreateComponentItem(actualName, width, height, folderPath, extensionId, exported, false);
+    const item = pkg.CreateComponentItem(actualName, width, height, target.path, extensionId, exported, false);
     if (!item)
         throw new Error(`创建组件失败：${requestedName}`);
     markPackageChanged(pkg);
     const document = params.openAfterCreate === false ? null : openDocument({ url: item.GetURL() });
     const result = describeCreatedItem(item, "created", requestedName, folderPath, document);
-    return packageWriteResult(result, pkg, packageItemRef(item, "component", folderPath, false), params);
+    return packageWriteResult(result, pkg, packageItemRef(item, "component", target.path, false), params);
 }
 function normalizeConflictPolicy(value) {
     const policy = String(value || "error").toLowerCase();
@@ -481,7 +921,8 @@ async function importImage(params) {
     if (detectedType !== FairyEditor.FPackageItemType.IMAGE)
         throw new Error(`文件不是 FairyGUI 支持的图片资源：${sourcePath}`);
     const folderPath = normalizePackagePath(params.folderPath);
-    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
+    const folder = target.folder;
     let requestedName = params.resourceName
         ? String(params.resourceName).trim()
         : String(IOPath.GetFileNameWithoutExtension(sourcePath));
@@ -518,10 +959,10 @@ async function importImage(params) {
             packageModified: true,
             requiresSave: true,
             diskWrite: true
-        }, pkg, packageItemRef(existing, "image", folderPath, true), params);
+        }, pkg, packageItemRef(existing, "image", target.path, true), params);
     }
     const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
-    const item = await puerts.$promise(pkg.ImportResource(sourcePath, folderPath, importFileName));
+    const item = await puerts.$promise(pkg.ImportResource(sourcePath, target.path, importFileName));
     if (!item)
         throw new Error(`导入图片失败：${sourcePath}`);
     if (item.type !== FairyEditor.FPackageItemType.IMAGE)
@@ -542,7 +983,7 @@ async function importImage(params) {
         packageModified: true,
         requiresSave: true,
         diskWrite: true
-    }, pkg, packageItemRef(item, "image", folderPath, true), params);
+    }, pkg, packageItemRef(item, "image", target.path, true), params);
 }
 async function importFont(params) {
     validatePackageWriteOptions(params, "font", true);
@@ -559,7 +1000,8 @@ async function importFont(params) {
     if (detectedType !== FairyEditor.FPackageItemType.FONT)
         throw new Error(`文件不是 FairyGUI 支持的字体资源：${sourcePath}`);
     const folderPath = normalizePackagePath(params.folderPath);
-    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
+    const folder = target.folder;
     let requestedName = params.resourceName
         ? String(params.resourceName).trim()
         : String(IOPath.GetFileNameWithoutExtension(sourcePath));
@@ -594,10 +1036,10 @@ async function importFont(params) {
             packageModified: true,
             requiresSave: true,
             diskWrite: true
-        }, pkg, packageItemRef(existing, "font", folderPath, true), params);
+        }, pkg, packageItemRef(existing, "font", target.path, true), params);
     }
     const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
-    const item = await puerts.$promise(pkg.ImportResource(sourcePath, folderPath, importFileName));
+    const item = await puerts.$promise(pkg.ImportResource(sourcePath, target.path, importFileName));
     if (!item)
         throw new Error(`导入字体失败：${sourcePath}`);
     if (item.type !== FairyEditor.FPackageItemType.FONT)
@@ -616,7 +1058,7 @@ async function importFont(params) {
         packageModified: true,
         requiresSave: true,
         diskWrite: true
-    }, pkg, packageItemRef(item, "font", folderPath, true), params);
+    }, pkg, packageItemRef(item, "font", target.path, true), params);
 }
 function normalizeButtonMode(value) {
     const mode = String(value || "common").toLowerCase();
@@ -655,7 +1097,8 @@ function createButton(params) {
     const pkg = resolvePackage(params);
     const requestedName = validateResourceName(params.buttonName, "buttonName");
     const folderPath = normalizePackagePath(params.folderPath);
-    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
+    const folder = target.folder;
     const actualName = resolveNewItemName(pkg, folder, requestedName, params.autoRename === true);
     const width = validateSize(params.width, 160, "width");
     const height = validateSize(params.height, 60, "height");
@@ -665,7 +1108,7 @@ function createButton(params) {
         ? String(params.extensionId).trim()
         : FairyEditor.FObjectType.EXT_BUTTON;
     const templates = new FairyEditor.ComponentTemplates(pkg);
-    const item = templates.CreateButtonItem(actualName, extensionId, mode, toCsStringArray(images), width, height, params.asListItem === true, params.createRelations !== false, params.createText !== false, params.createIcon !== false, params.exported !== false, folderPath);
+    const item = templates.CreateButtonItem(actualName, extensionId, mode, toCsStringArray(images), width, height, params.asListItem === true, params.createRelations !== false, params.createText !== false, params.createIcon !== false, params.exported !== false, target.path);
     if (!item)
         throw new Error(`创建按钮失败：${requestedName}`);
     markPackageChanged(pkg);
@@ -673,10 +1116,31 @@ function createButton(params) {
     const result = describeCreatedItem(item, "created", requestedName, folderPath, document);
     result.mode = mode;
     result.imageUrls = images;
-    return packageWriteResult(result, pkg, packageItemRef(item, "component", folderPath, false), params);
+    return packageWriteResult(result, pkg, packageItemRef(item, "component", target.path, false), params);
 }
 function openDocument(params) {
-    const item = resolveItem(params);
+    let item = null;
+    // 显式 branch 优先；省略时按活跃分支解析，branch="" 才表示主干。
+    // 仅传 url 的内部调用保持按 URL 直接解析，不叠加分支上下文。
+    const scopeBranch = branchRequested(params) ? branchScopeName(params) : (params && params.url ? "" : activeBranchName());
+    if (scopeBranch) {
+        const branch = scopeBranch;
+        if (params.url) {
+            item = resolveItem({ url: params.url });
+        }
+        else {
+            const pkg = resolvePackage(params);
+            item = resolveBranchItem(pkg, branch, params);
+        }
+        if (!item || String(item.branch || "") !== branch)
+            verificationError("target_not_found", `分支 ${branch} 中没有匹配的资源`, {
+                stage: "branch", branch, itemId: params.itemId || null, itemName: params.itemName || null, itemPath: params.itemPath || null,
+                hint: "分支资源需先在分支内创建或导入；要打开主干资源请显式传 branch=\"\""
+            });
+    }
+    else {
+        item = resolveTrunkItem(params);
+    }
     if (item.type !== FairyEditor.FPackageItemType.COMPONENT)
         throw new Error(`资源 ${item.name} 不是组件，无法作为文档打开`);
     const opened = App.docView.OpenDocument(item.GetURL(), true);
@@ -1136,9 +1600,14 @@ function verifyObject(doc, obj, expected, readXml, reload, state, readers) {
             for (const k of (disk.skipped || []))
                 skipped[k] = true;
             const xmlExpected = {};
-            for (const k of Object.keys(expected))
-                if (!skipped[k])
-                    xmlExpected[k] = expected[k];
+            for (const k of Object.keys(expected)) {
+                if (skipped[k])
+                    continue;
+                // 组件根节点不序列化 name（文件名即组件名），拿它做 XML 断言会让每次根对象写入都误报。
+                if (obj === doc.content && k === "name")
+                    continue;
+                xmlExpected[k] = expected[k];
+            }
             compareVerification(xmlExpected, disk.values, "xml", obj);
         }
         catch (error) {
@@ -2261,17 +2730,24 @@ function validatePackageWriteOptions(params, itemType, allowReload) {
     if (params.externalReload && !allowReload)
         verificationError("invalid_argument", `external reload 暂不支持该操作：仅 image/sound/font/movieclip 包资源可通过 asset 重新加载验证（当前：${itemType}）`, { stage: "input" });
 }
-function persistedPackageItemValues(pkg, itemId) {
-    const file = IOPath.Combine(String(pkg.basePath || ""), "package.xml");
+function packageManifestPath(pkg, branch) {
+    if (!branch)
+        return IOPath.Combine(String(pkg.basePath || ""), "package.xml");
+    // 分支资源登记在 assets_<branch>/<pkg>/package_branch.xml 的
+    // <branchDescription><resources> 下，主干 package.xml 看不到它们。
+    return IOPath.Combine(String((App.project && App.project.basePath) || ""), `assets_${branch}`, String(pkg.name), "package_branch.xml");
+}
+function persistedPackageItemValues(pkg, itemId, branch) {
+    const file = packageManifestPath(pkg, branch);
     if (!IOFile.Exists(file))
-        verificationError("persistence_failed", "无法读取 package.xml", { stage: "xml", file });
+        verificationError("persistence_failed", `无法读取 ${branch ? "package_branch.xml" : "package.xml"}`, { stage: "xml", file, branch: branch || null });
     const XmlType = CS.FairyGUI.Utils.XML;
     let xml = null;
     try {
         xml = new XmlType(String(IOFile.ReadAllText(file)));
     }
     catch (error) {
-        verificationError("persistence_failed", "package.xml 解析失败", { stage: "xml", file, reason: String(error) });
+        verificationError("persistence_failed", `${branch ? "package_branch.xml" : "package.xml"} 解析失败`, { stage: "xml", file, branch: branch || null, reason: String(error) });
     }
     const resources = xml.GetNode("resources");
     let node = null;
@@ -2280,7 +2756,7 @@ function persistedPackageItemValues(pkg, itemId) {
             const candidate = resources.elements.get_Item(i);
             if (String(candidate.GetAttribute("id") || "") === String(itemId)) {
                 if (node)
-                    verificationError("persistence_failed", "package.xml 中资源 ID 重复", { stage: "xml", id: itemId });
+                    verificationError("persistence_failed", `${branch ? "package_branch.xml" : "package.xml"} 中资源 ID 重复`, { stage: "xml", id: itemId, branch: branch || null });
                 node = candidate;
             }
         }
@@ -2340,7 +2816,7 @@ function writePackageVerification(pkg, ref, params) {
     // 包资源写入走 FPackage.ImportResource/UpdateResource/DeleteItem 等包层 API，
     // 组件文档模型不参与。
     const expectPresent = ref.present !== false;
-    const target = { id: ref.id || null, name: ref.name || null, path: ref.path || null, type: ref.type || "packageItem", url: ref.url || null };
+    const target = { id: ref.id || null, name: ref.name || null, path: ref.path || null, type: ref.type || "packageItem", url: ref.url || null, branch: ref.branch || "" };
     const stub = { id: ref.id, name: ref.name, objectType: ref.type || "packageItem" };
     const expected = { present: expectPresent };
     if (expectPresent) {
@@ -2369,7 +2845,7 @@ function writePackageVerification(pkg, ref, params) {
     let xmlFile = null;
     let xmlValues = null;
     if (saved && params.verify !== false) {
-        const disk = persistedPackageItemValues(pkg, String(ref.id));
+        const disk = persistedPackageItemValues(pkg, String(ref.id), String(ref.branch || ""));
         xmlFile = disk.file;
         xmlValues = disk.values;
         if (ref.file !== undefined && ref.file !== null)
@@ -2391,12 +2867,13 @@ function writePackageVerification(pkg, ref, params) {
     return {
         ok: true, target, saved, persisted: strength !== NONE_STRENGTH, strength, verification,
         writePath: lastWritePath,
-        note: `${strengthNote(verification, saved, "包资源验证覆盖 package.xml 条目与资源文件；")}失败不自动回滚。`
+        note: `${strengthNote(verification, saved, ref.branch ? "包资源验证覆盖 package_branch.xml 条目与资源文件；" : "包资源验证覆盖 package.xml 条目与资源文件；")}失败不自动回滚。`
     };
 }
 function packageWriteResult(result, pkg, ref, params) {
     const verified = writePackageVerification(pkg, ref, params);
     result.requiresSave = !verified.saved;
+    result.branch = String(ref.branch || "");
     return Object.assign(result, verified);
 }
 function packageItemRef(item, type, folderPath, checkFile) {
@@ -2407,6 +2884,7 @@ function packageItemRef(item, type, folderPath, checkFile) {
         type,
         path: folderPath,
         present: true,
+        branch: String(item.branch || ""),
         file: item.file ? String(item.file) : null,
         checkFile
     };
@@ -4332,7 +4810,8 @@ async function importSound(params) {
     if (FairyEditor.FPackageItemType.GetFileType(sourcePath) !== FairyEditor.FPackageItemType.SOUND)
         throw new Error(`文件不是 FairyGUI 支持的声音资源：${sourcePath}`);
     const folderPath = normalizePackagePath(params.folderPath);
-    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
+    const folder = target.folder;
     let requestedName = params.resourceName ? String(params.resourceName).trim() : String(IOPath.GetFileNameWithoutExtension(sourcePath));
     if (IOPath.GetExtension(requestedName))
         requestedName = String(IOPath.GetFileNameWithoutExtension(requestedName));
@@ -4353,15 +4832,15 @@ async function importSound(params) {
         existing.exported = params.exported !== false;
         existing.SetChanged();
         markPackageChanged(pkg);
-        return packageWriteResult({ operation: "replaced", requestedName, actualName: existing.name, sourcePath, folderPath, item: describeItem(existing), packageModified: true, requiresSave: true, diskWrite: true }, pkg, packageItemRef(existing, "sound", folderPath, true), params);
+        return packageWriteResult({ operation: "replaced", requestedName, actualName: existing.name, sourcePath, folderPath, item: describeItem(existing), packageModified: true, requiresSave: true, diskWrite: true }, pkg, packageItemRef(existing, "sound", target.path, true), params);
     }
-    const item = await puerts.$promise(pkg.ImportResource(sourcePath, folderPath, `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`));
+    const item = await puerts.$promise(pkg.ImportResource(sourcePath, target.path, `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`));
     if (!item || item.type !== FairyEditor.FPackageItemType.SOUND)
         throw new Error(`导入声音失败：${sourcePath}`);
     item.exported = params.exported !== false;
     item.SetChanged();
     markPackageChanged(pkg);
-    return packageWriteResult({ operation: "imported", requestedName, actualName: item.name, sourcePath, folderPath, item: describeItem(item), packageModified: true, requiresSave: true, diskWrite: true }, pkg, packageItemRef(item, "sound", folderPath, true), params);
+    return packageWriteResult({ operation: "imported", requestedName, actualName: item.name, sourcePath, folderPath, item: describeItem(item), packageModified: true, requiresSave: true, diskWrite: true }, pkg, packageItemRef(item, "sound", target.path, true), params);
 }
 function normalizeFramePaths(value) {
     if (!Array.isArray(value) || value.length === 0)
@@ -4536,7 +5015,8 @@ async function createMovieClip(params) {
     const pkg = resolvePackage(params);
     const requestedName = validateResourceName(params.movieClipName, "movieClipName");
     const folderPath = normalizePackagePath(params.folderPath);
-    const folder = resolvePackageFolder(pkg, folderPath, params.createFolders !== false);
+    const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
+    const folder = target.folder;
     const policy = normalizeConflictPolicy(params.conflictPolicy);
     let name = requestedName;
     let item = findItemInFolder(pkg, folder, name);
@@ -4550,7 +5030,7 @@ async function createMovieClip(params) {
         throw new Error(`同名资源不是 MovieClip：${requestedName}`);
     const created = !item;
     if (!item)
-        item = pkg.CreateMovieClipItem(name, folderPath, false);
+        item = pkg.CreateMovieClipItem(name, target.path, false);
     if (!item)
         throw new Error(`创建 MovieClip 失败：${name}`);
     try {
@@ -4568,7 +5048,7 @@ async function createMovieClip(params) {
             requiresSave: true,
             diskWrite: true,
             undoable: !created
-        }, pkg, packageItemRef(item, "movieclip", folderPath, true), params);
+        }, pkg, packageItemRef(item, "movieclip", target.path, true), params);
     }
     catch (error) {
         if (created) {
@@ -4586,6 +5066,7 @@ async function createMovieClip(params) {
 async function updateMovieClip(params) {
     validatePackageWriteOptions(params, "movieclip", true);
     const item = resolveItem(params.movieClip || params);
+    assertItemBranchScope(item, params, "update_movieclip");
     const updateKeys = ["framePaths", "fps", "speed", "repeatDelay", "swing", "frameDelays", "exported", "compressPng"];
     if (!updateKeys.some((key) => params[key] !== undefined))
         throw new Error("update_movieclip 至少需要提供一个更新字段");
@@ -4639,6 +5120,7 @@ async function removeMovieClip(params) {
     // 删除没有诚实的重载基元（资源句柄已随删除失效），externalReload 不支持。
     validatePackageWriteOptions(params, "movieclip", false);
     const item = resolveItem(params.movieClip || params);
+    assertItemBranchScope(item, params, "remove_movieclip");
     if (item.type !== FairyEditor.FPackageItemType.MOVIECLIP)
         throw new Error("目标资源不是 MovieClip");
     if (params.force !== true)
@@ -4648,7 +5130,7 @@ async function removeMovieClip(params) {
         throw new Error(`MovieClip 正在被引用，不能删除：${references.join(", ")}`);
     const pkg = item.owner;
     const removed = describeLoadedMovieClip(item, await ensureMovieClipAsset(item));
-    const ref = { id: String(item.id), url: String(item.GetURL()), name: String(item.name), type: "movieclip", path: String(item.path || ""), present: false, file: item.file ? String(item.file) : null };
+    const ref = { id: String(item.id), url: String(item.GetURL()), name: String(item.name), type: "movieclip", path: String(item.path || ""), branch: String(item.branch || ""), present: false, file: item.file ? String(item.file) : null };
     clearAgentHistory();
     pkg.DeleteItem(item);
     markPackageChanged(pkg);
@@ -4828,6 +5310,9 @@ const WRITE_PATH_MODEL = "object-model";
 // 原生批处理入口（DependencyQuery.ReplaceReferences）：不经 Document、不产生脏文档，
 // 直接改包 XML。单独标出来，免得把它的落盘行为误读成"文档模型写"。
 const WRITE_PATH_NATIVE = "native-batch";
+// 带外写入：直接改 package.xml 后 Dispose + 重开包。现有资源上的 atlas 属性
+// 在 6.1.4 上不可由 folderAtlas setter 修改（见 P8-5 探针），这是唯一的纠正路线。
+const WRITE_PATH_OUT_OF_BAND = "out-of-band-xml";
 // 最近一次写入实际走的路径。由各写入路径显式设置，验证层读取并回报，
 // 让"绕过文档模型"变成可观测事实而不是事后才知道的静默失败。
 //
@@ -5599,29 +6084,59 @@ function footprintExceeds(fw, fh, c) {
 // 空串（编辑器自己的幂等守卫 applyLargeImageAtlasRule 因此每次都重新施加）。
 // 所以「这张图当前是不是被标成 alone」必须以磁盘为准，只报内存值会说谎。
 // 读失败不抛错：只读分析不该因为 package.xml 不可读就整体失败，退化成空映射并回报。
-function persistedAtlasByItemId(pkg) {
-    const result = {};
-    try {
-        const file = IOPath.Combine(String(pkg.basePath || ""), "package.xml");
-        if (!IOFile.Exists(file))
-            return result;
-        const XmlType = CS.FairyGUI.Utils.XML;
-        const xml = new XmlType(String(IOFile.ReadAllText(file)));
-        const resources = xml.GetNode("resources");
-        if (!resources)
-            return result;
+function packageXmlPath(pkg) {
+    return IOPath.Combine(String(pkg.basePath || ""), "package.xml");
+}
+function parsePackageXmlAtlasData(xmlText) {
+    const XmlType = CS.FairyGUI.Utils.XML;
+    const xml = new XmlType(String(xmlText));
+    const resources = xml.GetNode("resources");
+    const byId = {};
+    const counts = {};
+    const imageIds = [];
+    if (resources) {
         for (let i = 0; i < resources.elements.Count; i++) {
             const node = resources.elements.get_Item(i);
             const id = String(node.GetAttribute("id") || "");
             const atlas = String(node.GetAttribute("atlas") || "");
-            if (id && atlas)
-                result[id] = atlas;
+            if (String(node.name) === "image" && id)
+                imageIds.push(id);
+            if (id && atlas) {
+                byId[id] = atlas;
+                counts[id] = (counts[id] || 0) + 1;
+            }
         }
+    }
+    return {
+        byId,
+        imageIds,
+        duplicateIds: Object.keys(counts).filter(id => counts[id] > 1)
+    };
+}
+function persistedAtlasByItemId(pkg) {
+    try {
+        const file = packageXmlPath(pkg);
+        if (!IOFile.Exists(file))
+            return {};
+        return parsePackageXmlAtlasData(String(IOFile.ReadAllText(file))).byId;
     }
     catch (error) {
         return {};
     }
-    return result;
+}
+// 写路径必须区分「读不到」和「没有标记」。上面那个只读版本会把异常吞成空映射，
+// 用它判断候选会让一次 IO 失败看起来像「包里没有 alone 标记」。
+function readPackageXmlTextStrict(pkg) {
+    const file = packageXmlPath(pkg);
+    if (!IOFile.Exists(file))
+        throw new Error(`package.xml 不存在：${file}`);
+    const text = String(IOFile.ReadAllText(file));
+    if (!text)
+        throw new Error(`package.xml 为空：${file}`);
+    return text;
+}
+function persistedAtlasByItemIdStrict(pkg) {
+    return parsePackageXmlAtlasData(readPackageXmlTextStrict(pkg)).byId;
 }
 // 图集归属判定的唯一入口：这张图要不要单独成图集（alone）。
 //
@@ -5951,6 +6466,427 @@ function analyzeAtlasFit(params) {
         }
     };
 }
+// clear_atlas_markers：清除磁盘 package.xml 中错误的 atlas="alone" 标记。
+//
+// 为什么必须带外改文件：6.1.4 的活体探针已经证伪「folderAtlas="" 清除」这条路——
+// 已存在资源一旦带了 atlas 属性，对 folderAtlas 赋任何值都不会改变落盘结果。
+// 唯一可行且不破坏资源 id / 引用关系的路线，是直接改 package.xml。
+//
+// 这条路径刻意做窄：
+//   * 只处理真实约束判定为 alone-not-needed 的图片，不写任意图集归属；
+//   * 默认只预览；execute 才写，写前先保存包、再备份 package.xml；
+//   * 包内有打开的文档时拒绝执行，除非显式 closeOpenDocuments=true，且任何未保存文档都直接拒绝；
+//   * 写后回读磁盘，再 Dispose + 重开包，防止编辑器内存里的旧 XML 节点在下次保存时把属性写回来。
+function stringListParam(value, label) {
+    if (value === undefined || value === null)
+        return [];
+    if (!Array.isArray(value))
+        verificationError("invalid_argument", `${label} 必须是字符串数组`, { stage: "input", field: label });
+    const result = [];
+    for (let i = 0; i < value.length; i++) {
+        const text = String(value[i] === undefined || value[i] === null ? "" : value[i]).trim();
+        if (text)
+            result.push(text);
+    }
+    return result;
+}
+function openDocumentsForPackage(pkg) {
+    const docView = App.docView;
+    if (!docView || typeof docView.FindDocument !== "function")
+        return { supported: false, documents: [] };
+    const documents = [];
+    for (let i = 0; i < pkg.items.Count; i++) {
+        const item = pkg.items.get_Item(i);
+        if (!item || item.type !== FairyEditor.FPackageItemType.COMPONENT)
+            continue;
+        const url = String(item.GetURL());
+        let doc = null;
+        try {
+            doc = docView.FindDocument(url);
+        }
+        catch (_) {
+            doc = null;
+        }
+        if (doc)
+            documents.push({ url, itemId: String(item.id), itemName: String(item.name), modified: !!doc.isModified });
+    }
+    return { supported: true, documents };
+}
+function backupPackageXml(pkg, xmlText, withBom) {
+    const folder = IOPath.Combine(String(App.project.basePath || ""), ".agent", "backups");
+    IODirectory.CreateDirectory(folder);
+    const stamp = nowIso().replace(/[:.]/g, "-");
+    const safeName = String(pkg.name || "package").replace(/[^A-Za-z0-9._-]+/g, "_");
+    const path = IOPath.Combine(folder, `${safeName}-package-${stamp}.xml`);
+    writePackageXmlText(path, xmlText, withBom);
+    return path;
+}
+// package.xml 有没有 UTF-8 BOM 由编辑器/历史决定，不是常量。ReadAllText 会吃掉
+// BOM，所以写入前先看原始字节，再决定是否用 \uFEFF 前缀还原。
+function readFileHasUtf8Bom(file) {
+    const readAllBytes = IOFile.ReadAllBytes;
+    if (typeof readAllBytes !== "function")
+        return null;
+    const raw = readAllBytes(file);
+    if (!raw)
+        return null;
+    const length = Number(raw.Length !== undefined ? raw.Length : raw.length);
+    if (!isFinite(length) || length < 3)
+        return false;
+    const byteAt = (index) => Number(raw.get_Item ? raw.get_Item(index) : raw[index]);
+    return byteAt(0) === 0xEF && byteAt(1) === 0xBB && byteAt(2) === 0xBF;
+}
+function writePackageXmlText(file, text, withBom) {
+    // ReadAllText 会吃掉 BOM，而 package.xml 原本有没有 BOM 决定了写回时该不该补。
+    // 用字符串前缀而不是编码对象来还原：File.WriteAllText(path, text) 在 Unity 的
+    // .NET 上默认就是不写 BOM 的 UTF-8，两条路径都能得到恰好一份 BOM。
+    let payload = text;
+    if (withBom === true && payload.charCodeAt(0) !== 0xFEFF)
+        payload = "\uFEFF" + payload;
+    if (withBom === false && payload.charCodeAt(0) === 0xFEFF)
+        payload = payload.slice(1);
+    try {
+        const Encoding = CS.System && CS.System.Text ? CS.System.Text.UTF8Encoding : null;
+        if (Encoding) {
+            IOFile.WriteAllText(file, payload, new Encoding(false));
+            return;
+        }
+    }
+    catch (_) { /* 退回到不指定编码 */ }
+    IOFile.WriteAllText(file, payload);
+}
+// 只删除目标 <image> 节点上的 atlas 属性，其余字节原样保留。
+// 不走 XML 反序列化再序列化：那会重排属性、缩进和注释，把一次两点修复变成整文件 diff。
+function removeAtlasAttributesFromXml(xmlText, targets) {
+    const removedIds = [];
+    const seen = {};
+    const branchConflicts = [];
+    const mismatched = [];
+    const tagCounts = {};
+    const text = xmlText.replace(/<image\b[^>]*>/g, (tag) => {
+        const idMatch = /\bid\s*=\s*"([^"]*)"/.exec(tag);
+        if (!idMatch)
+            return tag;
+        const id = idMatch[1];
+        if (targets[id] === undefined)
+            return tag;
+        tagCounts[id] = (tagCounts[id] || 0) + 1;
+        const branch = /\bbranch\s*=\s*"([^"]*)"/.exec(tag);
+        if (branch && branch[1]) {
+            branchConflicts.push(id);
+            return tag;
+        }
+        const atlas = /\batlas\s*=\s*"([^"]*)"/.exec(tag);
+        if (!atlas || atlas[1] !== targets[id]) {
+            mismatched.push({ id, expected: targets[id], actual: atlas ? atlas[1] : null });
+            return tag;
+        }
+        seen[id] = true;
+        const cleaned = tag.replace(/\s+atlas\s*=\s*"[^"]*"/, "");
+        if (cleaned === tag) {
+            mismatched.push({ id, expected: targets[id], actual: atlas[1] });
+            return tag;
+        }
+        removedIds.push(id);
+        return cleaned;
+    });
+    return {
+        text,
+        removedIds,
+        missingIds: Object.keys(targets).filter(id => !seen[id]),
+        branchConflicts,
+        mismatched,
+        duplicateTags: Object.keys(tagCounts).filter(id => tagCounts[id] > 1)
+    };
+}
+function describeAtlasClearCandidate(item, decision) {
+    return {
+        id: String(item.id),
+        name: String(item.name),
+        width: decision.width,
+        height: decision.height,
+        folderAtlasOnDisk: decision.folderAtlasOnDisk,
+        constraintsSource: decision.constraintsSource,
+        atlas: decision.atlas,
+        fit: decision.fit,
+        binding: decision.binding,
+        requiredWidth: decision.requiredWidth || 0,
+        requiredHeight: decision.requiredHeight || 0,
+        limitWidth: decision.limitWidth || 0,
+        limitHeight: decision.limitHeight || 0,
+        url: item.GetURL()
+    };
+}
+function clearAtlasMarkers(params) {
+    const pkg = resolvePackage(params);
+    const settings = App.project.GetSettings("Publish");
+    if (!settings)
+        verificationError("invalid_argument", "FairyGUI 工程缺少 Publish 设置，无法判定图集约束", { stage: "input", packageName: String(pkg.name) });
+    const execute = params && params.execute === true;
+    const closeOpenDocuments = params && params.closeOpenDocuments === true;
+    const requestedIds = stringListParam(params ? params.itemIds : null, "itemIds");
+    const requestedNames = stringListParam(params ? params.itemNames : null, "itemNames");
+    const filterActive = requestedIds.length > 0 || requestedNames.length > 0;
+    let parsed = null;
+    try {
+        parsed = parsePackageXmlAtlasData(readPackageXmlTextStrict(pkg));
+    }
+    catch (error) {
+        verificationError("persistence_failed", "无法读取 package.xml，拒绝在状态不明时纠正标记", { stage: "disk", packageName: String(pkg.name), reason: String(error) });
+    }
+    if (parsed.duplicateIds.length)
+        verificationError("persistence_failed", "package.xml 中存在重复资源 id，定向删除无法保证只改目标节点", { stage: "disk", packageName: String(pkg.name), duplicateIds: parsed.duplicateIds });
+    const persisted = parsed.byId;
+    const candidates = [];
+    const held = [];
+    const resolvedIds = {};
+    const resolvedNames = {};
+    const nameMatches = {};
+    let scannedImages = 0;
+    let markedAloneOnDisk = 0;
+    for (let i = 0; i < pkg.items.Count; i++) {
+        const item = pkg.items.get_Item(i);
+        if (!item || item.type !== FairyEditor.FPackageItemType.IMAGE)
+            continue;
+        scannedImages++;
+        const id = String(item.id);
+        const itemName = String(item.name);
+        const diskAtlas = String(persisted[id] || "");
+        if (diskAtlas === ALONE_ATLAS)
+            markedAloneOnDisk++;
+        let idMatch = false;
+        for (let j = 0; j < requestedIds.length; j++) {
+            if (requestedIds[j] === id) {
+                idMatch = true;
+                resolvedIds[requestedIds[j]] = true;
+            }
+        }
+        let nameMatch = false;
+        const itemNameKey = packageItemNameKey(itemName);
+        for (let j = 0; j < requestedNames.length; j++) {
+            const requested = requestedNames[j];
+            const requestedKey = packageItemNameKey(requested);
+            if (requested === itemName || (requestedKey !== "" && requestedKey === itemNameKey)) {
+                nameMatch = true;
+                resolvedNames[requested] = true;
+                if (!nameMatches[requested])
+                    nameMatches[requested] = [];
+                if (nameMatches[requested].indexOf(id) < 0)
+                    nameMatches[requested].push(id);
+            }
+        }
+        if (filterActive && !idMatch && !nameMatch)
+            continue;
+        if (item.supportAtlas === false) {
+            held.push({ id, name: itemName, reason: "not-atlasable", folderAtlasOnDisk: diskAtlas });
+            continue;
+        }
+        if (String(item.branch || "")) {
+            held.push({ id, name: itemName, reason: "branch-scope-unsupported", folderAtlasOnDisk: diskAtlas });
+            continue;
+        }
+        if (diskAtlas !== ALONE_ATLAS) {
+            held.push({ id, name: itemName, reason: diskAtlas ? "different-atlas" : "not-marked-alone", folderAtlasOnDisk: diskAtlas });
+            continue;
+        }
+        const decision = decideAtlasAssignment(pkg, settings, item, persisted, true);
+        if (decision.verdict !== "alone-not-needed") {
+            held.push({
+                id, name: itemName, reason: decision.verdict, folderAtlasOnDisk: diskAtlas,
+                fit: decision.fit, binding: decision.binding, constraintsSource: decision.constraintsSource
+            });
+            continue;
+        }
+        candidates.push(describeAtlasClearCandidate(item, decision));
+    }
+    const missingIds = requestedIds.filter(id => !resolvedIds[id]);
+    const missingNames = requestedNames.filter(name => !resolvedNames[name]);
+    if (missingIds.length || missingNames.length)
+        verificationError("target_not_found", "指定的资源不在该包中（或不是图片资源）", { stage: "input", packageName: String(pkg.name), missingIds, missingNames });
+    const ambiguousNames = requestedNames.filter(name => (nameMatches[name] || []).length > 1);
+    if (ambiguousNames.length) {
+        const details = { stage: "input", packageName: String(pkg.name), ambiguousNames };
+        details.matches = {};
+        for (let i = 0; i < ambiguousNames.length; i++)
+            details.matches[ambiguousNames[i]] = nameMatches[ambiguousNames[i]];
+        verificationError("invalid_argument", "按名称过滤时匹配到多个图片资源，改写目标不唯一", details);
+    }
+    const result = {
+        mode: execute ? "execute" : "preview",
+        package: describePackage(pkg),
+        packageXml: packageXmlPath(pkg),
+        candidates,
+        held,
+        summary: {
+            scannedImages,
+            markedAloneOnDisk,
+            candidates: candidates.length,
+            held: held.length,
+            wouldClear: candidates.length,
+            remainingAloneAfterPreview: markedAloneOnDisk - candidates.length
+        },
+        executeWillSavePackage: true,
+        note: "只清除磁盘上 atlas=\"alone\"、且按真实 PackSettings 判定装得下的图片标记。带外修改绕过编辑器对象模型：不可撤销、不进 Agent 撤销栈；执行前会保存当前包并备份 package.xml。"
+    };
+    if (!execute) {
+        result.writePath = null;
+        result.undoable = false;
+        result.strength = NONE_STRENGTH;
+        return result;
+    }
+    if (candidates.length === 0) {
+        result.changed = [];
+        result.writePath = null;
+        result.undoable = false;
+        result.strength = NONE_STRENGTH;
+        result.verification = { diskReadBack: false, targetsCleared: 0, remainingAloneInPackage: markedAloneOnDisk };
+        return result;
+    }
+    const open = openDocumentsForPackage(pkg);
+    if (!open.supported)
+        verificationError("invalid_argument", "编辑器未暴露 docView.FindDocument，无法确认包内没有打开文档；拒绝执行带外修改", { stage: "precheck", packageName: String(pkg.name) });
+    const modified = open.documents.filter((doc) => doc.modified);
+    if (modified.length)
+        verificationError("invalid_argument", "包内有未保存的文档，带外修改会丢失这些改动；请先保存或放弃后再执行", { stage: "precheck", packageName: String(pkg.name), openDocuments: open.documents, modifiedDocuments: modified });
+    if (open.documents.length && !closeOpenDocuments)
+        verificationError("invalid_argument", "包内有打开的文档。带外修改后需要重开包，请先关闭这些文档，或显式传 closeOpenDocuments=true 让本 Action 关闭（不会丢弃未保存改动）", { stage: "precheck", packageName: String(pkg.name), openDocuments: open.documents });
+    // 先保存包：既避免 Dispose 丢掉包级内存改动，也保证后面的备份就是执行前状态。
+    try {
+        pkg.Save();
+    }
+    catch (error) {
+        verificationError("persistence_failed", "执行前保存包失败，未修改 package.xml", { stage: "save", packageName: String(pkg.name), reason: String(error) });
+    }
+    let closedDocuments = [];
+    if (open.documents.length) {
+        try {
+            App.docView.CloseDocuments(pkg);
+        }
+        catch (error) {
+            verificationError("persistence_failed", "关闭包内文档失败，未修改 package.xml", { stage: "precheck", packageName: String(pkg.name), openDocuments: open.documents, reason: String(error) });
+        }
+        const afterClose = openDocumentsForPackage(pkg);
+        if (!afterClose.supported || afterClose.documents.length)
+            verificationError("persistence_failed", "关闭包内文档后仍有文档处于打开状态，未修改 package.xml", { stage: "precheck", packageName: String(pkg.name), remaining: afterClose.documents });
+        closedDocuments = open.documents;
+    }
+    // 保存会重写 package.xml，必须重新读一遍再构造 targets。
+    let currentText = "";
+    let currentAtlas = {};
+    try {
+        currentText = readPackageXmlTextStrict(pkg);
+        currentAtlas = parsePackageXmlAtlasData(currentText).byId;
+    }
+    catch (error) {
+        verificationError("persistence_failed", "保存后重新读取 package.xml 失败，未修改标记", { stage: "disk", packageName: String(pkg.name), reason: String(error) });
+    }
+    const targets = {};
+    for (let i = 0; i < candidates.length; i++) {
+        const id = String(candidates[i].id);
+        if (currentAtlas[id] !== ALONE_ATLAS)
+            verificationError("invalid_argument", `保存后磁盘上的标记已变化（${candidates[i].name}），请重新分析后再执行`, { stage: "precheck", id, expected: ALONE_ATLAS, actual: currentAtlas[id] === undefined ? null : currentAtlas[id] });
+        targets[id] = ALONE_ATLAS;
+    }
+    let bomBefore = null;
+    try {
+        bomBefore = readFileHasUtf8Bom(packageXmlPath(pkg));
+    }
+    catch (error) {
+        verificationError("persistence_failed", "读取 package.xml 编码状态失败，未修改标记", { stage: "precheck", packageName: String(pkg.name), reason: String(error) });
+    }
+    let backupPath = "";
+    try {
+        backupPath = backupPackageXml(pkg, currentText, bomBefore);
+    }
+    catch (error) {
+        verificationError("persistence_failed", "备份 package.xml 失败，未修改标记", { stage: "backup", packageName: String(pkg.name), reason: String(error) });
+    }
+    const removal = removeAtlasAttributesFromXml(currentText, targets);
+    if (removal.duplicateTags.length || removal.missingIds.length || removal.branchConflicts.length || removal.mismatched.length || removal.removedIds.length !== candidates.length) {
+        verificationError("persistence_failed", "XML 定向删除预检失败，package.xml 未被修改", {
+            stage: "precheck", packageName: String(pkg.name), backupPath,
+            missingIds: removal.missingIds, duplicateTags: removal.duplicateTags,
+            branchConflicts: removal.branchConflicts, mismatched: removal.mismatched, removed: removal.removedIds
+        });
+    }
+    try {
+        writePackageXmlText(packageXmlPath(pkg), removal.text, bomBefore);
+    }
+    catch (error) {
+        verificationError("persistence_failed", "写入 package.xml 失败，磁盘可能处于未完成状态", { stage: "write", packageName: String(pkg.name), backupPath, mutationMayHaveOccurred: true, reason: String(error) });
+    }
+    let afterText = "";
+    let afterAtlas = {};
+    let bomAfter = null;
+    try {
+        afterText = String(IOFile.ReadAllText(packageXmlPath(pkg)));
+        afterAtlas = parsePackageXmlAtlasData(afterText).byId;
+        bomAfter = readFileHasUtf8Bom(packageXmlPath(pkg));
+    }
+    catch (error) {
+        verificationError("persistence_failed", "写入后回读 package.xml 失败", { stage: "disk", packageName: String(pkg.name), backupPath, mutationMayHaveOccurred: true, reason: String(error) });
+    }
+    if (afterText !== removal.text)
+        verificationError("persistence_failed", "写入后回读内容与预期不一致", { stage: "disk", packageName: String(pkg.name), backupPath, mutationMayHaveOccurred: true });
+    if (bomBefore !== null && bomAfter !== null && bomBefore !== bomAfter)
+        verificationError("persistence_failed", "写入后 BOM 状态与原文件不一致", { stage: "disk", packageName: String(pkg.name), backupPath, mutationMayHaveOccurred: true, bomBefore, bomAfter });
+    const remainingTargets = candidates
+        .filter((candidate) => String(afterAtlas[String(candidate.id)] || "") === ALONE_ATLAS)
+        .map((candidate) => String(candidate.id));
+    if (remainingTargets.length)
+        verificationError("persistence_failed", "写入后回读仍有目标标记", { stage: "disk", packageName: String(pkg.name), backupPath, mutationMayHaveOccurred: true, remainingTargets });
+    // 包对象里仍保留旧 XML 节点，下次保存可能把删掉的属性写回来；必须同进程重开。
+    const packageId = String(pkg.id);
+    const packageName = String(pkg.name);
+    let reloadedPkg = null;
+    try {
+        pkg.Dispose();
+        reloadedPkg = App.project.GetPackage(packageId);
+        if (!reloadedPkg)
+            throw new Error("工程内找不到该包");
+        reloadedPkg.EnsureOpen();
+    }
+    catch (error) {
+        verificationError("persistence_failed", "package.xml 已修改，但包重开失败；请重启编辑器后复查", { stage: "reload", packageName, packageId, backupPath, mutationMayHaveOccurred: true, reason: String(error) });
+    }
+    let finalAlone = [];
+    try {
+        const finalAtlas = parsePackageXmlAtlasData(readPackageXmlTextStrict(reloadedPkg)).byId;
+        const ids = Object.keys(finalAtlas);
+        for (let i = 0; i < ids.length; i++) {
+            if (finalAtlas[ids[i]] === ALONE_ATLAS)
+                finalAlone.push(ids[i]);
+        }
+    }
+    catch (error) {
+        verificationError("persistence_failed", "重开后回读 package.xml 失败", { stage: "reload", packageName, backupPath, mutationMayHaveOccurred: true, reason: String(error) });
+    }
+    lastWritePath = WRITE_PATH_OUT_OF_BAND;
+    result.changed = candidates;
+    result.backupPath = backupPath;
+    result.closedDocuments = closedDocuments;
+    result.reloaded = true;
+    result.reloadStrategy = "package-dispose-open";
+    result.savedPackageBeforeEdit = true;
+    result.writePath = WRITE_PATH_OUT_OF_BAND;
+    result.undoable = false;
+    result.strength = DISK_STRENGTH;
+    result.verification = {
+        diskReadBack: true,
+        targetsCleared: candidates.length,
+        remainingAloneInPackage: finalAlone,
+        contentOutsideTargetsUnchanged: true,
+        bomPreserved: bomBefore === null || bomAfter === null ? null : bomBefore === bomAfter,
+        reloadedPackageId: packageId,
+        checkedAt: nowIso()
+    };
+    result.persistence = {
+        crossRestartVerified: false,
+        note: "本 Action 证明磁盘回读与同进程包重开；跨编辑器重启由独立真机报告验证。"
+    };
+    result.summary.remainingAloneAfterExecute = finalAlone.length;
+    return result;
+}
 function matchAtlasConstraints(constraints, item, folderAtlas) {
     if (!constraints || constraints.length === 0)
         return null;
@@ -6190,6 +7126,365 @@ async function publishPackages(params) {
         writeStatus();
     }
 }
+// --- Phase 8 / P8-7：只读资源审计（0.8.19） --------------------------------
+//
+// 编辑器自带的 FindUnusedResource / FindDuplicateResource / FullSearch 都是
+// Pro 功能：Start() 先走 CheckProLicense，非 Pro 环境会弹授权框并让请求永久
+// 挂起（真机 6.1.4 实测，见 tests/reports/p8-7-audit-live.json）。因此这里
+// 不复用它们，改为组合非 Pro 可用的 DependencyQuery 与
+// BuilderUtil.GetMD5HashFromFile 实现同等语义。
+const AUDIT_DEFAULT_MAX_ITEMS = 500;
+const AUDIT_MAX_ITEMS_CEILING = 5000;
+const AUDIT_DEFAULT_MAX_GROUPS = 100;
+const AUDIT_MAX_GROUPS_CEILING = 1000;
+const AUDIT_DEFAULT_MAX_ITEMS_PER_GROUP = 50;
+const AUDIT_MAX_ITEMS_PER_GROUP_CEILING = 500;
+const AUDIT_ERROR_SAMPLES = 20;
+function auditLimit(value, name, defaultValue, ceiling) {
+    if (value === undefined || value === null)
+        return defaultValue;
+    const limit = Number(value);
+    if (!isFinite(limit) || limit < 1 || limit > ceiling)
+        verificationError("invalid_argument", `${name} 必须是 1..${ceiling} 的数字`, { stage: "input", [name]: value });
+    return Math.floor(limit);
+}
+function auditStringList(value) {
+    if (value === undefined || value === null)
+        return [];
+    const raw = Array.isArray(value) ? value : String(value).split(",");
+    const result = [];
+    for (let i = 0; i < raw.length; i++) {
+        const text = String(raw[i] === undefined || raw[i] === null ? "" : raw[i]).trim();
+        if (text)
+            result.push(text);
+    }
+    return result;
+}
+function resolveAuditPackages(params) {
+    const requested = [];
+    if (params.packageId)
+        requested.push(String(params.packageId));
+    if (params.packageName)
+        requested.push(String(params.packageName));
+    for (const name of auditStringList(params.packages)) {
+        if (requested.indexOf(name) < 0)
+            requested.push(name);
+    }
+    if (!requested.length) {
+        const packages = [];
+        const all = App.project.allPackages;
+        for (let i = 0; i < all.Count; i++)
+            packages.push(all.get_Item(i));
+        return { packages, scope: "project" };
+    }
+    const packages = [];
+    const seen = {};
+    for (const nameOrId of requested) {
+        const pkg = App.project.GetPackageByName(nameOrId) || App.project.GetPackage(nameOrId);
+        if (!pkg)
+            verificationError("target_not_found", `未找到包：${nameOrId}`, { stage: "input", package: nameOrId });
+        if (seen[pkg.id])
+            continue;
+        seen[pkg.id] = true;
+        packages.push(pkg);
+    }
+    return { packages, scope: "selected" };
+}
+function collectAuditItems(packages, params) {
+    const types = auditStringList(params.types).map(value => value.toLowerCase());
+    const includeBranches = params.includeBranches !== false;
+    const items = [];
+    const seen = {};
+    const branches = includeBranches ? knownBranches(false).names : [];
+    let candidateCount = 0;
+    const add = (item) => {
+        if (!item || item.isBranchRoot || item.type === "folder")
+            return;
+        // 6.1.4 的 pkg.items 也会列出分支根与分支资源；显式排除分支时不能只靠
+        // 「主干列表」这个假设，否则 --no-branches 在真机上什么也没过滤。
+        if (!includeBranches && String(item.branch || ""))
+            return;
+        if (types.length && types.indexOf(String(item.type).toLowerCase()) < 0)
+            return;
+        let url = "";
+        try {
+            url = String(item.GetURL());
+        }
+        catch (_) {
+            url = "";
+        }
+        const key = url || `${item.owner ? item.owner.id : ""}|${String(item.branch || "")}|${item.id}`;
+        if (seen[key])
+            return;
+        seen[key] = true;
+        candidateCount++;
+        items.push(item);
+    };
+    for (let i = 0; i < packages.length; i++) {
+        const pkg = packages[i];
+        pkg.EnsureOpen();
+        // pkg.items 只枚举主干；分支资源是独立条目，必须从分支根 GetItemListing 取，
+        // 否则 includeBranches 会变成「永远什么也没多扫」的空开关。
+        for (let j = 0; j < pkg.items.Count; j++)
+            add(pkg.items.get_Item(j));
+        for (let j = 0; j < branches.length; j++) {
+            const branch = branches[j];
+            const root = branchRootItem(pkg, branch);
+            if (!root)
+                continue;
+            const listing = listToArray(pkg.GetItemListing(root, null, false, true, null));
+            for (let k = 0; k < listing.length; k++) {
+                if (String(listing[k].branch || "") === branch)
+                    add(listing[k]);
+            }
+        }
+    }
+    return { items, candidateCount, types, includeBranches, branches };
+}
+function describeAuditItem(item, includeAssetSize) {
+    const pkg = item.owner;
+    const result = {
+        packageId: pkg ? safeValue(pkg.id) : null,
+        packageName: pkg ? safeValue(pkg.name) : null,
+        item: describeItemSafe(item)
+    };
+    if (item.file) {
+        try {
+            result.fileBytes = Number((new IOFileInfo(String(item.file))).Length);
+        }
+        catch (_) {
+            result.fileBytes = null;
+        }
+        if (includeAssetSize && item.type === "image") {
+            try {
+                const size = FairyEditor.AssetSizeUtil.GetSize(String(item.file));
+                result.assetSize = {
+                    width: Number(size.width) || 0,
+                    height: Number(size.height) || 0,
+                    type: size.type === undefined || size.type === null ? null : String(size.type),
+                    bitDepth: Number(size.bitDepth) || 0,
+                    colorType: Number(size.colorType) || 0
+                };
+            }
+            catch (_) {
+                result.assetSize = null;
+            }
+        }
+    }
+    else {
+        result.fileBytes = null;
+    }
+    return result;
+}
+function auditErrorSample(item, error) {
+    return {
+        packageName: item && item.owner ? safeValue(item.owner.name) : null,
+        itemName: item ? safeValue(item.name) : null,
+        itemType: item ? safeValue(item.type) : null,
+        url: (() => { try {
+            return item ? String(item.GetURL()) : null;
+        }
+        catch (_) {
+            return null;
+        } })(),
+        message: String(error && error.message ? error.message : error)
+    };
+}
+function findUnused(params) {
+    const startedMs = Date.now();
+    const scope = resolveAuditPackages(params);
+    const openInfo = ensurePackagesOpen(params);
+    const collected = collectAuditItems(scope.packages, params);
+    const maxItems = auditLimit(params.maxItems, "maxItems", AUDIT_DEFAULT_MAX_ITEMS, AUDIT_MAX_ITEMS_CEILING);
+    const skipExported = params.skipExported === true;
+    let scannedCount = 0;
+    let unusedCount = 0;
+    let exportedUnusedCount = 0;
+    let exportedSkipped = 0;
+    let errorCount = 0;
+    const errors = [];
+    const items = [];
+    for (let i = 0; i < collected.items.length; i++) {
+        const item = collected.items[i];
+        if (skipExported && item.exported) {
+            exportedSkipped++;
+            continue;
+        }
+        let referenceCount = 0;
+        try {
+            const query = new FairyEditor.DependencyQuery();
+            query.QueryReferences(App.project, String(item.GetURL()));
+            referenceCount = query.references ? Number(query.references.Count) : 0;
+        }
+        catch (error) {
+            errorCount++;
+            if (errors.length < AUDIT_ERROR_SAMPLES)
+                errors.push(auditErrorSample(item, error));
+            continue;
+        }
+        scannedCount++;
+        if (referenceCount !== 0)
+            continue;
+        unusedCount++;
+        if (item.exported)
+            exportedUnusedCount++;
+        if (items.length < maxItems)
+            items.push(describeAuditItem(item, true));
+    }
+    return {
+        ok: true,
+        readOnly: true,
+        scope: scope.scope,
+        activeBranch: activeBranchName(),
+        packages: {
+            count: scope.packages.length,
+            names: scope.packages.map(pkg => pkg.name),
+            opened: openInfo.opened,
+            projectPackageCount: openInfo.packageCount
+        },
+        includeBranches: collected.includeBranches,
+        branches: collected.branches,
+        candidateCount: collected.candidateCount,
+        scannedCount,
+        unusedCount,
+        exportedUnusedCount,
+        exportedSkipped,
+        errorCount,
+        errors,
+        maxItems,
+        truncated: unusedCount > items.length,
+        durationMs: Date.now() - startedMs,
+        items,
+        note: "只读分析。未使用 = 当前工程内零引用；导出资源可能被运行时按 URL 使用，删除前请确认。"
+    };
+}
+function findDuplicates(params) {
+    const startedMs = Date.now();
+    const scope = resolveAuditPackages(params);
+    const openInfo = ensurePackagesOpen(params);
+    const collected = collectAuditItems(scope.packages, params);
+    const maxGroups = auditLimit(params.maxGroups, "maxGroups", AUDIT_DEFAULT_MAX_GROUPS, AUDIT_MAX_GROUPS_CEILING);
+    const maxItemsPerGroup = auditLimit(params.maxItemsPerGroup, "maxItemsPerGroup", AUDIT_DEFAULT_MAX_ITEMS_PER_GROUP, AUDIT_MAX_ITEMS_PER_GROUP_CEILING);
+    let hashedCount = 0;
+    let unreadableCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    const groupsByKey = {};
+    for (let i = 0; i < collected.items.length; i++) {
+        const item = collected.items[i];
+        if (!item.file)
+            continue;
+        let hash;
+        let fileBytes = null;
+        try {
+            hash = String(FairyEditor.BuilderUtil.GetMD5HashFromFile(String(item.file)));
+            try {
+                fileBytes = Number((new IOFileInfo(String(item.file))).Length);
+            }
+            catch (_) {
+                fileBytes = null;
+            }
+        }
+        catch (error) {
+            unreadableCount++;
+            errorCount++;
+            if (errors.length < AUDIT_ERROR_SAMPLES)
+                errors.push(auditErrorSample(item, error));
+            continue;
+        }
+        hashedCount++;
+        const key = `${hash}|${fileBytes === null ? "?" : fileBytes}`;
+        let group = groupsByKey[key];
+        if (!group) {
+            group = { hash, fileBytes, items: [] };
+            groupsByKey[key] = group;
+        }
+        group.items.push(describeAuditItem(item, true));
+    }
+    const groups = [];
+    let duplicateItemCount = 0;
+    let wastedBytes = 0;
+    for (const key of Object.keys(groupsByKey)) {
+        const group = groupsByKey[key];
+        if (group.items.length < 2)
+            continue;
+        duplicateItemCount += group.items.length;
+        const wasted = group.fileBytes === null ? 0 : group.fileBytes * (group.items.length - 1);
+        wastedBytes += wasted;
+        groups.push({
+            hash: group.hash,
+            fileBytes: group.fileBytes,
+            itemCount: group.items.length,
+            wastedBytes: wasted,
+            truncated: group.items.length > maxItemsPerGroup,
+            items: group.items.slice(0, maxItemsPerGroup)
+        });
+    }
+    groups.sort((left, right) => right.wastedBytes - left.wastedBytes || right.itemCount - left.itemCount);
+    return {
+        ok: true,
+        readOnly: true,
+        scope: scope.scope,
+        activeBranch: activeBranchName(),
+        packages: {
+            count: scope.packages.length,
+            names: scope.packages.map(pkg => pkg.name),
+            opened: openInfo.opened,
+            projectPackageCount: openInfo.packageCount
+        },
+        includeBranches: collected.includeBranches,
+        branches: collected.branches,
+        candidateCount: collected.candidateCount,
+        hashedCount,
+        unreadableCount,
+        errorCount,
+        errors,
+        duplicateGroupCount: groups.length,
+        duplicateItemCount,
+        wastedBytes,
+        maxGroups,
+        maxItemsPerGroup,
+        truncated: groups.length > maxGroups,
+        durationMs: Date.now() - startedMs,
+        groups: groups.slice(0, maxGroups),
+        note: "只读分析。按文件内容 MD5 分组，同名不同内容不算重复；组件 XML 也在比较范围内。"
+    };
+}
+const DOCUMENT_WRITE_ACTIONS = {
+    set_property: true,
+    insert_object: true,
+    remove_object: true,
+    replace_object_resource: true,
+    set_text_style: true,
+    set_list_layout: true,
+    set_group_layout: true,
+    set_relation: true,
+    set_gear_display: true,
+    set_controller: true,
+    save_document: true,
+    duplicate_transition: true,
+    upsert_transition: true,
+    remove_transition: true,
+    add_transition_item: true,
+    update_transition_item: true,
+    remove_transition_item: true,
+    add_keyframes: true,
+    set_keyframe: true,
+    undo: true,
+    redo: true
+};
+// 原生批处理与带外 XML 修改没有分支感知，分支活跃时执行会改到主干。
+const TRUNK_ONLY_ACTIONS = {
+    replace_references: true,
+    clear_atlas_markers: true
+};
+// 只读操作可以显式读取任意分支，不要求先切换活跃分支；写入仍要求作用域一致，
+// 否则 activeBranch 与文档保存不会跟随改道，会把改动落到错误的分支。
+const BRANCH_READ_ACTIONS = {
+    list_items: true,
+    open_document: true,
+    get_tree: true
+};
 function handleCommand(request) {
     // 每条写路径必须自己声明写入层；不声明就是 null（unknown），
     // 不能沿用上一个 action 的值——那会让 writePath 变成谎报。
@@ -6211,6 +7506,7 @@ function handleCommand(request) {
         remove_movieclip: true,
         upsert_transition: true,
         set_publish_settings: true,
+        clear_atlas_markers: true,
         add_keyframes: true,
         set_keyframe: true,
         duplicate_transition: true,
@@ -6237,6 +7533,18 @@ function handleCommand(request) {
     };
     if (publishInProgress && actionsBlockedDuringPublish[action])
         throw new Error(`FairyGUI 发布进行中，暂不能执行：${action}`);
+    // branch 是通用作用域参数：写入与 publish（它自己的 branch 指发布目标）
+    // 要求与活跃分支一致；只读视图允许跨分支读取。
+    if (action !== "publish" && action !== "create_branch" && action !== "switch_branch" && !BRANCH_READ_ACTIONS[action])
+        assertBranchScope(params, action);
+    // 文档保存不会跟随 activeBranch 改道（真机 6.1.4 实测：分支活跃时保存仍写
+    // 主干）。所有文档写操作按文档自身分支与请求作用域比对，不一致就拒绝。
+    if (DOCUMENT_WRITE_ACTIONS[action])
+        assertDocumentBranchScope(params, action);
+    if (TRUNK_ONLY_ACTIONS[action] && activeBranchName())
+        verificationError("branch_mismatch", `${action} 只作用于主干，当前活跃分支为 ${activeBranchName()}`, {
+            stage: "branch", action, activeBranch: activeBranchName(), hint: "先 switch_branch 切回主干（name 为空字符串）"
+        });
     switch (action) {
         case "ping":
             return {
@@ -6248,6 +7556,12 @@ function handleCommand(request) {
             };
         case "get_project":
             return describeProject();
+        case "list_branches":
+            return listBranches(params);
+        case "create_branch":
+            return createBranch(params);
+        case "switch_branch":
+            return switchBranch(params);
         case "list_packages": {
             const packages = [];
             const list = App.project.allPackages;
@@ -6257,14 +7571,62 @@ function handleCommand(request) {
         }
         case "list_items": {
             const pkg = resolvePackage(params);
+            const typeFilter = params.type ? String(params.type) : "";
+            // 显式 branch 优先；省略时看活跃分支视图，branch="" 才表示主干。
+            const viewBranch = branchRequested(params) ? branchScopeName(params) : activeBranchName();
+            if (viewBranch) {
+                const branch = viewBranch;
+                const root = branchRootItem(pkg, branch);
+                if (!root)
+                    verificationError("target_not_found", `包 ${pkg.name} 在分支 ${branch} 中没有分支根`, {
+                        stage: "branch", branch, package: pkg.name
+                    });
+                const branchItems = listToArray(pkg.GetItemListing(root, null, false, true, null))
+                    .filter(item => String(item.branch || "") === branch && !item.isBranchRoot)
+                    .filter(item => !typeFilter || String(item.type) === typeFilter);
+                const branchKeys = {};
+                for (let i = 0; i < branchItems.length; i++)
+                    branchKeys[`${logicalBranchPath(branchItems[i], branch)}|${String(branchItems[i].name)}`] = true;
+                const items = [];
+                let trunkCount = 0;
+                for (let i = 0; i < pkg.items.Count; i++) {
+                    const item = pkg.items.get_Item(i);
+                    const itemBranch = String(item.branch || "");
+                    if (item.isBranchRoot || itemBranch)
+                        continue;
+                    trunkCount++;
+                    if (branchKeys[`${logicalBranchPath(item, branch)}|${String(item.name)}`])
+                        continue;
+                    if (!typeFilter || String(item.type) === typeFilter)
+                        items.push(describeItem(item));
+                }
+                for (let i = 0; i < branchItems.length; i++)
+                    items.push(describeItem(branchItems[i]));
+                return {
+                    package: describePackage(pkg),
+                    activeBranch: activeBranchName(),
+                    branch,
+                    branchRoot: describeItemSafe(root),
+                    trunkItemCount: trunkCount,
+                    branchItemCount: branchItems.length,
+                    effectiveCount: items.length,
+                    items
+                };
+            }
             const items = [];
             for (let i = 0; i < pkg.items.Count; i++) {
                 const item = pkg.items.get_Item(i);
-                if (!params.type || item.type === String(params.type))
+                // 6.1.4 的 pkg.items 会包含分支根与分支资源，主干视图必须把它们滤掉。
+                if (item.isBranchRoot || String(item.branch || ""))
+                    continue;
+                if (!typeFilter || item.type === typeFilter)
                     items.push(describeItem(item));
             }
             return {
                 package: describePackage(pkg),
+                activeBranch: activeBranchName(),
+                branch: null,
+                itemCount: items.length,
                 items
             };
         }
@@ -6282,6 +7644,15 @@ function handleCommand(request) {
             return describeDocument(getActiveDocument());
         case "get_tree": {
             const doc = params.url || params.packageName ? openDocument(params) : getActiveDocument();
+            if (branchRequested(params)) {
+                const branch = branchScopeName(params);
+                const docBranch = String((doc.packageItem && doc.packageItem.branch) || "");
+                if (docBranch !== branch)
+                    verificationError("branch_mismatch", `活动文档不属于分支 ${branch}`, {
+                        stage: "branch", action: "get_tree", documentBranch: docBranch, requestedBranch: branch,
+                        hint: "用 open_document 的 branch 参数打开分支文档，或切回该分支后重试"
+                    });
+            }
             const maxDepth = params.maxDepth === undefined ? 12 : Math.max(0, Math.min(64, Number(params.maxDepth)));
             return {
                 document: describeDocument(doc),
@@ -6334,6 +7705,10 @@ function handleCommand(request) {
             return queryReferences(params);
         case "query_dependencies":
             return queryDependencies(params);
+        case "find_unused":
+            return findUnused(params);
+        case "find_duplicate":
+            return findDuplicates(params);
         case "replace_references":
             return replaceReferences(params);
         case "get_text_style":
@@ -6526,6 +7901,8 @@ function handleCommand(request) {
             return setPublishSettings(params);
         case "analyze_atlas_fit":
             return analyzeAtlasFit(params);
+        case "clear_atlas_markers":
+            return clearAtlasMarkers(params);
         case "publish":
             return publishPackages(params);
         case "get_history": {

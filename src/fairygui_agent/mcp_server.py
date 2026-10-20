@@ -108,18 +108,80 @@ def fgui_list_packages() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def fgui_list_items(package_name: str, item_type: str | None = None) -> list[dict[str, Any]]:
-    """列出指定包中的资源，可按 FairyGUI 资源类型过滤。"""
+def fgui_list_branches(
+    refresh: bool = False,
+    include_packages: bool = False,
+    include_items: bool = False,
+) -> dict[str, Any]:
+    """列出工程分支及活跃分支；可附带每个包的分支根与资源。
+
+    refresh=True 先从磁盘重扫。分支资源目录为 assets_<branch>/<package>，活跃分支不会让编辑器自动改道保存。
+    """
+    return _client.call(
+        "list_branches",
+        {"refresh": refresh, "includePackages": include_packages, "includeItems": include_items},
+    )
+
+
+@mcp.tool()
+def fgui_create_branch(
+    name: str,
+    switch_to: bool = False,
+    save_open_documents: bool = False,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """创建分支并为每个包建立分支根；走工程原生 API，立即落盘且不可撤销。
+
+    switch_to=True 创建后切换活跃分支；有未保存文档时需同时 save_open_documents=True。
+    """
+    params: dict[str, Any] = {
+        "name": name,
+        "switch": switch_to,
+        "saveOpenDocuments": save_open_documents,
+        "verify": verify,
+    }
+    return _client.call("create_branch", params)
+
+
+@mcp.tool()
+def fgui_switch_branch(name: str, save_open_documents: bool = False) -> dict[str, Any]:
+    """切换活跃分支；name 传空字符串切回主干。
+
+    只改变编辑器分支上下文。真机 6.1.4 上文档保存与资源创建不会自动改道，Bridge 的写操作按 branch 参数或活跃分支显式寻址。
+    """
+    return _client.call("switch_branch", {"name": name, "saveOpenDocuments": save_open_documents})
+
+
+@mcp.tool()
+def fgui_list_items(
+    package_name: str,
+    item_type: str | None = None,
+    branch: str | None = None,
+) -> list[dict[str, Any]]:
+    """列出指定包中的资源，可按 FairyGUI 资源类型过滤。
+
+    省略 branch 时跟随当前活跃分支，branch="" 表示主干。返回的分支视角中，
+    分支资源覆盖同名主干资源；只读操作可以读取非活跃分支，不需要先切换。
+    """
     params: dict[str, Any] = {"packageName": package_name}
     if item_type:
         params["type"] = item_type
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("list_items", params)
 
 
 @mcp.tool()
-def fgui_open_document(package_name: str, item_name: str) -> dict[str, Any]:
-    """按包名和资源名打开 FairyGUI 组件文档。"""
-    return _client.call("open_document", {"packageName": package_name, "itemName": item_name})
+def fgui_open_document(package_name: str, item_name: str, branch: str | None = None) -> dict[str, Any]:
+    """按包名和资源名打开 FairyGUI 组件文档。
+
+    省略 branch 时跟随当前活跃分支，branch="" 表示主干。只读打开不要求该分支处于活跃状态，
+    但后续写该文档前仍需切换。
+    """
+    params: dict[str, Any] = {"packageName": package_name, "itemName": item_name}
+    if branch is not None:
+        params["branch"] = branch
+    return _client.call("open_document", params)
 
 
 @mcp.tool()
@@ -136,10 +198,11 @@ def fgui_create_component(
     open_after_create: bool = True,
     save: bool = False,
     verify: bool = True,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """在指定包中新建组件文档；默认打开但不保存，重名时默认拒绝。
 
-    save=True 保存包与工程后默认比对 package.xml 条目；组件类资源没有可靠的 asset 重载手段，external_reload 不可用，strength 上限为 disk。
+    save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目；组件类资源没有可靠的 asset 重载手段，external_reload 不可用，strength 上限为 disk。
     """
     params: dict[str, Any] = {
         "packageName": package_name,
@@ -156,6 +219,8 @@ def fgui_create_component(
     }
     if extension_id:
         params["extensionId"] = extension_id
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("create_component", params)
 
 
@@ -172,10 +237,11 @@ def fgui_import_image(
     save: bool = False,
     verify: bool = True,
     external_reload: bool = False,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """从绝对本地路径导入图片；这是磁盘写入操作，支持拒绝、自动改名或替换同名图片。
 
-    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
     """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
@@ -193,6 +259,8 @@ def fgui_import_image(
     }
     if resource_name:
         params["resourceName"] = resource_name
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("import_image", params, timeout=timeout_seconds)
 
 
@@ -209,10 +277,11 @@ def fgui_import_font(
     save: bool = False,
     verify: bool = True,
     external_reload: bool = False,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """从绝对本地路径导入字体；这是磁盘写入操作，支持拒绝、自动改名或替换同名字体。
 
-    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
     """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
@@ -230,6 +299,8 @@ def fgui_import_font(
     }
     if resource_name:
         params["resourceName"] = resource_name
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("import_font", params, timeout=timeout_seconds)
 
 
@@ -253,10 +324,11 @@ def fgui_create_button(
     extension_id: str | None = None,
     save: bool = False,
     verify: bool = True,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """创建标准 FairyGUI Button 组件；状态图顺序为 up/down/over/selectedOver/disabled/selectedDisabled。
 
-    save=True 保存包与工程后默认比对 package.xml 条目；组件类资源不支持 external_reload，strength 上限为 disk。
+    save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目；组件类资源不支持 external_reload，strength 上限为 disk。
     """
     params: dict[str, Any] = {
         "packageName": package_name,
@@ -279,6 +351,8 @@ def fgui_create_button(
     }
     if extension_id:
         params["extensionId"] = extension_id
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("create_button", params)
 
 
@@ -289,11 +363,17 @@ def fgui_get_active_document() -> dict[str, Any]:
 
 
 @mcp.tool()
-def fgui_get_tree(max_depth: int = 12) -> dict[str, Any]:
-    """读取当前组件对象树；修改前应先取得稳定的对象 ID 或路径。"""
+def fgui_get_tree(max_depth: int = 12, branch: str | None = None) -> dict[str, Any]:
+    """读取当前组件对象树；修改前应先取得稳定的对象 ID 或路径。
+
+    branch 指定时要求当前文档属于该分支；只读读取不要求该分支处于活跃状态。
+    """
     if max_depth < 0 or max_depth > 64:
         raise ValueError("max_depth 必须在 0 到 64 之间")
-    return _client.call("get_tree", {"maxDepth": max_depth})
+    params: dict[str, Any] = {"maxDepth": max_depth}
+    if branch is not None:
+        params["branch"] = branch
+    return _client.call("get_tree", params)
 
 
 @mcp.tool()
@@ -309,10 +389,11 @@ def fgui_import_sound(
     save: bool = False,
     verify: bool = True,
     external_reload: bool = False,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """从绝对本地路径导入声音资源；支持替换同名声音，属于磁盘写入。
 
-    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
     """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
@@ -329,6 +410,8 @@ def fgui_import_sound(
     }
     if resource_name:
         params["resourceName"] = resource_name
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("import_sound", params, timeout=timeout_seconds)
 
 
@@ -349,10 +432,11 @@ def fgui_create_movieclip(
     save: bool = False,
     verify: bool = True,
     external_reload: bool = False,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     """用有序绝对图片路径创建或替换 MovieClip；图片序列由 FairyGUI 原生动画资源处理。
 
-    save=True 保存包与工程后默认比对 package.xml 条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
+    save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
     """
     if not frame_paths:
         raise ValueError("frame_paths 至少需要一帧")
@@ -379,6 +463,8 @@ def fgui_create_movieclip(
         if len(frame_delays) != len(frame_paths) or any(delay < 0 or delay > 255 for delay in frame_delays):
             raise ValueError("frame_delays 必须与 frame_paths 等长，且每项在 0 到 255 之间")
         params["frameDelays"] = frame_delays
+    if branch is not None:
+        params["branch"] = branch
     return _client.call("create_movieclip", params, timeout=timeout_seconds)
 
 
@@ -726,6 +812,64 @@ def fgui_query_dependencies(resource_url: str, seek_level: str = "samePackage", 
 
 
 @mcp.tool()
+def fgui_find_unused(
+    packages: list[str] | None = None,
+    types: list[str] | None = None,
+    include_branches: bool = True,
+    skip_exported: bool = False,
+    max_items: int | None = None,
+) -> dict[str, Any]:
+    """找出工程内没有任何引用位置的资源（只读，0.8.19+）。
+
+    返回每个未引用资源的包、路径、URL、文件大小，图片还附带尺寸。判断口径是
+    「当前工程内零引用」：导出资源可能被运行时按 URL 使用，默认仍会列出并标记
+    exported，删改前请确认；skip_exported=True 可排除它们。
+
+    packages 传包名或包 ID，省略时扫描全工程；types 可按 image / font / sound /
+    movieclip / component 过滤；max_items 限制返回明细条数，unusedCount 仍是真实总数。
+    """
+    params: dict[str, Any] = {
+        "includeBranches": include_branches,
+        "skipExported": skip_exported,
+    }
+    if packages:
+        params["packages"] = packages
+    if types:
+        params["types"] = types
+    if max_items is not None:
+        params["maxItems"] = max_items
+    return _client.call("find_unused", params)
+
+
+@mcp.tool()
+def fgui_find_duplicate(
+    packages: list[str] | None = None,
+    types: list[str] | None = None,
+    include_branches: bool = True,
+    max_groups: int | None = None,
+    max_items_per_group: int | None = None,
+) -> dict[str, Any]:
+    """找出文件内容完全相同的资源，按 MD5 分组（只读，0.8.19+）。
+
+    适合清理重复导入的图片、字体和音效；组件 XML 也参与比较。每组返回文件大小、
+    条目和可回收字节数，按浪费体积从大到小排序。同名不同内容不算重复。
+
+    packages / types / include_branches 同 fgui_find_unused；max_groups 和
+    max_items_per_group 分别限制组数与组内明细条数，计数字段不受截断影响。
+    """
+    params: dict[str, Any] = {"includeBranches": include_branches}
+    if packages:
+        params["packages"] = packages
+    if types:
+        params["types"] = types
+    if max_groups is not None:
+        params["maxGroups"] = max_groups
+    if max_items_per_group is not None:
+        params["maxItemsPerGroup"] = max_items_per_group
+    return _client.call("find_duplicate", params)
+
+
+@mcp.tool()
 def fgui_replace_references(
     resource_url: str,
     new_resource_url: str,
@@ -1014,6 +1158,36 @@ def fgui_analyze_atlas_fit(package_name: str | None = None) -> dict[str, Any]:
     if package_name:
         params["packageName"] = package_name
     return _client.call("analyze_atlas_fit", params)
+
+
+@mcp.tool()
+def fgui_clear_atlas_markers(
+    package_name: str,
+    execute: bool = False,
+    item_ids: list[str] | None = None,
+    item_names: list[str] | None = None,
+    close_open_documents: bool = False,
+) -> dict[str, Any]:
+    """清除磁盘 package.xml 中错误的 atlas="alone" 标记（只处理按真实约束装得下的图片）。
+
+    默认只预览，execute=True 才写；可用 item_ids / item_names 限定目标。
+    这是带外修改：绕过编辑器对象模型，不可撤销、不进 Agent 撤销栈。执行前会保存
+    当前包并备份 package.xml，写后回读磁盘并 Dispose + 重开包。包内有未保存文档时
+    直接拒绝；有已保存的打开文档时，需要显式 close_open_documents=True 才会关闭它们。
+
+    只清除错误标记，不写任意图集归属；装不下或无法判定的 alone 标记会保留并在
+    held 里说明原因。
+    """
+    params: dict[str, Any] = {
+        "packageName": package_name,
+        "execute": execute,
+        "closeOpenDocuments": close_open_documents,
+    }
+    if item_ids is not None:
+        params["itemIds"] = item_ids
+    if item_names is not None:
+        params["itemNames"] = item_names
+    return _client.call("clear_atlas_markers", params)
 
 
 @mcp.tool()

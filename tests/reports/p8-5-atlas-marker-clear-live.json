@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "suite": "p8-5-atlas-marker-clear-live",
+  "capturedAt": "2026-10-20T11:24:11+08:00",
+  "liveEditorVerified": true,
+  "evidence": "live-editor-6.1.4",
+  "editorVersion": "6.1.4",
+  "bridgeVersion": "0.8.17",
+  "protocolVersion": "1.0",
+  "project": "sample (Package1)",
+  "environment": {
+    "editorPath": "~/Downloads/FairyGUI-Editor.app (bundle com.fairygui.FairyGUIEditor)",
+    "runFromAppTranslocation": true,
+    "launchProcedure": "osascript quit → open -a ~/Downloads/FairyGUI-Editor.app sample/sample.fairy → 等待心跳",
+    "pluginSnapshot": "scripts/sync_to_project.py --project sample/sample.fairy --apply 同步 0.8.17 插件并重启编辑器",
+    "heartbeat": "重开后 status 返回 online=true、pluginVersion=0.8.17、versionMatch=true、capabilities 含 clear_atlas_markers"
+  },
+  "baseline": {
+    "source": "仓库 sample/assets/Package1/package.xml",
+    "baselineSha256": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2",
+    "restoredSha256": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2",
+    "repoSampleRestored": true,
+    "fixture": "AtlasFixture_HD.png 1920x1080 与 AtlasFixture_Huge.png 4096x4096 均带 atlas=\"alone\"；全局 AtlasSetting.maxSize=2048、padding=0、rotation=false，故 HD 装得下、Huge 装不下"
+  },
+  "summary": {
+    "action": "clear_atlas_markers（带外纠正 alone 标记）",
+    "result": "已真机验证并通过",
+    "mockHost": {
+      "passed": 224,
+      "total": 224
+    },
+    "python": {
+      "passed": 50,
+      "total": 50
+    },
+    "typescript": {
+      "errors": 0
+    },
+    "liveChecks": 11,
+    "liveFailures": 0
+  },
+  "checks": [
+    {
+      "id": "capability",
+      "command": "fgui-agent status",
+      "expected": "插件上报 0.8.17 且 capabilities 含 clear_atlas_markers",
+      "actual": {
+        "online": true,
+        "pluginVersion": "0.8.17",
+        "versionMatch": true,
+        "hasClearAtlasMarkers": true,
+        "hasAnalyzeAtlasFit": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "analyze-baseline",
+      "command": "fgui-agent analyze-atlas-fit Package1",
+      "expected": "HD 判 alone-not-needed，Huge 判 already-alone",
+      "actual": {
+        "assignedAloneButFits": 1,
+        "images": {
+          "AtlasFixture_HD": {
+            "fit": "fits",
+            "verdict": "alone-not-needed",
+            "folderAtlasOnDisk": "alone"
+          },
+          "AtlasFixture_Huge": {
+            "fit": "exceeds",
+            "verdict": "already-alone",
+            "folderAtlasOnDisk": "alone"
+          }
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "preview",
+      "command": "fgui-agent clear-atlas-markers Package1",
+      "expected": "只预览 HD，不写盘",
+      "actual": {
+        "mode": "preview",
+        "writePath": null,
+        "strength": "none",
+        "summary": {
+          "scannedImages": 6,
+          "markedAloneOnDisk": 2,
+          "candidates": 1,
+          "wouldClear": 1,
+          "remainingAloneAfterPreview": 1
+        },
+        "candidates": [
+          {
+            "id": "x5h76",
+            "name": "AtlasFixture_HD"
+          }
+        ],
+        "held": [
+          "AtlasFixture_Huge:already-alone",
+          "Red:not-marked-alone",
+          "Blue:not-marked-alone",
+          "AtlasFixture_Small:not-marked-alone",
+          "AtlasFixture_Probe:not-marked-alone"
+        ],
+        "diskSha256Unchanged": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "filter-by-name",
+      "command": "fgui-agent clear-atlas-markers Package1 --item-name AtlasFixture_HD.png",
+      "expected": "名称过滤命中同一资源（带扩展名亦可）",
+      "actual": {
+        "candidates": [
+          {
+            "id": "x5h76",
+            "name": "AtlasFixture_HD"
+          }
+        ],
+        "held": [],
+        "diskSha256Unchanged": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "unknown-target",
+      "command": "fgui-agent clear-atlas-markers Package1 --item-name no-such-image",
+      "expected": "target_not_found，不写盘",
+      "actual": {
+        "ok": false,
+        "code": "target_not_found",
+        "stage": "input",
+        "missingNames": [
+          "no-such-image"
+        ],
+        "diskSha256Unchanged": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "negative-open-document",
+      "command": "fgui-agent clear-atlas-markers Package1 --execute（BridgeFixture 文档打开）",
+      "expected": "invalid_argument / precheck，拒绝执行且不写盘",
+      "actual": {
+        "ok": false,
+        "code": "invalid_argument",
+        "stage": "precheck",
+        "openDocuments": [
+          {
+            "url": "ui://qsezbqtwfix01",
+            "itemId": "fix01",
+            "itemName": "BridgeFixture",
+            "modified": false
+          }
+        ],
+        "diskSha256Unchanged": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "execute",
+      "command": "fgui-agent clear-atlas-markers Package1 --execute --close-open-documents",
+      "expected": "清除 HD 标记，保留 Huge 标记，备份、回读并重开包",
+      "actual": {
+        "mode": "execute",
+        "writePath": "out-of-band-xml",
+        "undoable": false,
+        "strength": "disk",
+        "reloaded": true,
+        "reloadStrategy": "package-dispose-open",
+        "savedPackageBeforeEdit": true,
+        "backupPath": "sample/.agent/backups/Package1-package-2026-10-20T03-22-58-626Z.xml",
+        "closedDocuments": [
+          "BridgeFixture"
+        ],
+        "verification": {
+          "diskReadBack": true,
+          "targetsCleared": 1,
+          "remainingAloneInPackage": [
+            "x5h77"
+          ],
+          "contentOutsideTargetsUnchanged": true,
+          "bomPreserved": true
+        },
+        "persistence": {
+          "crossRestartVerified": false
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "disk-and-backup",
+      "command": "git diff / sha256",
+      "expected": "package.xml 只少一个 atlas 属性；备份逐字节等于执行前文件；不引入 BOM",
+      "actual": {
+        "diff": "1 file changed, 1 insertion(+), 1 deletion(-)",
+        "hdLine": "<image id=\"x5h76\" name=\"AtlasFixture_HD.png\" path=\"/\" exported=\"true\"/>",
+        "hugeLineKept": "<image id=\"x5h77\" name=\"AtlasFixture_Huge.png\" path=\"/\" exported=\"true\" atlas=\"alone\"/>",
+        "backupSha256": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2",
+        "backupEqualsBaseline": true,
+        "fileStartsWithBom": false
+      },
+      "status": "pass"
+    },
+    {
+      "id": "editor-save",
+      "command": "fgui-agent save-all",
+      "expected": "编辑器保存不回写已删除的 atlas 属性",
+      "actual": {
+        "saved": true,
+        "hdAtlasAfterSave": null,
+        "hugeAtlasAfterSave": "alone",
+        "gitDiffStillSingleLine": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "full-restart",
+      "command": "退出并重启编辑器和工程后复查",
+      "expected": "重启后 HD 仍无标记、Huge 仍为 alone，预览不再有候选",
+      "actual": {
+        "pluginVersion": "0.8.17",
+        "versionMatch": true,
+        "packageXml": {
+          "HD": "no atlas attribute",
+          "Huge": "atlas=\"alone\""
+        },
+        "analyze": {
+          "AtlasFixture_HD": "leave-as-is / disk empty",
+          "AtlasFixture_Huge": "already-alone / disk alone"
+        },
+        "preview": {
+          "wouldClear": 0,
+          "remainingAloneAfterPreview": 1
+        },
+        "crossRestartVerified": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "restore-fixture",
+      "command": "cp /tmp/fgui-p8-17-acceptance/package.xml.before sample/assets/Package1/package.xml",
+      "expected": "恢复仓库样例基线并重启编辑器使内存与磁盘一致",
+      "actual": {
+        "restoredSha256": "021202c2fd96a13ebe4564000ca79195c365735139274b9bdcbcd2bf36a780a2",
+        "repoSampleGitDiff": "none",
+        "postRestoreAnalyze": {
+          "AtlasFixture_HD": "alone-not-needed / disk alone",
+          "AtlasFixture_Huge": "already-alone / disk alone"
+        }
+      },
+      "status": "pass"
+    }
+  ],
+  "limitations": [
+    "跨重启结论基于同一台机器上的编辑器退出与重启；未覆盖换机或版本升级。",
+    "同一次写入只覆盖单包单图；分支资源（branch-scope-unsupported）、同名多图歧义、未保存文档拒绝由模拟宿主覆盖，本轮未在真机触发。",
+    "原样例文件无 BOM，因此真机验证的是「不新增 BOM」；「保留已有 BOM」由模拟宿主用例覆盖。",
+    "约束来自全局 AtlasSetting（useGlobalAtlasSettings=true）；包级 PackSettings 路径未在本轮重复触发。",
+    "备份文件留在 sample/.agent/backups/（运行时目录，不纳入 Git）；回退方式是用该备份覆盖 package.xml 后重启编辑器。"
+  ],
+  "artifacts": [
+    "/tmp/fgui-p8-17-acceptance/package.xml.before",
+    "/tmp/fgui-p8-17-acceptance/preview.json",
+    "/tmp/fgui-p8-17-acceptance/preview-filter-name.json",
+    "/tmp/fgui-p8-17-acceptance/negative-unknown-name.json",
+    "/tmp/fgui-p8-17-acceptance/negative-open-doc.json",
+    "/tmp/fgui-p8-17-acceptance/execute.json",
+    "/tmp/fgui-p8-17-acceptance/analyze-after-restart.json",
+    "/tmp/fgui-p8-17-acceptance/preview-after-restart.json",
+    "sample/.agent/backups/Package1-package-2026-10-20T03-22-58-626Z.xml"
+  ]
+}
