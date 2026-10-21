@@ -233,6 +233,7 @@ def fgui_import_image(
     conflict_policy: Literal["error", "auto_rename", "replace"] = "error",
     exported: bool = True,
     create_folders: bool = True,
+    max_size: int | None = None,
     timeout_seconds: float = 120,
     save: bool = False,
     verify: bool = True,
@@ -241,10 +242,14 @@ def fgui_import_image(
 ) -> dict[str, Any]:
     """从绝对本地路径导入图片；这是磁盘写入操作，支持拒绝、自动改名或替换同名图片。
 
+    max_size 是长边上限（像素，1~32768）：源图长边超过它就先等比缩放再入库，响应里的 scaled 回报缩放前后尺寸与缩放比，atlasPrecheck 给出按真实图集约束的前置判定（fit 为 fits/exceeds/unknown，unknown 不等于放行）。
+
     save=True 保存包与工程后默认比对 package.xml（分支写入比对 package_branch.xml）条目和资源文件；external_reload=True（需 save=True）卸载并重新加载 asset 再比对，响应 strength 为 reload / disk / none。
     """
     if timeout_seconds <= 0 or timeout_seconds > 1800:
         raise ValueError("timeout_seconds 必须在 0 到 1800 之间")
+    if max_size is not None and (not isinstance(max_size, int) or max_size <= 0 or max_size > 32768):
+        raise ValueError("max_size 必须是 1 到 32768 之间的整数")
     resolved_source = Path(source_path).expanduser().resolve()
     params: dict[str, Any] = {
         "packageName": package_name,
@@ -259,6 +264,8 @@ def fgui_import_image(
     }
     if resource_name:
         params["resourceName"] = resource_name
+    if max_size is not None:
+        params["maxSize"] = max_size
     if branch is not None:
         params["branch"] = branch
     return _client.call("import_image", params, timeout=timeout_seconds)
@@ -547,6 +554,117 @@ def fgui_remove_movieclip(
     params["save"] = save
     params["verify"] = verify
     return _client.call("remove_movieclip", params)
+
+
+# --- P9-4 包资源管理（0.8.22） ---------------------------------------------
+# 真机 6.1.4 实测：四个原语都立即落盘、不进 Agent 撤销栈。
+# 编辑器原生 DeleteItem 不拦引用（会留悬空引用），MoveItem 的目标目录必须已存在，
+# RenameItem/MoveItem 不会更新引用方文档的 fileName 属性。
+
+
+@mcp.tool()
+def fgui_delete_package_item(
+    force: bool = False,
+    allow_dangling_references: bool = False,
+    close_open_documents: bool = False,
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """删除包资源（组件/图片/字体/声音/MovieClip/目录）；不可逆操作，必须显式 force=True。
+
+    编辑器原生 DeleteItem 不会拦引用：被引用的资源照样删，引用方会留下悬空 src。
+    默认检测到引用就拒绝并列出引用位置；确认要删就传 allow_dangling_references=True，响应会回报哪些引用会变悬空。
+    目标组件的文档正开着时默认拒绝；传 close_open_documents=True 让本工具关闭它（未保存改动一律拒绝）。
+    删除会连带删掉磁盘文件，不进 Agent 撤销栈。
+    """
+    params = _resource_target(url, package_name, item_name, item_path)
+    params["force"] = force
+    params["allowDanglingReferences"] = allow_dangling_references
+    params["closeOpenDocuments"] = close_open_documents
+    params["save"] = save
+    params["verify"] = verify
+    return _client.call("delete_package_item", params)
+
+
+@mcp.tool()
+def fgui_rename_package_item(
+    new_name: str,
+    close_open_documents: bool = False,
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """重命名包资源；磁盘文件同步改名，不可撤销。
+
+    new_name 不带扩展名（编辑器按资源类型补）。同名资源会被拒绝。
+    改名不会更新引用方文档的 fileName 属性（id 不变，运行时按 id 解析不受影响），
+    响应里的 staleFileNameSlots 会列出这些位置，需要时让那些文档经编辑器重新保存一次即可补齐。
+    """
+    params = _resource_target(url, package_name, item_name, item_path)
+    params["newName"] = new_name
+    params["closeOpenDocuments"] = close_open_documents
+    params["save"] = save
+    params["verify"] = verify
+    return _client.call("rename_package_item", params)
+
+
+@mcp.tool()
+def fgui_move_package_item(
+    folder_path: str,
+    create_folders: bool = True,
+    close_open_documents: bool = False,
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """把包资源移动到包内另一个目录；磁盘文件同步移动，不可撤销。
+
+    folder_path 是包内目录（如 "/ui/"）。编辑器原生 MoveItem 要求目标目录已存在，
+    否则会抛原生异常；本工具默认按 create_folders=True 先建目录再移动，并在响应里回报是否新建了目录。
+    移动不会更新引用方文档的 fileName 属性（id 不变，运行时按 id 解析不受影响），响应里的 staleFileNameSlots 会列出这些位置。
+    """
+    params = _resource_target(url, package_name, item_name, item_path)
+    params["folderPath"] = folder_path
+    params["createFolders"] = create_folders
+    params["closeOpenDocuments"] = close_open_documents
+    params["save"] = save
+    params["verify"] = verify
+    return _client.call("move_package_item", params)
+
+
+@mcp.tool()
+def fgui_duplicate_package_item(
+    new_name: str | None = None,
+    conflict_policy: str = "error",
+    url: str | None = None,
+    package_name: str | None = None,
+    item_name: str | None = None,
+    item_path: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """复制包资源；副本是新 id 的新资源，磁盘文件一并复制，原资源不受影响。
+
+    new_name 省略时用 "<原名>_copy"。conflict_policy 取 error（同名即拒绝）或 auto_rename（自动加后缀）。
+    """
+    params = _resource_target(url, package_name, item_name, item_path)
+    if new_name is not None:
+        params["newName"] = new_name
+    params["conflictPolicy"] = conflict_policy
+    params["save"] = save
+    params["verify"] = verify
+    return _client.call("duplicate_package_item", params)
+
 
 
 @mcp.tool()

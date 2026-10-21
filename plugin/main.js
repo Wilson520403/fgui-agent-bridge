@@ -11,7 +11,7 @@ const IOSearchOption = CS.System.IO.SearchOption;
 const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
-const BRIDGE_VERSION = "0.8.21";
+const BRIDGE_VERSION = "0.8.23";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -134,6 +134,10 @@ function writeStatus() {
             "get_movieclip",
             "update_movieclip",
             "remove_movieclip",
+            "delete_package_item",
+            "rename_package_item",
+            "move_package_item",
+            "duplicate_package_item",
             "list_transitions",
             "get_transition",
             "verify_transition",
@@ -858,10 +862,12 @@ function toCsStringArray(values) {
         result.SetValue(values[i], i);
     return result;
 }
-function markPackageChanged(pkg) {
+function markPackageChanged(pkg, writePath) {
     // 包资源创建/导入/删除走 FPackage.ImportResource / UpdateResource / DeleteItem 等
     // 包层 API，组件文档模型不参与这条路径。
-    lastWritePath = WRITE_PATH_MODEL;
+    // writePath 可覆盖：包级管理原语（delete/rename/move/duplicate）走的是包模型，
+    // 不能沿用「对象模型」这个默认值，否则报告会谎报写入层。
+    lastWritePath = writePath || WRITE_PATH_MODEL;
     pkg.SetChanged();
     App.project.SetChanged();
     clearAgentHistory();
@@ -889,8 +895,16 @@ function createComponent(params) {
     const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
     const folder = target.folder;
     const actualName = resolveNewItemName(pkg, folder, requestedName, params.autoRename === true);
-    const width = validateSize(params.width, 800, "width");
-    const height = validateSize(params.height, 600, "height");
+    // P9-5：组件尺寸是整数几何。编辑器在 CreateComponentItem 当场就把浮点收成整数
+    // （真机实测 172.5→172），Bridge 先做同一套量化再调用，并把精度损失报出去。
+    const sizeGeometry = quantizeGeometryFields({
+        width: validateSize(params.width, 800, "width"),
+        height: validateSize(params.height, 600, "height")
+    }, ["width", "height"]);
+    const width = Number(sizeGeometry.values.width);
+    const height = Number(sizeGeometry.values.height);
+    if (width <= 0 || height <= 0)
+        verificationError("invalid_argument", "width/height 量化后必须大于 0", { stage: "input", width: width, height: height });
     const extensionId = params.extensionId ? String(params.extensionId).trim() : "";
     const exported = params.exported !== false;
     const item = pkg.CreateComponentItem(actualName, width, height, target.path, extensionId, exported, false);
@@ -899,13 +913,135 @@ function createComponent(params) {
     markPackageChanged(pkg);
     const document = params.openAfterCreate === false ? null : openDocument({ url: item.GetURL() });
     const result = describeCreatedItem(item, "created", requestedName, folderPath, document);
-    return packageWriteResult(result, pkg, packageItemRef(item, "component", target.path, false), params);
+    return withRounded(packageWriteResult(result, pkg, packageItemRef(item, "component", target.path, false), params), sizeGeometry.rounded);
 }
 function normalizeConflictPolicy(value) {
     const policy = String(value || "error").toLowerCase();
     if (policy !== "error" && policy !== "auto_rename" && policy !== "replace")
         throw new Error(`未知冲突策略：${policy}`);
     return policy;
+}
+// ---------- P9-6：导入前的等比缩放与图集前置判定 ----------
+//
+// 真机 6.1.4 实测（tests/reports/p9-6-image-scale-probe-live.json）：
+//   ① 编辑器自带 FairyEditor.VImage 能读 PNG（含 alpha 通道）、能按 LANCZOS3 缩放、能存盘；
+//      2560×1440 缩到 1024×576 后重新导入，包内图片尺寸就是 1024×576，alpha 保留。
+//   ② 图集归属判定完全按**入库后的像素尺寸**走：缩放后装得进默认图集，就不该再被标 alone。
+//      所以缩放必须发生在入库之前，判定必须复用同一套函数，不能各判各的。
+//
+// 缩放不引外部图像库：Bridge 的写路径要在任何装了 FairyGUI 的机器上直接可跑。
+const IMAGE_RESIZE_KERNEL = 5; // FairyEditor.VImage.Kernel.LANCZOS3
+function readImagePixelSize(filePath) {
+    // 读不到尺寸不等于图不能用：读不到就当作「尺寸未知」，
+    // 判定退化成 unknown，而不是让整个导入失败。
+    try {
+        // 用声明内的类型化入口：编译期就能校验到宿主真实签名。
+        const info = FairyEditor.AssetSizeUtil.GetSize(filePath);
+        if (!info)
+            return null;
+        return { width: Number(info.width) || 0, height: Number(info.height) || 0, type: String(info.type || "") };
+    }
+    catch (_) {
+        return null;
+    }
+}
+// 长边超过 maxSize 才缩放；等比缩放后长边正好是 maxSize，短边按比例取整。
+function planImageScale(sourcePath, maxSize) {
+    if (!maxSize)
+        return null;
+    const size = readImagePixelSize(sourcePath);
+    if (!size || !size.width || !size.height)
+        verificationError("invalid_argument", "读不出源图像素尺寸，无法按 maxSize 缩放", { stage: "input", sourcePath: sourcePath, maxSize: maxSize });
+    const longest = Math.max(size.width, size.height);
+    if (longest <= maxSize)
+        return null;
+    const scale = maxSize / longest;
+    return {
+        from: size,
+        to: {
+            width: Math.max(1, Math.round(size.width * scale)),
+            height: Math.max(1, Math.round(size.height * scale))
+        },
+        scale: scale,
+        maxSize: maxSize,
+        kernel: "lanczos3"
+    };
+}
+// 产出缩放后的临时文件；调用方负责删除。
+function renderScaledImage(sourcePath, plan) {
+    // 只看 New 在不在：宿主里它是类（typeof "function"），宿主替身可能是普通对象，
+    // 按类本身判会误杀。
+    if (!FairyEditor.VImage || typeof FairyEditor.VImage.New !== "function")
+        throw new Error("当前 FairyGUI Editor 未暴露 FairyEditor.VImage，无法在插件内缩放图片");
+    // 临时文件沿用源图扩展名：内容编码与扩展名一致，编辑器按扩展名判类型才不会错位。
+    const extension = String(IOPath.GetExtension(sourcePath) || ".png").toLowerCase();
+    const tempPath = IOPath.Combine(IOPath.GetTempPath(), `fgui_scale_${Date.now()}${extension}`);
+    let image = null;
+    try {
+        image = FairyEditor.VImage.New(sourcePath);
+        image.Resize(plan.to.width, plan.to.height, IMAGE_RESIZE_KERNEL);
+        image.Save(tempPath);
+    }
+    catch (error) {
+        try {
+            if (IOFile.Exists(tempPath))
+                IOFile.Delete(tempPath);
+        }
+        catch (_) { }
+        throw new Error(`缩放图片失败（${sourcePath}）：${String(error)}`);
+    }
+    finally {
+        try {
+            if (image && typeof image.Dispose === "function")
+                image.Dispose();
+        }
+        catch (_) { }
+    }
+    if (!IOFile.Exists(tempPath))
+        throw new Error(`缩放图片失败：未生成临时文件 ${tempPath}`);
+    return tempPath;
+}
+// 导入前的图集前置判定：与 analyze_atlas_fit 共用同一套约束与 judgeAtlasFit。
+// unknown 不是放行——约束不足或落点不明时不下结论，只把已知事实报出来。
+function precheckAtlasFit(pkg, settings, width, height) {
+    if (!width || !height)
+        return { fit: "unknown", reason: "no-dimensions", width: width, height: height };
+    const constraints = resolveAtlasConstraints(pkg, settings);
+    if (!constraints || constraints.length === 0)
+        return { fit: "unknown", reason: "no-constraints", width: width, height: height };
+    // 新图还没有归属：全局设置只有一条约束时它就是落点；
+    // 包级多图集时编辑器按自己的规则分配，Bridge 不猜——逐张给出判定。
+    const matched = matchAtlasConstraints(constraints, {}, "");
+    if (!matched) {
+        return {
+            fit: "unknown",
+            reason: "atlas-not-determined",
+            width: width, height: height,
+            atlases: constraints.map((c) => {
+                const verdict = judgeAtlasFit(width, height, c);
+                return {
+                    atlas: c.atlas, source: c.source,
+                    fit: verdict.fits ? "fits" : "exceeds",
+                    binding: verdict.binding,
+                    maxWidth: c.maxWidth, maxHeight: c.maxHeight
+                };
+            })
+        };
+    }
+    if (!constraintsUsable(matched))
+        return { fit: "unknown", reason: "constraints-incomplete", width: width, height: height, constraintsSource: matched.source, atlas: matched.atlas };
+    const verdict = judgeAtlasFit(width, height, matched);
+    return {
+        fit: verdict.fits ? "fits" : "exceeds",
+        binding: verdict.binding,
+        requiredWidth: verdict.requiredWidth,
+        requiredHeight: verdict.requiredHeight,
+        width: width, height: height,
+        constraintsSource: matched.source,
+        atlas: matched.atlas,
+        maxWidth: matched.maxWidth,
+        maxHeight: matched.maxHeight
+    };
 }
 async function importImage(params) {
     validatePackageWriteOptions(params, "image", true);
@@ -921,6 +1057,13 @@ async function importImage(params) {
     const detectedType = FairyEditor.FPackageItemType.GetFileType(sourcePath);
     if (detectedType !== FairyEditor.FPackageItemType.IMAGE)
         throw new Error(`文件不是 FairyGUI 支持的图片资源：${sourcePath}`);
+    // P9-6：maxSize 是长边上限（像素）。省略或 0 表示不缩放。
+    let maxSize = 0;
+    if (params.maxSize !== undefined && params.maxSize !== null && params.maxSize !== "") {
+        maxSize = Number(params.maxSize);
+        if (!Number.isInteger(maxSize) || maxSize <= 0 || maxSize > 32768)
+            verificationError("invalid_argument", "maxSize 必须是 1 到 32768 之间的整数", { stage: "input", maxSize: params.maxSize });
+    }
     const folderPath = normalizePackagePath(params.folderPath);
     const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
     const folder = target.folder;
@@ -940,51 +1083,93 @@ async function importImage(params) {
         actualName = resolveNewItemName(pkg, folder, requestedName, true);
         existing = null;
     }
-    if (existing && policy === "replace") {
-        if (existing.type !== FairyEditor.FPackageItemType.IMAGE)
-            throw new Error(`同名资源不是图片，不能替换：${requestedName}`);
-        await puerts.$promise(pkg.UpdateResource(existing, sourcePath));
-        existing.exported = params.exported !== false;
-        existing.SetChanged();
-        const atlasAssignment = applyAtlasAssignmentForItem(pkg, existing);
+    // 缩放计划与图集前置判定都在写入前算出来：判定的是「即将入库的尺寸」。
+    const scalePlan = planImageScale(sourcePath, maxSize);
+    const originalSize = readImagePixelSize(sourcePath);
+    const effectiveSize = scalePlan ? scalePlan.to : (originalSize || { width: 0, height: 0 });
+    const settings = App.project.GetSettings("Publish");
+    const atlasPrecheck = {
+        original: precheckAtlasFit(pkg, settings, originalSize ? originalSize.width : 0, originalSize ? originalSize.height : 0),
+        effective: precheckAtlasFit(pkg, settings, effectiveSize.width, effectiveSize.height),
+        note: "effective 是本次真正入库的尺寸判定；unknown 表示约束不足，不等于放行"
+    };
+    let tempPath = "";
+    try {
+        const importPath = scalePlan ? renderScaledImage(sourcePath, scalePlan) : sourcePath;
+        if (scalePlan)
+            tempPath = importPath;
+        if (existing && policy === "replace") {
+            if (existing.type !== FairyEditor.FPackageItemType.IMAGE)
+                throw new Error(`同名资源不是图片，不能替换：${requestedName}`);
+            await puerts.$promise(pkg.UpdateResource(existing, importPath));
+            existing.exported = params.exported !== false;
+            existing.SetChanged();
+            const atlasAssignment = applyAtlasAssignmentForItem(pkg, existing);
+            markPackageChanged(pkg);
+            const result = packageWriteResult({
+                operation: "replaced",
+                requestedName,
+                actualName: existing.name,
+                autoRenamed: false,
+                sourcePath,
+                folderPath,
+                atlasAssignment,
+                atlasPrecheck,
+                scaled: scalePlan ? scaleReport(scalePlan) : null,
+                item: describeItem(existing),
+                packageModified: true,
+                requiresSave: true,
+                diskWrite: true
+            }, pkg, packageItemRef(existing, "image", target.path, true), params);
+            return result;
+        }
+        const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
+        const item = await puerts.$promise(pkg.ImportResource(importPath, target.path, importFileName));
+        if (!item)
+            throw new Error(`导入图片失败：${sourcePath}`);
+        if (item.type !== FairyEditor.FPackageItemType.IMAGE)
+            throw new Error(`导入结果不是图片资源：${item.name}`);
+        item.exported = params.exported !== false;
+        item.SetChanged();
+        const atlasAssignment = applyAtlasAssignmentForItem(pkg, item);
         markPackageChanged(pkg);
         return packageWriteResult({
-            operation: "replaced",
+            operation: "imported",
             requestedName,
-            actualName: existing.name,
-            autoRenamed: false,
+            actualName: item.name,
+            autoRenamed: item.name !== requestedName,
             sourcePath,
             folderPath,
             atlasAssignment,
-            item: describeItem(existing),
+            atlasPrecheck,
+            scaled: scalePlan ? scaleReport(scalePlan) : null,
+            item: describeItem(item),
             packageModified: true,
             requiresSave: true,
             diskWrite: true
-        }, pkg, packageItemRef(existing, "image", target.path, true), params);
+        }, pkg, packageItemRef(item, "image", target.path, true), params);
     }
-    const importFileName = `${actualName}${String(IOPath.GetExtension(sourcePath) || "")}`;
-    const item = await puerts.$promise(pkg.ImportResource(sourcePath, target.path, importFileName));
-    if (!item)
-        throw new Error(`导入图片失败：${sourcePath}`);
-    if (item.type !== FairyEditor.FPackageItemType.IMAGE)
-        throw new Error(`导入结果不是图片资源：${item.name}`);
-    item.exported = params.exported !== false;
-    item.SetChanged();
-    const atlasAssignment = applyAtlasAssignmentForItem(pkg, item);
-    markPackageChanged(pkg);
-    return packageWriteResult({
-        operation: "imported",
-        requestedName,
-        actualName: item.name,
-        autoRenamed: item.name !== requestedName,
-        sourcePath,
-        folderPath,
-        atlasAssignment,
-        item: describeItem(item),
-        packageModified: true,
-        requiresSave: true,
-        diskWrite: true
-    }, pkg, packageItemRef(item, "image", target.path, true), params);
+    finally {
+        // 临时文件是缩放的中间产物，不属于工程资源，入库后立刻清掉。
+        if (tempPath) {
+            try {
+                if (IOFile.Exists(tempPath))
+                    IOFile.Delete(tempPath);
+            }
+            catch (_) { }
+        }
+    }
+}
+// 缩放回报：让调用方知道入库尺寸与缩放比，而不是只看到「导入成功」。
+function scaleReport(plan) {
+    return {
+        from: plan.from,
+        to: plan.to,
+        scale: plan.scale,
+        maxSize: plan.maxSize,
+        kernel: plan.kernel,
+        source: "FairyEditor.VImage"
+    };
 }
 async function importFont(params) {
     validatePackageWriteOptions(params, "font", true);
@@ -1101,8 +1286,15 @@ function createButton(params) {
     const target = resolveWriteFolder(pkg, params, folderPath, params.createFolders !== false);
     const folder = target.folder;
     const actualName = resolveNewItemName(pkg, folder, requestedName, params.autoRename === true);
-    const width = validateSize(params.width, 160, "width");
-    const height = validateSize(params.height, 60, "height");
+    // P9-5：按钮尺寸是整数几何，写入前显式量化并回报精度损失。
+    const sizeGeometry = quantizeGeometryFields({
+        width: validateSize(params.width, 160, "width"),
+        height: validateSize(params.height, 60, "height")
+    }, ["width", "height"]);
+    const width = Number(sizeGeometry.values.width);
+    const height = Number(sizeGeometry.values.height);
+    if (width <= 0 || height <= 0)
+        verificationError("invalid_argument", "width/height 量化后必须大于 0", { stage: "input", width: width, height: height });
     const mode = normalizeButtonMode(params.mode);
     const images = resolveButtonImages(params);
     const extensionId = params.extensionId
@@ -1117,7 +1309,7 @@ function createButton(params) {
     const result = describeCreatedItem(item, "created", requestedName, folderPath, document);
     result.mode = mode;
     result.imageUrls = images;
-    return packageWriteResult(result, pkg, packageItemRef(item, "component", target.path, false), params);
+    return withRounded(packageWriteResult(result, pkg, packageItemRef(item, "component", target.path, false), params), sizeGeometry.rounded);
 }
 function openDocument(params) {
     let item = null;
@@ -3511,8 +3703,19 @@ function insertText(params) {
     if (!parent || typeof parent.CreateChild !== "function" || typeof parent.AddChild !== "function")
         verificationError("invalid_argument", "当前文档根节点不是可容纳子节点的组件", { stage: "input" });
     const style = params.style && typeof params.style === "object" ? params.style : {};
-    const x = Number(params.x || 0);
-    const y = Number(params.y || 0);
+    // P9-5：文本坐标与尺寸是整数几何，先量化再写，避免落盘时被悄悄截断。
+    const geometry = quantizeGeometryFields({
+        x: params.x === undefined ? 0 : params.x,
+        y: params.y === undefined ? 0 : params.y,
+        width: style.width,
+        height: style.height
+    }, ["x", "y", "width", "height"]);
+    const x = Number(geometry.values.x);
+    const y = Number(geometry.values.y);
+    if (geometry.values.width !== undefined)
+        style.width = geometry.values.width;
+    if (geometry.values.height !== undefined)
+        style.height = geometry.values.height;
     const XmlType = CS.FairyGUI.Utils.XML;
     const xml = XmlType.Create("text");
     let obj = null;
@@ -3626,6 +3829,7 @@ function insertText(params) {
             expected[key] = style[key];
     const after = Object.assign({ x, y, width: obj.width, height: obj.height, text: obj.text }, textStyle(obj));
     const result = writeVerification(doc, obj, {}, after, params, expected);
+    withRounded(result, geometry.rounded);
     result.inserted = {
         id: obj.id,
         name: nameActual,
@@ -3672,6 +3876,10 @@ function setTextStyle(params) {
             verificationError("invalid_argument", "font 必须引用字体资源", { stage: "input" });
         style.font = String(font.GetURL());
     }
+    // P9-5：文本样式里的 width/height/x/y 是整数几何，写入前显式量化并回报精度损失。
+    const geometry = quantizeGeometryFields(style, ["width", "height", "x", "y"]);
+    for (const key of Object.keys(geometry.values))
+        style[key] = geometry.values[key];
     const before = textStyle(obj);
     const aliases = { vAlign: "verticalAlign", lineGap: "leading" };
     lastWritePath = WRITE_PATH_MODEL;
@@ -3707,7 +3915,7 @@ function setTextStyle(params) {
     const expected = Object.assign({ id: obj.id, type }, style);
     // shadow 是内存里的启用态，不落盘，不进 XML 断言。
     delete expected.shadow;
-    return writeVerification(doc, obj, before, textStyle(obj), params, expected);
+    return withRounded(writeVerification(doc, obj, before, textStyle(obj), params, expected), geometry.rounded);
 }
 // `expected` may describe a subtree rather than a flat property map. Reserved
 // structural keys: `children` (array of node specs), `childrenMode`
@@ -5413,6 +5621,568 @@ async function removeMovieClip(params) {
     markPackageChanged(pkg);
     return packageWriteResult({ operation: "removed", movieClip: removed, references, packageModified: true, requiresSave: true, diskWrite: true, undoable: false }, pkg, ref, params);
 }
+// ------------------------------------------------------------------
+// P9-4 包资源管理：delete / rename / move / duplicate
+//
+// 真机 6.1.4 实测（探针原始数据 tests/reports/p9-4-probe-live.json，
+// 落地复验 tests/reports/p9-4-package-item-live.json）钉住的六条事实：
+//
+//  1. 四个原语都是**立即落盘**的：调用返回后 package.xml 已经是新值，
+//     不需要 Save；但它们**不进 Agent 撤销栈** → undoable 恒为 false，
+//     写路径恒为包模型（package-model），不能报成文档模型。
+//  2. `DeleteItem` 的返回值 = 本次实际移除的条目数（目录含递归子项），
+//     **不是引用数**：实测被 3 处引用的组件返回 1，含 1 个子项的目录返回 2，
+//     已被目录连带删掉的资源再单独删返回 0。
+//  3. `DeleteItem` **不拦引用**：被引用的资源照样删，引用方 XML 里留悬空 src。
+//     所以 Bridge 必须自己前置挡（复用 P8-2 引用图），强制时显式回报悬空引用。
+//  4. `RenameItem` / `MoveItem` 会真的改磁盘文件名与目录，并同步 package.xml；
+//     但**不更新引用方文档的 fileName 属性**（id 不变、fileName 变旧）。
+//     运行时按 id 解析不受影响，属半状态 → 显式回报，不做带外改写
+//     （与 replace_references 的 staleFileNameSlots 同一口径）。
+//  5. `MoveItem` 的目标目录必须**已存在**，否则原生抛 KeyNotFoundException
+//     （原始栈极长、不可读）→ Bridge 前置校验或按需建目录。
+//  6. `DuplicateItem` 返回**新 id** 的资源，磁盘文件被复制，清单登记新条目。
+// ------------------------------------------------------------------
+const WRITE_PATH_PACKAGE = "package-model";
+function packageItemTarget(params) {
+    // 允许 item 子对象与平铺参数两种写法
+    return (params && params.item && typeof params.item === "object") ? params.item : params;
+}
+// 包内相对文件路径：与 XML 里的 fileName 属性同口径（目录用 / 分隔、无前导斜杠）
+function packageItemRelativeFile(pkg, item) {
+    const base = String((pkg && pkg.basePath) || "").replace(/\\/g, "/").replace(/\/+$/, "");
+    const file = String((item && item.file) || "").replace(/\\/g, "/");
+    if (!file)
+        return "";
+    if (base && file.indexOf(base) === 0)
+        return file.slice(base.length + 1);
+    return String(IOPath.GetFileName(file) || "");
+}
+// 读清单条目（package.xml / package_branch.xml），带 path 属性
+function readPackageEntry(pkg, itemId, branch) {
+    const file = packageManifestPath(pkg, branch);
+    if (!IOFile.Exists(file))
+        return { present: false, file };
+    try {
+        const XmlType = CS.FairyGUI.Utils.XML;
+        const xml = new XmlType(String(IOFile.ReadAllText(file)));
+        const resources = xml.GetNode("resources");
+        if (!resources)
+            return { present: false, file };
+        for (let i = 0; i < resources.elements.Count; i++) {
+            const node = resources.elements.get_Item(i);
+            if (String(node.GetAttribute("id") || "") === String(itemId))
+                return {
+                    present: true, file,
+                    tag: String(node.name),
+                    id: String(node.GetAttribute("id") || ""),
+                    name: String(node.GetAttribute("name") || ""),
+                    path: String(node.GetAttribute("path") || "")
+                };
+        }
+        return { present: false, file };
+    }
+    catch (error) {
+        verificationError("persistence_failed", "读取包清单失败", { stage: "xml", file, reason: String(error) });
+    }
+    return { present: false, file };
+}
+// 谁引用了它：与 P8-2 的 query_references 同一套 DependencyQuery
+function packageItemReferencingDocs(item) {
+    const url = String(item.GetURL());
+    const query = new FairyEditor.DependencyQuery();
+    query.QueryReferences(App.project, url);
+    const list = query.references;
+    const total = list ? Number(list.Count) : 0;
+    const out = [];
+    for (let i = 0; i < total; i++)
+        out.push(describeReference(list.get_Item(i)));
+    return out;
+}
+function summarizePackageReference(reference) {
+    return {
+        hostItemId: reference.owner ? reference.owner.itemId : null,
+        hostItemName: reference.owner ? reference.owner.itemName : null,
+        objectId: reference.owner ? reference.owner.objectId : null,
+        objectName: reference.owner ? reference.owner.objectName : null,
+        element: reference.slot ? reference.slot.element : null,
+        propKey: reference.slot ? reference.slot.propKey : null,
+        fileName: reference.attributes ? (reference.attributes.fileName || null) : null
+    };
+}
+// 改名/移动后引用方文档的 fileName 属性不会跟着更新 → 逐条比对回报
+function staleFileNameSlotDetails(item, pkg) {
+    const expected = packageItemRelativeFile(pkg, item);
+    const slots = [];
+    for (const reference of packageItemReferencingDocs(item)) {
+        const fileName = reference.attributes ? reference.attributes.fileName : null;
+        if (!fileName)
+            continue;
+        if (String(fileName) === expected)
+            continue;
+        slots.push({
+            hostItemId: reference.owner ? reference.owner.itemId : null,
+            hostItemName: reference.owner ? reference.owner.itemName : null,
+            objectId: reference.owner ? reference.owner.objectId : null,
+            objectName: reference.owner ? reference.owner.objectName : null,
+            element: reference.slot ? reference.slot.element : null,
+            staleFileName: String(fileName),
+            expectedFileName: expected
+        });
+    }
+    return slots;
+}
+// 打开文档里的内存引用：磁盘引用图只反映「已保存」的内容。
+// 真机 6.1.4 实测：insert_object 插入实例后不保存文档，DependencyQuery 查不到
+// 这处引用——但它确实活在打开的文档内存里，保存那一刻就会落盘成悬空 src。
+// 所以删除前的引用检查必须把这一层也算上。
+function openDocumentReferences(pkg, item) {
+    const url = String(item.GetURL());
+    const hits = [];
+    const open = openDocumentsForPackage(pkg);
+    for (const entry of open.documents) {
+        let doc = null;
+        try {
+            doc = App.docView.FindDocument(entry.url);
+        }
+        catch (_) {
+            doc = null;
+        }
+        if (!doc || !doc.content)
+            continue;
+        const matches = [];
+        try {
+            findObjectsByResourceUrl(doc.content, url, matches);
+        }
+        catch (_) {
+            continue;
+        }
+        if (!matches.length)
+            continue;
+        hits.push({
+            url: entry.url,
+            itemId: entry.itemId,
+            itemName: entry.itemName,
+            modified: entry.modified,
+            referenceCount: matches.length,
+            objectIds: matches.map((obj) => String(obj.id || "")),
+            objectNames: matches.map((obj) => String(obj.name || ""))
+        });
+    }
+    return hits;
+}
+// 目标组件的文档正开着时的保护（只用于删除）。
+//
+// 真机 6.1.4 实测（tests/reports/p9-4-probe-live.json 探针 C1/D1/D2）：
+//   * `App.docView.CloseDocuments(pkg)` 对已打开文档是**空操作**——关不掉，
+//     真正有效的是 `App.docView.CloseDocument(doc)`（逐个关）。
+//   * **改名与移动在文档开着时是安全的**：文档的 packageItem.file 会跟着新路径走，
+//     之后保存该文档不会把旧文件名写回来。因此只有「删除」需要这道保护——
+//     删除会让仍打开的文档持有已释放的 item。
+// 与 clear_atlas_markers 同一口径：未保存文档一律拒绝；已保存文档需显式允许关闭。
+function packageItemOpenDocumentGuard(pkg, item, params, action) {
+    if (item.type !== FairyEditor.FPackageItemType.COMPONENT)
+        return { supported: true, documents: [], closed: [] };
+    const url = String(item.GetURL());
+    let doc = null;
+    try {
+        doc = App.docView.FindDocument(url);
+    }
+    catch (error) {
+        verificationError("invalid_argument", "编辑器未暴露 docView.FindDocument，无法确认目标文档是否打开", {
+            stage: "precheck", packageName: String(pkg.name), reason: String(error)
+        });
+    }
+    if (!doc)
+        return { supported: true, documents: [], closed: [] };
+    const entry = { url, itemId: String(item.id), itemName: String(item.name), modified: Boolean(doc.isModified) };
+    if (entry.modified)
+        verificationError("invalid_argument", `目标组件的文档有未保存修改，拒绝${action}；请先保存或放弃`, {
+            stage: "precheck", packageName: String(pkg.name), openDocuments: [entry]
+        });
+    if (params.closeOpenDocuments !== true)
+        verificationError("invalid_argument", `目标组件的文档正在编辑器里打开，拒绝${action}；请先关闭它，或显式传 closeOpenDocuments=true`, {
+            stage: "precheck", packageName: String(pkg.name), openDocuments: [entry]
+        });
+    try {
+        App.docView.CloseDocument(doc);
+    }
+    catch (error) {
+        verificationError("persistence_failed", `关闭目标文档失败，未执行${action}`, {
+            stage: "precheck", packageName: String(pkg.name), reason: String(error)
+        });
+    }
+    let still = null;
+    try {
+        still = App.docView.FindDocument(url);
+    }
+    catch (_) {
+        still = null;
+    }
+    if (still)
+        verificationError("persistence_failed", `关闭后目标文档仍处于打开状态，未执行${action}`, {
+            stage: "precheck", packageName: String(pkg.name), url
+        });
+    return { supported: true, documents: [entry], closed: [entry] };
+}
+// 四个动作共用：把包刷盘并回读清单
+function flushPackage(pkg, params) {
+    if (!params || params.save !== true)
+        return false;
+    try {
+        pkg.EnsureOpen();
+        pkg.Save();
+        App.project.Save();
+        return true;
+    }
+    catch (error) {
+        verificationError("persistence_failed", "保存包或工程失败", { stage: "save", packageName: String(pkg.name), reason: String(error) });
+    }
+    return false;
+}
+function deletePackageItem(params) {
+    validatePackageWriteOptions(params, "packageItem", false);
+    const item = resolveItem(packageItemTarget(params));
+    assertItemBranchScope(item, params, "delete_package_item");
+    const pkg = item.owner;
+    if (!pkg)
+        verificationError("invalid_argument", "目标资源没有所属包", { stage: "input" });
+    if (item.isRoot)
+        verificationError("invalid_argument", "不允许删除包根节点", { stage: "input" });
+    if (params.force !== true)
+        verificationError("invalid_argument", "删除包资源是不可逆操作（磁盘文件会一起删掉）；请显式传 force=true 确认", {
+            stage: "input", itemId: String(item.id)
+        });
+    const itemId = String(item.id);
+    const branch = String(item.branch || "");
+    const before = describeItem(item);
+    const beforeFile = item.file ? String(item.file) : null;
+    packageItemOpenDocumentGuard(pkg, item, params, "删除包资源");
+    // 引用检查：原生 DeleteItem 不拦引用，Bridge 必须自己挡。
+    // 磁盘引用图只覆盖已保存内容，打开文档里的内存引用要单独算一层。
+    ensurePackagesOpen(params);
+    const references = packageItemReferencingDocs(item);
+    const openReferences = openDocumentReferences(pkg, item);
+    if ((references.length > 0 || openReferences.length > 0) && params.allowDanglingReferences !== true)
+        verificationError("invalid_argument", `目标资源正被 ${references.length} 处已保存引用、${openReferences.length} 个打开文档引用，删除后这些引用会变成悬空；请先移除引用，或显式传 allowDanglingReferences=true`, {
+            stage: "precheck", itemId,
+            references: references.map(summarizePackageReference),
+            openDocumentReferences: openReferences
+        });
+    let removedCount = 0;
+    try {
+        removedCount = pkg.DeleteItem(item);
+    }
+    catch (error) {
+        verificationError("editor_rejected", `删除包资源失败：${String(error)}`, { stage: "editor", itemId, reason: String(error) });
+    }
+    markPackageChanged(pkg, WRITE_PATH_PACKAGE);
+    const saved = flushPackage(pkg, params);
+    const memoryPresent = (() => { try {
+        return pkg.GetItem(itemId) ? true : false;
+    }
+    catch (_) {
+        return null;
+    } })();
+    const entry = readPackageEntry(pkg, itemId, branch);
+    const fileExists = beforeFile ? IOFile.Exists(beforeFile) : null;
+    if (memoryPresent === true || entry.present)
+        verificationError("persistence_failed", "删除后目标资源仍可解析", {
+            stage: "verify", itemId, memoryPresent, diskEntryPresent: entry.present
+        });
+    if (fileExists === true)
+        verificationError("persistence_failed", "删除后磁盘文件仍存在", { stage: "verify", itemId, file: beforeFile });
+    const verification = {
+        editorReadback: true,
+        memoryPresent,
+        xmlReadback: true,
+        diskEntryPresent: entry.present,
+        diskFileExists: fileExists,
+        file: entry.file,
+        saved
+    };
+    return {
+        ok: true,
+        operation: "deleted",
+        target: before,
+        removedCount: Number(removedCount) || 0,
+        removedCountNote: "编辑器返回的是本次实际移除的条目数（目录含递归子项），不是引用数。",
+        references: references.map(summarizePackageReference),
+        openDocumentReferences: openReferences,
+        danglingReferences: references.map(summarizePackageReference).concat(openReferences.map((hit) => ({
+            source: "open-document",
+            hostItemId: hit.itemId,
+            hostItemName: hit.itemName,
+            url: hit.url,
+            referenceCount: hit.referenceCount,
+            objectIds: hit.objectIds
+        }))),
+        fileDeleted: beforeFile ? true : null,
+        deletedFile: beforeFile,
+        persisted: true,
+        strength: DISK_STRENGTH,
+        undoable: false,
+        writePath: WRITE_PATH_PACKAGE,
+        verification,
+        note: references.length > 0
+            ? "删除已落盘且不可撤销；被引用方的引用没有自动清理，会留下悬空 src，请按 references 自行处理。"
+            : "删除已落盘且不可撤销（磁盘文件一并删除），不进 Agent 撤销栈。"
+    };
+}
+function renamePackageItem(params) {
+    const item = resolveItem(packageItemTarget(params));
+    const allowReload = item.type !== FairyEditor.FPackageItemType.COMPONENT && item.type !== FairyEditor.FPackageItemType.FOLDER;
+    validatePackageWriteOptions(params, "packageItem", allowReload);
+    assertItemBranchScope(item, params, "rename_package_item");
+    const pkg = item.owner;
+    if (!pkg)
+        verificationError("invalid_argument", "目标资源没有所属包", { stage: "input" });
+    const itemId = String(item.id);
+    const branch = String(item.branch || "");
+    const before = describeItem(item);
+    const beforeName = packageItemNameKey(before.name);
+    const beforeFile = item.file ? String(item.file) : null;
+    const requestedName = validateResourceName(params.newName || params.name, "newName");
+    const targetName = packageItemNameKey(requestedName);
+    if (!targetName)
+        verificationError("invalid_argument", "newName 不能为空", { stage: "input" });
+    if (targetName === beforeName)
+        verificationError("invalid_argument", `新名称与当前名称相同：${targetName}`, { stage: "input", itemId });
+    const folder = item.parent;
+    if (folder) {
+        const existing = pkg.GetItemByName(folder, targetName);
+        if (existing && String(existing.id) !== itemId)
+            verificationError("invalid_argument", `目标目录已存在同名资源：${targetName}`, {
+                stage: "input", itemId, existingItemId: String(existing.id)
+            });
+    }
+    // 文档开着也能改名：真机 6.1.4 实测文档的 packageItem.file 会跟着新文件名走，
+    // 之后保存该文档不会把旧文件名写回来（探针 C2）。
+    try {
+        pkg.RenameItem(item, targetName);
+    }
+    catch (error) {
+        verificationError("editor_rejected", `改名失败：${String(error)}`, { stage: "editor", itemId, reason: String(error) });
+    }
+    markPackageChanged(pkg, WRITE_PATH_PACKAGE);
+    const saved = flushPackage(pkg, params);
+    const after = describeItem(item);
+    const afterName = packageItemNameKey(after.name);
+    const afterFile = after.file ? String(after.file) : null;
+    const entry = readPackageEntry(pkg, itemId, branch);
+    if (afterName !== targetName)
+        verificationError("persistence_failed", "改名后编辑器内存里的名称与请求不一致", {
+            stage: "verify", itemId, expected: targetName, actual: afterName
+        });
+    if (!entry.present || packageItemNameKey(entry.name) !== targetName)
+        verificationError("persistence_failed", "改名后包清单里的条目名没有落盘", {
+            stage: "verify", itemId, expected: targetName, actual: entry.present ? entry.name : null, file: entry.file
+        });
+    if (beforeFile && IOFile.Exists(beforeFile))
+        verificationError("persistence_failed", "改名后旧文件仍存在", { stage: "verify", itemId, file: beforeFile });
+    if (afterFile && !IOFile.Exists(afterFile))
+        verificationError("persistence_failed", "改名后新文件不存在", { stage: "verify", itemId, file: afterFile });
+    const staleSlots = staleFileNameSlotDetails(item, pkg);
+    const openRefs = openDocumentReferences(pkg, item);
+    const verification = {
+        editorReadback: true,
+        xmlReadback: true,
+        diskEntryName: entry.name,
+        diskEntryPath: entry.path,
+        oldFileExists: beforeFile ? IOFile.Exists(beforeFile) : null,
+        newFileExists: afterFile ? IOFile.Exists(afterFile) : null,
+        file: entry.file,
+        saved
+    };
+    return {
+        ok: true,
+        operation: "renamed",
+        target: before,
+        previousName: beforeName,
+        actualName: afterName,
+        nameAdjusted: afterName !== targetName,
+        item: after,
+        staleFileNameSlots: staleSlots,
+        openDocumentReferences: openRefs,
+        persisted: true,
+        strength: DISK_STRENGTH,
+        undoable: false,
+        writePath: WRITE_PATH_PACKAGE,
+        verification,
+        note: staleSlots.length
+            ? `改名已落盘且不可撤销；${staleSlots.length} 处引用方的 fileName 属性不会自动更新（id 不变，运行时按 id 解析不受影响），需要时让那些文档经编辑器重新保存一次即可补齐。`
+            : "改名已落盘且不可撤销（磁盘文件同步改名），不进 Agent 撤销栈。"
+    };
+}
+function movePackageItem(params) {
+    const item = resolveItem(packageItemTarget(params));
+    const allowReload = item.type !== FairyEditor.FPackageItemType.COMPONENT && item.type !== FairyEditor.FPackageItemType.FOLDER;
+    validatePackageWriteOptions(params, "packageItem", allowReload);
+    assertItemBranchScope(item, params, "move_package_item");
+    const pkg = item.owner;
+    if (!pkg)
+        verificationError("invalid_argument", "目标资源没有所属包", { stage: "input" });
+    const itemId = String(item.id);
+    const branch = String(item.branch || "");
+    const before = describeItem(item);
+    const beforePath = String(before.path || "/");
+    const beforeFile = item.file ? String(item.file) : null;
+    const folderPath = normalizePackagePath(params.folderPath || params.targetPath || "/");
+    if (folderPath === beforePath)
+        verificationError("invalid_argument", `目标目录与当前目录相同：${folderPath}`, { stage: "input", itemId });
+    if (item.type === FairyEditor.FPackageItemType.FOLDER && folderPath.indexOf(beforePath) === 0)
+        verificationError("invalid_argument", "不能把目录移动到它自己或它的子目录里", {
+            stage: "input", itemId, from: beforePath, to: folderPath
+        });
+    // 原生 MoveItem 对不存在的目标目录抛 KeyNotFoundException（原生栈不可读），
+    // 所以目标目录要么已存在，要么由 Bridge 先建好。
+    const createIfMissing = params.createFolders !== false;
+    const existedBefore = (() => { try {
+        return pkg.GetItemByPath(folderPath) ? true : false;
+    }
+    catch (_) {
+        return false;
+    } })();
+    resolvePackageFolder(pkg, folderPath, createIfMissing);
+    // 文档开着也能移动：真机 6.1.4 实测文档跟随新路径，保存不会写回旧路径（探针 D2）。
+    try {
+        pkg.MoveItem(item, folderPath);
+    }
+    catch (error) {
+        verificationError("editor_rejected", `移动失败：${String(error)}`, { stage: "editor", itemId, folderPath, reason: String(error) });
+    }
+    markPackageChanged(pkg, WRITE_PATH_PACKAGE);
+    const saved = flushPackage(pkg, params);
+    const after = describeItem(item);
+    const afterPath = String(after.path || "/");
+    const afterFile = after.file ? String(after.file) : null;
+    const entry = readPackageEntry(pkg, itemId, branch);
+    if (afterPath !== folderPath)
+        verificationError("persistence_failed", "移动后编辑器内存里的路径与请求不一致", {
+            stage: "verify", itemId, expected: folderPath, actual: afterPath
+        });
+    if (!entry.present || entry.path !== folderPath)
+        verificationError("persistence_failed", "移动后包清单里的 path 没有落盘", {
+            stage: "verify", itemId, expected: folderPath, actual: entry.present ? entry.path : null, file: entry.file
+        });
+    if (beforeFile && IOFile.Exists(beforeFile))
+        verificationError("persistence_failed", "移动后旧路径的文件仍存在", { stage: "verify", itemId, file: beforeFile });
+    if (afterFile && !IOFile.Exists(afterFile))
+        verificationError("persistence_failed", "移动后新路径的文件不存在", { stage: "verify", itemId, file: afterFile });
+    const staleSlots = staleFileNameSlotDetails(item, pkg);
+    const openRefs = openDocumentReferences(pkg, item);
+    const verification = {
+        editorReadback: true,
+        xmlReadback: true,
+        diskEntryName: entry.name,
+        diskEntryPath: entry.path,
+        oldFileExists: beforeFile ? IOFile.Exists(beforeFile) : null,
+        newFileExists: afterFile ? IOFile.Exists(afterFile) : null,
+        file: entry.file,
+        saved
+    };
+    return {
+        ok: true,
+        operation: "moved",
+        target: before,
+        previousPath: beforePath,
+        actualPath: afterPath,
+        folderCreated: !existedBefore && createIfMissing,
+        item: after,
+        staleFileNameSlots: staleSlots,
+        openDocumentReferences: openRefs,
+        persisted: true,
+        strength: DISK_STRENGTH,
+        undoable: false,
+        writePath: WRITE_PATH_PACKAGE,
+        verification,
+        note: staleSlots.length
+            ? `移动已落盘且不可撤销（磁盘文件同步移动）；${staleSlots.length} 处引用方的 fileName 属性不会自动更新（id 不变，运行时按 id 解析不受影响），需要时让那些文档经编辑器重新保存一次即可补齐。`
+            : "移动已落盘且不可撤销（磁盘文件同步移动），不进 Agent 撤销栈。"
+    };
+}
+function duplicatePackageItem(params) {
+    const item = resolveItem(packageItemTarget(params));
+    const allowReload = item.type !== FairyEditor.FPackageItemType.COMPONENT && item.type !== FairyEditor.FPackageItemType.FOLDER;
+    validatePackageWriteOptions(params, "packageItem", allowReload);
+    assertItemBranchScope(item, params, "duplicate_package_item");
+    const pkg = item.owner;
+    if (!pkg)
+        verificationError("invalid_argument", "目标资源没有所属包", { stage: "input" });
+    const sourceId = String(item.id);
+    const branch = String(item.branch || "");
+    const source = describeItem(item);
+    const sourceName = packageItemNameKey(source.name);
+    const requestedName = params.newName
+        ? validateResourceName(params.newName, "newName")
+        : `${sourceName}_copy`;
+    const targetName = packageItemNameKey(requestedName);
+    if (!targetName)
+        verificationError("invalid_argument", "newName 不能为空", { stage: "input" });
+    const folder = item.parent;
+    const policy = normalizeConflictPolicy(params.conflictPolicy);
+    let actualName = targetName;
+    if (folder) {
+        const existing = pkg.GetItemByName(folder, targetName);
+        if (existing) {
+            if (policy === "error")
+                verificationError("invalid_argument", `资源已存在：${targetName}`, { stage: "input", existingItemId: String(existing.id) });
+            if (policy === "replace")
+                verificationError("invalid_argument", "复制不支持 replace 冲突策略；同名资源请用 rename_package_item 或先删除旧资源", {
+                    stage: "input", existingItemId: String(existing.id)
+                });
+            actualName = resolveNewItemName(pkg, folder, targetName, true);
+        }
+    }
+    let copy = null;
+    try {
+        copy = pkg.DuplicateItem(item, actualName);
+    }
+    catch (error) {
+        verificationError("editor_rejected", `复制失败：${String(error)}`, { stage: "editor", itemId: sourceId, reason: String(error) });
+    }
+    if (!copy)
+        verificationError("editor_rejected", "复制失败：编辑器没有返回副本", { stage: "editor", itemId: sourceId });
+    markPackageChanged(pkg, WRITE_PATH_PACKAGE);
+    const copyId = String(copy.id);
+    const copied = describeItem(copy);
+    const copyFile = copied.file ? String(copied.file) : null;
+    const saved = flushPackage(pkg, params);
+    const entry = readPackageEntry(pkg, copyId, branch);
+    if (copyId === sourceId)
+        verificationError("persistence_failed", "副本与源资源 id 相同，无法区分", { stage: "verify", itemId: sourceId });
+    if (!entry.present || packageItemNameKey(entry.name) !== packageItemNameKey(copied.name))
+        verificationError("persistence_failed", "副本没有登记进包清单", {
+            stage: "verify", itemId: copyId, expected: copied.name, actual: entry.present ? entry.name : null, file: entry.file
+        });
+    if (copyFile && !IOFile.Exists(copyFile))
+        verificationError("persistence_failed", "副本的磁盘文件不存在", { stage: "verify", itemId: copyId, file: copyFile });
+    const verification = {
+        editorReadback: true,
+        xmlReadback: true,
+        diskEntryName: entry.name,
+        diskEntryPath: entry.path,
+        newFileExists: copyFile ? IOFile.Exists(copyFile) : null,
+        file: entry.file,
+        saved
+    };
+    return {
+        ok: true,
+        operation: "duplicated",
+        source,
+        requestedName: targetName,
+        actualName: packageItemNameKey(copied.name),
+        nameAdjusted: packageItemNameKey(copied.name) !== targetName,
+        copy: copied,
+        newItemId: copyId,
+        persisted: true,
+        strength: DISK_STRENGTH,
+        undoable: false,
+        writePath: WRITE_PATH_PACKAGE,
+        verification,
+        note: "副本是新 id 的新资源（磁盘文件一并复制），不进 Agent 撤销栈；原资源不受影响。"
+    };
+}
 async function previewAnimation(params) {
     const kind = String(params.kind || "").toLowerCase();
     const operation = String(params.operation || "").toLowerCase();
@@ -5560,6 +6330,54 @@ function normalizeWritableValue(property, value) {
         return String(value);
     }
     return value;
+}
+// ---------- P9-5：几何整数量化 ----------
+//
+// 真机 6.1.4 实测（tests/reports/p9-5-geometry-probe-live.json）：
+//   ① x/y/width/height 在**落盘时向零截断**：50.5→50、-10.5→-10、49.5→49、115.8→115。
+//      组件根尺寸更早一步——CreateComponentItem 当场就把 172.5 收成 172、44.25 收成 44。
+//   ② 对象模型的 x/y 是 float（115.8 在内存里是 115.80000305175781，float32 精度），
+//      所以写完立刻读回来**看不到**截断，只有落盘后的 XML 才是整数——
+//      Agent 只能靠事后比对才发现精度被吃掉，这正是要消灭的那种「说不清」的失败。
+//   ③ scale/rotation/pivot/alpha 是真浮点，落盘保留小数（scale="0.333,1.5" rotation="45.6"），
+//      不在量化范围内。
+//
+// Bridge 在写入前显式做同一套截断（向零，与编辑器一致），并把每一处精度损失
+// 写进响应的 rounded 列表：调用方当场知道少了多少，而不是靠事后对账才发现。
+const integerGeometryProperties = {
+    x: true, y: true, width: true, height: true
+};
+// 单个几何字段的量化。非有限数原样放行，交给既有校验报错，不在这里换语义。
+function quantizeGeometry(property, value) {
+    if (!integerGeometryProperties[property])
+        return { value: value, rounded: null };
+    const number = Number(value);
+    if (!Number.isFinite(number))
+        return { value: value, rounded: null };
+    const truncated = Math.trunc(number);
+    if (truncated === number)
+        return { value: number, rounded: null };
+    return { value: truncated, rounded: { property: property, from: number, to: truncated } };
+}
+// 一组几何字段的批量量化：返回量化后的值与可回报的 rounded 列表。
+function quantizeGeometryFields(source, keys) {
+    const values = {};
+    const rounded = [];
+    for (const key of keys) {
+        if (!source || source[key] === undefined || source[key] === null)
+            continue;
+        const result = quantizeGeometry(key, source[key]);
+        values[key] = result.value;
+        if (result.rounded)
+            rounded.push(result.rounded);
+    }
+    return { values: values, rounded: rounded };
+}
+// 响应里的 rounded 只在真的发生过精度损失时出现，空列表不占位。
+function withRounded(result, rounded) {
+    if (result && rounded && rounded.length)
+        result.rounded = rounded;
+    return result;
 }
 function validatePropertyTarget(doc, obj, property) {
     const isRoot = obj === doc.content;
@@ -8084,6 +8902,10 @@ function handleCommand(request) {
         create_movieclip: true,
         update_movieclip: true,
         remove_movieclip: true,
+        delete_package_item: true,
+        rename_package_item: true,
+        move_package_item: true,
+        duplicate_package_item: true,
         upsert_transition: true,
         set_publish_settings: true,
         clear_atlas_markers: true,
@@ -8256,6 +9078,15 @@ function handleCommand(request) {
             return updateMovieClip(params);
         case "remove_movieclip":
             return removeMovieClip(params);
+        // P9-4：包资源管理（delete / rename / move / duplicate）
+        case "delete_package_item":
+            return deletePackageItem(params);
+        case "rename_package_item":
+            return renamePackageItem(params);
+        case "move_package_item":
+            return movePackageItem(params);
+        case "duplicate_package_item":
+            return duplicatePackageItem(params);
         case "list_transitions":
             return listTransitions(getActiveDocument());
         case "get_transition":
@@ -8325,6 +9156,9 @@ function handleCommand(request) {
             validatePropertyTarget(doc, obj, property);
             validateReloadOptions(params, targetSummary(obj, params.target));
             let value = normalizeWritableValue(property, params.value);
+            // P9-5：x/y/width/height 是整数几何，写入前显式量化并回报精度损失。
+            const geometry = quantizeGeometry(property, value);
+            value = geometry.value;
             if (property === "font" && typeof value === "string" && value.indexOf("ui://") === 0) {
                 const font = resolveItem({ url: value });
                 if (font.type !== FairyEditor.FPackageItemType.FONT)
@@ -8355,6 +9189,7 @@ function handleCommand(request) {
                 expected[property] = property === "font" ? after : value;
             const result = writeVerification(doc, obj, before, after, params, expected);
             result.property = property;
+            withRounded(result, geometry.rounded ? [geometry.rounded] : []);
             result.history = {
                 agentUndoCount: agentUndoStack.length,
                 agentRedoCount: agentRedoStack.length,
@@ -8368,8 +9203,11 @@ function handleCommand(request) {
             const doc = getActiveDocument();
             const item = resolveItem(params);
             validateReloadOptions(params, null);
-            const x = Number(params.x || 0);
-            const y = Number(params.y || 0);
+            // P9-5：插入坐标是整数几何，先量化再落 Vector2，避免内存里留着
+            // 一个会被落盘悄悄截掉的浮点。
+            const geometry = quantizeGeometryFields({ x: params.x === undefined ? 0 : params.x, y: params.y === undefined ? 0 : params.y }, ["x", "y"]);
+            const x = Number(geometry.values.x);
+            const y = Number(geometry.values.y);
             const insertIndex = params.insertIndex === undefined ? -1 : Number(params.insertIndex);
             const obj = doc.InsertObject(item.GetURL(), new UnityEngine.Vector2(x, y), insertIndex);
             if (!obj)
@@ -8388,7 +9226,7 @@ function handleCommand(request) {
             };
             if (obj.resourceURL || String(obj.objectType).toLowerCase() === "loader")
                 expected.resourceURL = String(item.GetURL());
-            return writeVerification(doc, obj, null, describeObject(obj, 0, 1), params, expected);
+            return withRounded(writeVerification(doc, obj, null, describeObject(obj, 0, 1), params, expected), geometry.rounded);
         }
         case "insert_text":
             return insertText(params);

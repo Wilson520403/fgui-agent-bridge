@@ -564,7 +564,99 @@ FairyGUI-unity 的 `GButton.Setup_AfterAdd` 读实例扩展覆盖段：
 而且 Agent 得为一次换图付两次写操作的代价。现在是一次调用，编辑器自己把 id/name/xy/relation
 和显式尺寸都保住。
 
+## 4.8 包资源管理（delete / rename / move / duplicate）：0.8.22 的实测结论（2026-10-20）
+
+证据：`tests/reports/p9-4-probe-live.json`（四轮活体探针原始数据）、
+`tests/reports/p9-4-package-item-live.json`（31 项动作矩阵 + 7 项冷重启回读）。
+
+| 语义 | 编辑器入口 | 实测结论（6.1.4） |
+| --- | --- | --- |
+| 删除 | `FPackage.DeleteItem(pi): number` | 返回值 = **本次实际移除的条目数**（目录含递归子项），**不是引用数**；**不拦引用**（被引用的资源照样删，引用方留悬空 `src`）；**连带删磁盘文件** |
+| 改名 | `FPackage.RenameItem(pi, newName)` | id 不变；内存 name/file 立刻更新；**磁盘文件真改名**；`package.xml` 条目**立即落盘**；**不更新引用方文档的 `fileName` 属性** |
+| 移动 | `FPackage.MoveItem(pi, path)` | **目标目录必须已存在**，否则抛原生 `KeyNotFoundException`（栈极长不可读）；磁盘文件真移动；`package.xml` 的 path 立即落盘 |
+| 复制 | `FPackage.DuplicateItem(pi, newName)` | 返回**新 id** 的资源；磁盘文件被复制（内容一致）；清单登记新条目 |
+| 目录 | `FPackage.CreateFolder` / `EnsurePathExists` | 目录 id 就是路径字符串；删除目录会**递归**删子项与磁盘文件（返回值含子项数） |
+| 落盘时机 | — | 四个原语**立即落盘**（调用返回后 `package.xml` 已是新值），但**不进 Agent 撤销栈** → `undoable:false`、`strength` 上限 `disk` |
+| 文档交互 | `DocumentView.CloseDocument(doc)` | **文档开着也能改名/移动**：文档的 `packageItem.file` 跟着走，之后保存不会写回旧名；**删除**要求先关文档。`CloseDocuments(pkg)` 是**空操作**，能关掉的是 `CloseDocument(doc)` |
+
+**三条必须记住的结论。**
+
+1. **删除必须由 Bridge 自己挡引用。** 编辑器原生的 `DeleteItem` 不做引用检查——
+   原规划里「返回值疑似受影响引用数」的猜测也被证伪（被 3 处引用的组件返回 1）。
+   Bridge 的做法：先查引用图并拒绝，确要删时显式 `allow_dangling_references=true`，
+   并在响应里回报所有会变悬空的引用位置。
+2. **磁盘引用图只反映「已保存」的内容。** 插入实例后不保存文档，引用只活在打开文档的内存里，
+   `DependencyQuery` 查不到——但保存那一刻它就会落盘成悬空 `src`。
+   所以删除检查额外扫一层打开文档的内存引用（`openDocumentReferences`）。
+3. **改名/移动不更新引用方的 `fileName` 属性**，属半状态（id 对、fileName 旧）。
+   运行时按 id 解析不受影响，但引用方 XML 会留下过期文件名。
+   Bridge 只回报（`staleFileNameSlots`）不代改——带外改 XML 违反本仓库的实现红线；
+   让那些文档经编辑器重新保存一次，编辑器会自己补齐（与 `replace_references` 的
+   `staleFileNameSlots` 同一口径）。
+
+
 ---
+
+## 4.9 几何整数语义与位图缩放：0.8.23 的实测结论（2026-10-20）
+
+证据 `tests/reports/p9-5-geometry-probe-live.json`、`tests/reports/p9-6-image-scale-probe-live.json`。
+
+**几何：编辑器在落盘时向零截断，内存里却是 float**
+
+```csharp
+FObject { get x(): number; set x(value: number); ... }   // 声明是 number，运行时是 float
+```
+
+真机 6.1.4 实测（活体探针）：
+
+| 写入 | 内存读回 | 落盘 XML |
+| --- | --- | --- |
+| `x = 50.5` | `50.5` | `xy="50,..."` |
+| `x = -10.5` | `-10.5` | `xy="-10,..."` |
+| `x = 49.5` | `49.5` | `xy="49,..."` |
+| `y = 115.8` | `115.80000305175781`（float32） | `xy="...,115"` |
+| `width = 172.5` | `172.5` | `size="172,..."` |
+| `CreateComponentItem(w=172.5, h=44.25)` | `172` / `44`（**当场截断**） | `size="172,44"` |
+
+结论：**向零截断**（不是四舍五入、不是地板）。关键在于截断发生在**序列化**层——
+对象模型的 x/y 是 float，写完立刻读回看不到任何异常，只有落盘后的 XML 才是整数。
+这正是旧版本「写成功、读回来也对、存盘后变了」这种说不清的失败的来源。
+
+`scale` / `rotation` / `pivot` / `alpha` 是真浮点，落盘保留小数
+（`scale="0.333,1.5"` `rotation="45.6"` `pivot="0.5,0.25"` `alpha="0.333"`），不在整数化范围内。
+
+**位图缩放：编辑器自带 VImage，不需要外部图像库**
+
+```csharp
+FairyEditor.VImage {
+  static New($file: string): FairyEditor.VImage
+  static GetImageSize($file: string, $width: $Ref<number>, $height: $Ref<number>): boolean
+  Resize($width: number, $height: number, $kernel?: FairyEditor.VImage.Kernel): void
+  ResizeBy($hscale: number, $vscale: number, $kernel?: FairyEditor.VImage.Kernel): void
+  Save($file: string): void
+  Save($file: string, $format: string): void
+  Save($file: string, $format: string, $quality: number): void
+  Dispose(): void
+  get width(): number; get height(): number; get transparent(): boolean; get bandCount(): number
+}
+FairyEditor.VImage.Kernel { NEAREST, LINEAR, CUBIC, MITCHELL, LANCZOS2, LANCZOS3 }
+```
+
+真机实测：2560×1440 的 RGBA PNG 用 `Resize(1024, 576, LANCZOS3)` 缩放并 `Save` 后，
+临时文件就是 1024×576 的 PNG，alpha 通道保留；再用 `FPackage.ImportResource` 入库，
+包内 `FPackageItem.width/height` 就是 1024×576。
+
+**两个会在真机上咬人的宿主行为**
+
+- `scale` 只保留 3 位小数（磁盘 `scale="0.333"`），`rotation` 只保留 1 位（`rotation="45.6"`）。
+  写更精确的值会「写成功但过不了落盘比对」——写侧要按编辑器实际保留的精度给值。
+- **工程里没有任何字体资源时，新增文本节点会让编辑器抛 `NullReferenceException`**
+  （抛在检视器里，随后主循环停摆）。空文本、有无字体、导入真实 `.ttf` 都复现。
+  排查「桥接突然没反应」时，先看编辑器状态栏有没有这条异常。
+
+**图集判定必须发生在入库之前**：归属是按**入库后的像素尺寸**判的
+（`decideAtlasAssignment` / `judgeAtlasFit`），缩放后装得下默认图集就不该再被标 `alone`。
+所以「先缩放、再入库、用同一套判定函数」是唯一自洽的顺序。
 
 ## 5. 建议的落地顺序
 

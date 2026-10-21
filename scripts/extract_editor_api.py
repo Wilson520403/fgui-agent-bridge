@@ -239,8 +239,18 @@ def emit_stub(api: dict, main_ts: Path, out: Path) -> None:
     root = new_ns()
     for ns, names in sorted(ns_classes.items()):
         node = root
+        descend = True
         for part in ns.split("."):
+            existing = node["children"].get(part)
+            if existing is not None and existing.get("kind") != "ns":
+                # 同一段路径既是类又是命名空间（如 FairyEditor.VImage 既是类也有同名子命名空间）。
+                # 类更具体：命名空间这一支整支跳过，不能把类节点当命名空间往下钻
+                # （否则 node["children"] 直接 KeyError——而触发点可能只是源码里的一句注释）。
+                descend = False
+                break
             node = node["children"].setdefault(part, new_ns())
+        if not descend:
+            continue
         for name in sorted(names):
             decl = api[ns]["__classes__"][name]
             node["children"][name] = {

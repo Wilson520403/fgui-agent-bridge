@@ -36,6 +36,8 @@ function Color(r,g,b,a) { Object.assign(this,{r,g,b,a}); }
 const results=[];
 const tests=[];
 let ctx,doc,objects,files,resources,saveMode,replaceMode,replaceCount;
+// P9-6：外部图片（待导入源图、缩放临时文件）的像素尺寸登记表。
+let imageSizes;
 let createdCount,created;
 let closeMode,openMode,dropOnReload,closeCount,closeUsed;
 let transitions,packageItems,pkg,pkgSaveMode,dropTransitionOnReload;
@@ -427,7 +429,7 @@ function attachLayoutMembers(o){
  o.CheckGearDisplay=()=>{};
 }
 function setup() {
- files={'fixture.xml':fixture};saveMode='normal';replaceMode='normal';replaceCount=0;
+ files={'fixture.xml':fixture};imageSizes={};saveMode='normal';replaceMode='normal';replaceCount=0;
  createdCount=0;created=[];
  closeMode='normal';openMode='normal';dropOnReload=false;closeCount=0;closeUsed=[];
  transitions=[];packageItems=[];pkgSaveMode='normal';dropTransitionOnReload=false;
@@ -512,6 +514,20 @@ function setup() {
  ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},BuilderUtil:{GetMD5HashFromFile:p=>{const key=String(p);if(!(key in files))throw Error('file not readable: '+key);return crypto.createHash('md5').update(Buffer.from(String(files[key]),'utf8')).digest('hex');}},AssetSizeUtil:{GetSize:p=>{const key=String(p);const item=[...packageItems,...branchItems].find(i=>i&&i.file===key);if(!(key in files)||!item)throw Error('image not readable: '+key);return {width:Number(item.width)||0,height:Number(item.height)||0,type:'png',bitDepth:8,colorType:6};}},AtlasSettings:function(){return makeAtlasSettings('');},PackSettings:function(){return makePackSettings();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{Text:{UTF8Encoding:function(bom){this.bom=!!bom;}},IO:{File:{Exists:p=>p in files,ReadAllText:p=>String(files[p]||'').replace(/^\uFEFF/,''),ReadAllBytes:p=>{const b=Buffer.from(String(files[p]||''),'utf8');return {Length:b.length,get_Item:i=>b[i]};},WriteAllText:(p,t)=>{files[p]=String(t);}},Directory:{Exists:p=>branchDirectories.has(String(p)),GetDirectories:p=>{const prefix=String(p).replace(/\/$/,'')+'/';const found=[...branchDirectories].filter(d=>d.startsWith(prefix)&&d.slice(prefix.length).indexOf('/')<0);return {Length:found.length,get_Item:i=>found[i],GetValue:i=>found[i]};},GetFiles:()=>({Length:0,get_Item:()=>null,GetValue:()=>null}),CreateDirectory:p=>{branchDirectories.add(String(p).replace(/\/$/,''));return {};}},Path:{Combine:(...parts)=>parts.join('/'),GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:function(p){const key=String(p);Object.defineProperty(this,'Length',{get(){if(!(key in files))throw Error('file not found: '+key);return Buffer.byteLength(String(files[key]),'utf8');}});},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
+ // P9-6：插件内缩放走编辑器自带的 FairyEditor.VImage；源图尺寸走 AssetSizeUtil。
+ // 这两个 mock 是「宿主事实」的替身，不是行为断言：断言在下面的用例里。
+ ctx.CS.FairyEditor.VImage={New:file=>{const key=String(file);const dims=imageSizes[key];
+  if(!dims)throw Error('image not readable: '+key);
+  return {width:Number(dims.width)||0,height:Number(dims.height)||0,transparent:true,bandCount:4,
+   Resize(w,h){this.width=Number(w);this.height=Number(h);},
+   Save(path){imageSizes[String(path)]={width:this.width,height:this.height};files[String(path)]='PNGDATA';},
+   Dispose(){}};}};
+ const baseGetSize=ctx.CS.FairyEditor.AssetSizeUtil.GetSize;
+ ctx.CS.FairyEditor.AssetSizeUtil.GetSize=p=>{const key=String(p);
+  if(key in imageSizes)return {width:Number(imageSizes[key].width)||0,height:Number(imageSizes[key].height)||0,type:'png',bitDepth:8,colorType:6};
+  return baseGetSize(p);};
+ ctx.CS.System.IO.Path.GetTempPath=()=>'/tmp';
+ ctx.CS.System.IO.File.Delete=p=>{delete files[p];};
  ctx.getActiveDocument=()=>doc;
  ctx.resolveObject=(_,t)=>{const o=objects.find(o=>o.id===t.id);if(!o)throw Error('未找到对象 ID');return o;};
  ctx.findObjectById=(_,id)=>objects.find(o=>o.id===id)||null;
@@ -757,6 +773,9 @@ function serialize() {
 function test(name,run){tests.push({name,run});}
 const replace=(id,extra={})=>ctx.replaceObjectResource({target:{id},resourceURL:'ui://fixture0blue',save:true,...extra});
 const text=(extra={})=>ctx.setTextStyle({target:{id:'text1'},style:{fontSize:40,color:'#00ffBA',lineGap:8},save:true,...extra});
+// vm 上下文里的对象原型与测试域不同，assert.deepEqual 会判「结构相同但不是同一个原型」。
+// 跨 realm 比较前先拍平成普通对象。
+const plain=v=>JSON.parse(JSON.stringify(v));
 function rejects(fn,code,stage){assert.throws(fn,e=>(!code||e.code===code)&&(!stage||e.details?.stage===stage));}
 test('Image replacement resolves new object and preserves ID/name/size',()=>{const old=objects[0];const r=replace('image1');assert.notEqual(old,objects[0]);assert.equal(r.persisted,true);assert.equal(r.after.width,64);assert.equal(r.verification.xml.resourceURL,'ui://fixture0blue');});
 test('Loader remains Loader and URL is persisted',()=>{const r=replace('loader1');assert.equal(r.verification.xml.type,'loader');assert.equal(r.persisted,true);assert.equal(replaceCount,0);});
@@ -1992,13 +2011,19 @@ function stubImportedDimensions(){
  const base=pkg.ImportResource;
  pkg.ImportResource=function(sourcePath,folderPath,fileName){
   const it=base.call(pkg,sourcePath,folderPath,fileName);
-  const dims=/(\d+)x(\d+)\.png$/.exec(String(sourcePath));
+  const key=String(sourcePath);
+  const registered=imageSizes[key];
+  if(registered){it.width=Number(registered.width);it.height=Number(registered.height);return it;}
+  const dims=/(\d+)x(\d+)\.png$/.exec(key);
   if(dims){it.width=Number(dims[1]);it.height=Number(dims[2]);}
   return it;
  };
 }
 const importSized=(w,h,extra={})=>{
  const src=`/src/img_${w}x${h}.png`;files[src]='PNGDATA';
+ // 登记真实像素尺寸：源图尺寸读不出来时，图集前置判定只能报 unknown，
+ // 那条分支在本组用例里就等于没被测到。
+ imageSizes[src]={width:w,height:h};
  return ctx.importImage({packageName:'Fixture',sourcePath:src,save:true,...extra});
 };
 
@@ -2347,6 +2372,105 @@ test('Clearing atlas markers holds branch-scoped items instead of guessing',()=>
  assert.equal(r.held.find(h=>h.id===hd.id).reason,'branch-scope-unsupported');
 });
 
+
+// ---------- P9-5：几何整数量化 ----------
+// 真机 6.1.4 实测（tests/reports/p9-5-geometry-probe-live.json）：
+// x/y/width/height 是整数几何，落盘时**向零截断**（50.5→50、-10.5→-10、49.5→49），
+// 而 scale/rotation/pivot/alpha 是真浮点、落盘保留小数。
+// Bridge 必须在写入前做同一套量化，并把精度损失写进响应——
+// 否则调用方只能靠事后比对 XML 才发现精度被吃掉。
+test('set_property quantizes float geometry and reports the precision loss',()=>{
+ const r=set('text1','x',50.5);
+ assert.deepEqual(plain(r.rounded),[{property:'x',from:50.5,to:50}]);
+ assert.equal(r.after,50);
+ assert.equal(r.verification.xml.x,50);
+});
+test('set_property truncates toward zero instead of flooring or rounding',()=>{
+ const r=set('text1','x',-10.5);
+ assert.deepEqual(plain(r.rounded),[{property:'x',from:-10.5,to:-10}]);
+ const r2=set('text1','x',49.5);
+ assert.deepEqual(plain(r2.rounded),[{property:'x',from:49.5,to:49}]);
+});
+test('set_property leaves genuinely float properties untouched',()=>{
+ const r=set('text1','scaleX',0.3333);
+ assert.equal(r.rounded,undefined);
+ assert.equal(r.after,0.3333);
+});
+test('insert_object quantizes float coordinates',()=>{
+ const r=insert({x:50.5,y:115.8});
+ assert.deepEqual(plain(r.rounded),[{property:'x',from:50.5,to:50},{property:'y',from:115.8,to:115}]);
+ assert.equal(r.verification.xml.x,50);
+});
+test('insert_text quantizes float coordinates and sizes',()=>{
+ const r=ctx.insertText({text:'Hello',x:50.5,y:-10.5,style:{width:172.5,height:44.25},save:true});
+ assert.deepEqual(plain(r.rounded),[
+  {property:'x',from:50.5,to:50},
+  {property:'y',from:-10.5,to:-10},
+  {property:'width',from:172.5,to:172},
+  {property:'height',from:44.25,to:44}]);
+});
+test('set_text_style quantizes float width',()=>{
+ const r=ctx.setTextStyle({target:{id:'text1'},style:{width:172.5},save:true});
+ assert.deepEqual(plain(r.rounded),[{property:'width',from:172.5,to:172}]);
+});
+test('create_component quantizes float size',()=>{
+ const r=ctx.createComponent({packageName:'Fixture',componentName:'NewC',width:172.5,height:44.25,save:true});
+ assert.deepEqual(plain(r.rounded),[{property:'width',from:172.5,to:172},{property:'height',from:44.25,to:44}]);
+});
+test('A size that quantizes to zero is rejected instead of creating a zero-sized component',()=>{
+ assert.throws(()=>ctx.createComponent({packageName:'Fixture',componentName:'Tiny',width:0.5,save:true}),
+  e=>e.code==='invalid_argument'&&e.details.stage==='input');
+ assert.equal(packageItems.filter(i=>i.name==='Tiny.xml').length,0);
+});
+
+// ---------- P9-6：导入前缩放与图集前置判定 ----------
+test('import_image scales the source down to max_size before it lands in the package',async()=>{
+ stubImportedDimensions();
+ imageSizes['/src/img_2560x1440.png']={width:2560,height:1440};
+ files['/src/img_2560x1440.png']='PNGDATA';
+ const r=await ctx.importImage({packageName:'Fixture',sourcePath:'/src/img_2560x1440.png',maxSize:1024,save:true});
+ assert.equal(r.scaled.from.width,2560);
+ assert.equal(r.scaled.from.height,1440);
+ assert.equal(r.scaled.to.width,1024);
+ assert.equal(r.scaled.to.height,576);
+ assert.equal(r.scaled.scale,0.4);
+ assert.equal(r.item.width,1024);
+ assert.equal(r.item.height,576);
+ // 原图装不下、缩放后装得下：两件事必须分开报，不能只报缩放后的结果。
+ assert.equal(r.atlasPrecheck.original.fit,'exceeds');
+ assert.equal(r.atlasPrecheck.original.binding,'maxWidth');
+ assert.equal(r.atlasPrecheck.effective.fit,'fits');
+ // 缩放后装得下，就不该再被标 alone。
+ assert.equal(r.atlasAssignment.verdict,'leave-as-is');
+});
+test('import_image reports the atlas pre-check even when nothing is scaled',async()=>{
+ stubImportedDimensions();
+ imageSizes['/src/img_4096x4096.png']={width:4096,height:4096};
+ files['/src/img_4096x4096.png']='PNGDATA';
+ const r=await ctx.importImage({packageName:'Fixture',sourcePath:'/src/img_4096x4096.png',save:true});
+ assert.equal(r.scaled,null);
+ assert.equal(r.atlasPrecheck.effective.fit,'exceeds');
+ assert.equal(r.atlasPrecheck.effective.binding,'maxWidth');
+ assert.equal(r.atlasAssignment.verdict,'assign-alone');
+});
+test('import_image rejects an invalid max_size before touching the package',async()=>{
+ files['/src/new.png']='PNGDATA';
+ for(const bad of [0,-5,1.5,40000]){
+  await assert.rejects(()=>ctx.importImage({packageName:'Fixture',sourcePath:'/src/new.png',maxSize:bad,save:true}),
+   e=>e.code==='invalid_argument'&&e.details.stage==='input');
+ }
+});
+test('import_image keeps the scaled file out of the package and drops the temporary file',async()=>{
+ stubImportedDimensions();
+ imageSizes['/src/img_2560x1440.png']={width:2560,height:1440};
+ files['/src/img_2560x1440.png']='PNGDATA';
+ const before=Object.keys(files).length;
+ const r=await ctx.importImage({packageName:'Fixture',sourcePath:'/src/img_2560x1440.png',maxSize:1024,save:true});
+ assert.equal(r.persisted,true);
+ // 缩放中间产物留在工程里就是垃圾：临时文件必须被清掉。
+ assert.deepEqual(Object.keys(files).filter(k=>k.indexOf('fgui_scale_')===0),[]);
+ assert.ok(Object.keys(files).length>=before);
+});
 
 // verification *logic* against a mocked host, never Editor acceptance.
 (async()=>{

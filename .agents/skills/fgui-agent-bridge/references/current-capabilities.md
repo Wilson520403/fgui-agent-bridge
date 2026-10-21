@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.21`
+- Bridge 版本：`0.8.23`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：65，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override 工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：69，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override、包资源管理（删除/改名/移动/复制）工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -31,6 +31,10 @@
 | `fgui_create_button` | 包、名称、尺寸、模式、状态图片、目录、`branch?`、`save?`、`verify?` | 创建 Common/Check/Radio 标准 Button |
 | `fgui_create_movieclip` | 包、名称、有序 `frame_paths`、FPS、延迟、Swing、目录、`branch?`、`save?`、`verify?`、`external_reload?` | 从本地图片序列创建/替换 MovieClip |
 | `fgui_get_movieclip` / `fgui_update_movieclip` / `fgui_remove_movieclip` | MovieClip 资源定位；更新可传帧、FPS、Speed、延迟、Swing、`save?`、`verify?`、`external_reload?`（删除不支持 external_reload） | 读取、更新或显式强制删除 MovieClip |
+| `fgui_delete_package_item` | 资源定位（url 或 package_name + item_name/item_path）、`force`、`allow_dangling_references?`、`close_open_documents?`、`save?`、`verify?` | 0.8.22 新增：删除包内资源（组件/图片/字体/声音/目录）。原生 DeleteItem **不拦引用**，Bridge 先查引用图并拒绝，`allow_dangling_references=True` 才放行并在 `danglingReferences` 里回报会变悬空的引用；删除连带删磁盘文件，不进 Agent 撤销栈 |
+| `fgui_rename_package_item` | 资源定位、`new_name`、`close_open_documents?`、`save?`、`verify?` | 0.8.22 新增：重命名包内资源，磁盘文件同步改名。**不更新引用方的 `fileName` 属性**（id 不变、运行时按 id 解析不受影响），响应 `staleFileNameSlots` 列出这些位置 |
+| `fgui_move_package_item` | 资源定位、`folder_path`、`create_folders?`、`close_open_documents?`、`save?`、`verify?` | 0.8.22 新增：移动包内资源，磁盘文件同步移动。原生 MoveItem 要求目标目录已存在，否则抛原生异常，Bridge 默认先建目录并回报 `folderCreated` |
+| `fgui_duplicate_package_item` | 资源定位、`new_name?`、`conflict_policy?`（error/auto_rename）、`save?`、`verify?` | 0.8.22 新增：复制包内资源，副本是新 id 的新资源、磁盘文件一并复制，原资源不受影响 |
 | `fgui_get_active_document` / `fgui_get_tree` | 无 / `max_depth`、`branch?` | 读取活动文档或对象树 |
 | `fgui_select_object` / `fgui_set_property` | ID、路径或唯一名称；后者加 `property`、`value`、`save?`、`verify?`、`external_reload?` | 选择对象或修改白名单属性 |
 | `fgui_replace_object_resource` | target、resource_url、expected_type?、save?、external_reload? | 通过 Editor API 替换 Image/Loader 资源引用，0.8.21 起也支持**组件实例换源组件**（Button 状态显式拒绝）；expected_type 省略则按目标推导、传入则作断言 |
@@ -1003,3 +1007,120 @@ Label 的属性名按 FairyGUI-unity `GLabel.Setup_AfterAdd` 核对，标注为�
 四条负路径（换错资源类型、expected_type 断言不符、根组件、图片对象换组件）全部写入前拒绝。
 
 **未在真机验证**：Windows 版 Editor；跨包替换（源组件在另一个包，编辑器会写 `pkg=` 与 `fileName=`）。
+
+## 0.8.22：包资源管理（P9-4）
+
+证据 `tests/reports/p9-4-probe-live.json`（四轮活体探针原始数据）与
+`tests/reports/p9-4-package-item-live.json`（31 项动作矩阵 + 7 项冷重启回读）。
+
+### 6.1.4 运行时事实（活体探针钉住）
+
+- **四个原语都立即落盘**：调用返回后 `package.xml` 已是新值，不需要 Save；但**不进 Agent 撤销栈**
+  （`undoable: false`、`writePath: package-model`），失败不自动回滚。
+- `DeleteItem` 返回值 = **本次实际移除的条目数**（目录含递归子项），**不是引用数**
+  （实测：被 3 处引用的组件返回 1，含 1 个子项的目录返回 2，已被连带删掉的再删返回 0）。
+- `DeleteItem` **不拦引用**：被引用的资源照样删，引用方 XML 里留悬空 `src` → Bridge 必须自己前置挡。
+- `DeleteItem` **连带删磁盘文件**（组件 XML、图片都在）。
+- `RenameItem` / `MoveItem` 会真的改磁盘文件名与目录，并同步 `package.xml`；
+  但**不更新引用方文档的 `fileName` 属性**（id 不变、fileName 变旧）→ 半状态，必须显式回报。
+- `MoveItem` 的**目标目录必须已存在**，否则原生抛 `KeyNotFoundException`（栈极长、不可读）→ Bridge 前置校验/建目录。
+- `DuplicateItem` 返回**新 id** 的资源，磁盘文件被复制，清单登记新条目。
+- **文档开着也能改名/移动**：文档的 `packageItem.file` 跟着新路径走，之后保存该文档不会把旧文件名写回来。
+  **删除**则必须先关掉目标文档（未保存改动一律拒绝）。
+- `App.docView.CloseDocuments(pkg)` 对已打开文档是**空操作**；能关掉的是 `App.docView.CloseDocument(doc)`。
+
+### 语义边界
+
+- 磁盘引用图只反映**已保存**的内容：插入实例后不保存文档，引用只在打开文档的内存里，
+  引用图查不到——删除检查因此额外扫一层打开文档的内存引用（`openDocumentReferences`）。
+- 目录删除会**递归**删除子项与磁盘文件，返回值含子项数。
+- 复制不支持 `replace` 冲突策略；同名资源请用改名或先删旧资源。
+- 引用方的 `fileName` 属半状态，Bridge 只回报不代改（不做带外改写）；让那些文档经编辑器重新保存一次即可补齐。
+
+### 验证状态
+
+模拟宿主 264/264、Python 58 项、tsc 0 error。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**：隔离工程上跑 31 项动作矩阵（正例 + 负例）全部通过——
+引用挡删（磁盘引用与内存引用两层分别验）、未传 force 拒绝、改名撞名拒绝、移动到不存在目录拒绝、
+文档开着时改名/移动成功且文档跟随、复制新 id、auto_rename 重名、显式关闭后删除并回报悬空引用、
+删除后清单条目与磁盘文件同时消失；再冷重启编辑器回读，改名+移动的资源名、路径与磁盘文件都在（7/7）。
+
+**未在真机验证**：Windows 版 Editor；跨包引用下的删除检查；目录复制的编辑器行为。
+
+## 0.8.23：几何整数化与导入缩放（P9-5 / P9-6）
+
+证据 `tests/reports/p9-5-geometry-probe-live.json`、`tests/reports/p9-6-image-scale-probe-live.json`
+（两轮活体探针原始数据）与 `tests/reports/p9-5-p9-6-live.json`（功能验收矩阵）。
+
+### 6.1.4 运行时事实（活体探针钉住）
+
+- **x/y/width/height 是整数几何，落盘时向零截断**：50.5→50、-10.5→-10、49.5→49、115.8→115。
+  不是四舍五入（49.5→49），不是地板（-10.5→-10 不是 -11）。
+- **组件根尺寸更早一步就被截断**：`CreateComponentItem(172.5, 44.25)` 当场变成 172×44，
+  磁盘 `size="172,44"`——写侧不主动量化，编辑器也会替你截。
+- **对象模型的 x/y 是 float**：115.8 在内存里读回是 115.80000305175781（float32 精度）。
+  所以写完立刻读回**看不到**截断，只有落盘后的 XML 才是整数——
+  「写成功、读回来也对、存盘后变了」这三件事同时成立，是旧版本最说不清的一种失败。
+- **scale/rotation/pivot/alpha 是真浮点**，落盘保留小数（`scale="0.333,1.5"` `rotation="45.6"`
+  `pivot="0.5,0.25"` `alpha="0.333"`），不在整数化范围内。
+- **编辑器自带 `FairyEditor.VImage`**：能读 PNG（含 alpha，`transparent=true`、`bandCount=4`）、
+  能按 `VImage.Kernel.LANCZOS3` 缩放、能存盘，不需要任何外部图像库。
+- **图集判定完全按入库后的像素尺寸走**：缩放后装得进默认图集，就不该再被标 `alone`——
+  所以缩放必须发生在入库之前，判定必须复用同一套函数。
+
+### 新增能力
+
+- `fgui_import_image` 新增可选 `max_size`（长边上限，1~32768；CLI `--max-size`）：
+  源图长边超过它就先等比缩放再入库。响应 `scaled` 回报 `{from, to, scale, maxSize, kernel}`。
+- `fgui_import_image` 响应新增 `atlasPrecheck`：**入库前**按真实图集约束给出的前置判定，
+  分 `original`（原图尺寸）与 `effective`（真正入库的尺寸）两段。
+  `fit` 取 `fits` / `exceeds` / `unknown`——**`unknown` 不是放行**，
+  它表示约束不足或落点不明（例如包级多图集时编辑器按自己规则分配，Bridge 不猜）。
+- 几何写入（`set_property`、`insert_object`、`insert_text`、`set_text_style`、
+  `create_component`、`create_button`）在写入前显式做同一套向零截断，
+  并在响应 `rounded` 列表里回报每一处精度损失：`[{property, from, to}]`。
+  没有精度损失时不出现这个字段。
+
+### 语义边界
+
+- 量化只针对 x/y/width/height。`scale`/`rotation`/`pivot`/`alpha` 保持浮点；
+  `lineGap`/`columnGap` 这类间距字段不在本轮范围内（它们也是整数 XML 属性，
+  但不属于「坐标/尺寸」语义）。
+- 量化后尺寸为 0 的组件创建请求会被拒绝（`invalid_argument`），
+  不创建一个 0×0 的组件。
+- 缩放用的临时文件在入库后立刻删除，不留在工程里；临时文件沿用源图扩展名，
+  保证内容编码与扩展名一致。
+- 源图像素尺寸读不出来时：不带 `max_size` 的导入照常进行（判定退化成 `unknown`）；
+  带 `max_size` 的导入直接报错，不静默跳过缩放。
+
+### 验证状态
+
+模拟宿主 276/276（含 12 项新用例）、Python 60 项、tsc 0 error。
+
+**已在 FairyGUI Editor 6.1.4 真机验收**：两轮活体探针（`p9-5-geometry-probe-live.json`、
+`p9-6-image-scale-probe-live.json`）+ 功能验收矩阵（`p9-5-p9-6-live.json`，24 步）全部跑通：
+
+- 几何量化在 5 个写入入口上真机验证：`create_component`（172.5→172、44.25→44）、
+  `insert_object`（50.5→50、115.8→115）、`set_property`（x 50.5→50）、
+  `insert_text`（x/y/width/height 四项同时回报）、`set_text_style`（width 172.5→172）。
+  磁盘 XML 同步为整数：`size="172,44"`、`xy="50,-10"`、`xy="50,115"`。
+- 浮点属性不被整数化：`scaleX=0.333` 原样落盘（`scale="0.333,1"`），响应无 `rounded`。
+- `import_image` 的 `max_size=1024`：2560×1440 → 1024×576、`scale=0.4`、`kernel=lanczos3`；
+  `atlasPrecheck.original=exceeds(maxWidth)`、`effective=fits`；入库后 `atlasAssignment=leave-as-is`
+  （**不再被标 alone**）。落盘文件实测 1024×576、RGBA、alpha 极值 (0,255)、99.9% 像素非透明。
+  对照组（不带 `max_size`）：`precheck=exceeds`、`atlasAssignment=assign-alone`。
+  负路径：`maxSize=0` 被拒（`invalid_argument`）。
+- 回归：sample 夹具真机校验 21/21 通过（插件 0.8.23，`versionMatch=true`），样例工程已清干净。
+
+**两个宿主缺陷（真机实测，不是 Bridge 的 bug）**
+
+- **编辑器把 scale 写成 3 位小数**（`scale="0.333"`）。写 `scaleX=0.3333` 会「写成功但过不了
+  XML 严格比对」，报 `验证失败：xml`。要写更精确的缩放，先知道这条。
+- **在没有任何字体资源的工程里新增文本节点会让编辑器崩**：`NullReferenceException` 抛在检视器里，
+  主循环停摆，桥接随即失联（请求一直排队没人认领）。空文本、有无字体、导入真实 `.ttf` 都一样。
+  在这类工程里验证文本相关能力，要用**本来就存在**的文本节点，别新建。
+
+**未在真机验证**：Windows 版 Editor；JPG 源图缩放（探针只覆盖 PNG）；
+`import_image` 的 replace 策略 + `max_size` 组合；
+包级多图集配置下的 `atlasPrecheck.atlas-not-determined` 分支。

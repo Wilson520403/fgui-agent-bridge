@@ -1,0 +1,170 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "fgui-bridge-p9-5-probe-report",
+  "generatedAt": "2026-10-20T20:09:14+08:00",
+  "editor": "FairyGUI Editor 6.1.4 (macOS)",
+  "project": "sample（隔离工程，Package1）",
+  "question": "FGUI 的 x/y/width/height 到底存不存浮点？浮点写入是被拒绝、被取整还是原样保留？取整规则是哪一种？",
+  "method": "插件内临时探针动作 p9_5_probe，逐属性归因：内存态 → 落盘前 → 落盘后 XML 三段分开记录；同一属性连续写 10 个浮点看内存读回，四个几何属性各写一个浮点看 XML",
+  "rounds": [
+    {
+      "round": 1,
+      "action": "p9_5_probe",
+      "note": "探针自带清场：先关掉已打开的文档、删掉上一轮残留资源、pkg.Save()，否则编辑器会卡在上一轮的脏状态上（第一次连续跑两次时复现过）。",
+      "cleanup": {
+        "closedDocuments": [
+          "Component1",
+          "BridgeFixture"
+        ],
+        "deletedItems": [
+          {
+            "name": "P95Probemvgmc5hd",
+            "removed": 1
+          }
+        ],
+        "packageSaved": true
+      },
+      "steps": [
+        {
+          "step": "S0_create_float_size",
+          "requested": {
+            "width": 172.5,
+            "height": 44.25
+          },
+          "memoryRoot": {
+            "width": 172,
+            "height": 44
+          },
+          "memoryItem": {
+            "width": 172,
+            "height": 44
+          },
+          "disk": {
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P95Probemvgmqrmg.xml",
+            "sizeAttr": "172,44"
+          }
+        },
+        {
+          "step": "S1_insert_object_float_xy",
+          "requested": {
+            "x": 50.5,
+            "y": 115.8
+          },
+          "memory": {
+            "x": 50.5,
+            "y": 115.80000305175781,
+            "width": 64,
+            "height": 64
+          }
+        },
+        {
+          "step": "S2_x_write_sequence",
+          "property": "x",
+          "sequence": [
+            {
+              "requested": 50.5,
+              "writePath": "document-model",
+              "memory": 50.5
+            },
+            {
+              "requested": 49.5,
+              "writePath": "document-model",
+              "memory": 49.5
+            },
+            {
+              "requested": -10.5,
+              "writePath": "document-model",
+              "memory": -10.5
+            },
+            {
+              "requested": -10.6,
+              "writePath": "document-model",
+              "memory": -10.600000381469727
+            },
+            {
+              "requested": 0.4,
+              "writePath": "document-model",
+              "memory": 0.4000000059604645
+            },
+            {
+              "requested": 0.5,
+              "writePath": "document-model",
+              "memory": 0.5
+            },
+            {
+              "requested": 0.6,
+              "writePath": "document-model",
+              "memory": 0.6000000238418579
+            },
+            {
+              "requested": 115.8,
+              "writePath": "document-model",
+              "memory": 115.80000305175781
+            },
+            {
+              "requested": 172.5,
+              "writePath": "document-model",
+              "memory": 172.5
+            },
+            {
+              "requested": 44.25,
+              "writePath": "document-model",
+              "memory": 44.25
+            }
+          ]
+        },
+        {
+          "step": "S3_disk_geometry",
+          "memoryBeforeSave": {
+            "x": 50.5,
+            "y": -10.5,
+            "width": 49.5,
+            "height": 115.80000305175781
+          },
+          "disk": {
+            "xy": "50,-10",
+            "size": "49,115"
+          }
+        },
+        {
+          "step": "S4_float_properties",
+          "requested": {
+            "scaleX": 0.3333,
+            "scaleY": 1.5,
+            "rotation": 45.6,
+            "pivotX": 0.5,
+            "pivotY": 0.25,
+            "alpha": 0.3333
+          },
+          "memory": {
+            "scaleX": 0.33329999446868896,
+            "scaleY": 1.5,
+            "rotation": 45.599998474121094,
+            "pivotX": 0.5,
+            "pivotY": 0.25,
+            "alpha": 0.33329999446868896
+          },
+          "imageTag": "<image id=\"n0_r8lb\" name=\"n0\" src=\"p93m1\" fileName=\"Red.png\" xy=\"50,-10\" pivot=\"0.5,0.25\" size=\"49,115\" scale=\"0.333,1.5\" alpha=\"0.333\" rotation=\"45.6\"/>"
+        },
+        {
+          "step": "S5_text_geometry",
+          "memory": {
+            "x": 50.5,
+            "y": -10.5,
+            "width": 172.5,
+            "height": 44.25
+          },
+          "textTag": "<text id=\"n1_r8lb\" name=\"probeText\" xy=\"50,-10\" size=\"172,44\" font=\"UIDefault\" fontSize=\"12\" autoSize=\"none\" text=\"\"/>"
+        }
+      ]
+    }
+  ],
+  "conclusions": [
+    "x/y/width/height 是整数几何：落盘时向零截断（50.5→50、-10.5→-10、49.5→49、115.8→115）。不是四舍五入（49.5→49），不是地板（-10.5→-11 不是 -10）。",
+    "组件根尺寸更早一步就被截断：CreateComponentItem(172.5, 44.25) 当场就变成 172×44，磁盘 size=\"172,44\"。",
+    "对象模型的 x/y 是 float：115.8 在内存里读回是 115.80000305175781（float32 精度）。所以写完立刻读回看不到截断，只有落盘后的 XML 才是整数——事后比对才能发现精度被吃掉。",
+    "scale/rotation/pivot/alpha 是真浮点，落盘保留小数（scale=\"0.333,1.5\" rotation=\"45.6\" pivot=\"0.5,0.25\" alpha=\"0.333\"），不在整数化范围内。",
+    "文本节点的 width/height 走同一条路：内存 172.5/44.25，磁盘 size=\"172,44\"。"
+  ],
+  "implication": "Bridge 在写入前显式做同一套向零截断，并在响应里回报每一处精度损失（rounded 列表）；否则 Agent 只能靠 get_tree 与 XML 对不上才反推是自己传错了还是编辑器截断了。"
+}

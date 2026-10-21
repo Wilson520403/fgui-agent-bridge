@@ -41,6 +41,41 @@ def _add_target_arguments(parser: argparse.ArgumentParser) -> None:
     target_group.add_argument("--name", dest="target_name")
 
 
+def _add_package_item_arguments(parser: argparse.ArgumentParser) -> None:
+    """包资源寻址：ui:// URL，或包名 + 包内路径/名称。
+
+    目录没有 ui:// URL，只能用 --package + --item-path 寻址。
+    """
+    parser.add_argument("url", nargs="?", help="目标资源的 ui:// URL（目录请用 --package + --item-path）")
+    parser.add_argument("--package", dest="package_name", help="包名")
+    parser.add_argument("--item-path", dest="item_path", help="包内路径，如 /ui/Panel.xml")
+    parser.add_argument("--item-name", dest="item_name", help="包内资源名（不含扩展名）")
+
+
+def _package_item_params(args: argparse.Namespace) -> dict[str, str]:
+    url = getattr(args, "url", None)
+    package_name = getattr(args, "package_name", None)
+    item_path = getattr(args, "item_path", None)
+    item_name = getattr(args, "item_name", None)
+    if url and (package_name or item_path or item_name):
+        raise ValueError("url 不能与 --package/--item-path/--item-name 同时提供")
+    if url:
+        return {"url": url}
+    if not package_name:
+        raise ValueError("必须提供 url，或 --package 与 --item-path/--item-name")
+    params = {"packageName": package_name}
+    if item_path and item_name:
+        raise ValueError("--item-path 与 --item-name 只能提供一个")
+    if item_path:
+        params["itemPath"] = item_path
+    elif item_name:
+        params["itemName"] = item_name
+    else:
+        raise ValueError("--package 必须配合 --item-path 或 --item-name")
+    return params
+
+
+
 def _add_write_verify_arguments(parser: argparse.ArgumentParser, *, external_reload: bool = False) -> None:
     parser.add_argument("--save", action="store_true")
     parser.add_argument("--no-verify", action="store_true")
@@ -128,6 +163,12 @@ def build_parser() -> argparse.ArgumentParser:
     import_image_parser.add_argument("--not-exported", action="store_true")
     import_image_parser.add_argument("--no-create-folders", action="store_true")
     import_image_parser.add_argument("--branch", help="导入指定分支；省略时使用活跃分支")
+    import_image_parser.add_argument(
+        "--max-size",
+        dest="max_size",
+        type=int,
+        help="等比缩放的长边上限（像素）；超过则先缩放再入库，响应回报 scaled 与图集前置判定",
+    )
     import_image_parser.add_argument("--import-timeout", type=float, default=120.0)
     _add_write_verify_arguments(import_image_parser, external_reload=True)
 
@@ -220,6 +261,34 @@ def build_parser() -> argparse.ArgumentParser:
     remove_movieclip_parser.add_argument("url", help="MovieClip ui:// URL")
     remove_movieclip_parser.add_argument("--force", action="store_true", help="确认不可逆删除")
     _add_write_verify_arguments(remove_movieclip_parser)
+
+    # P9-4 包资源管理。资源可用 ui:// URL 寻址，目录只能用包内路径寻址。
+    delete_item_parser = subparsers.add_parser("delete-item", help="删除包资源（组件/图片/字体/声音/目录）")
+    _add_package_item_arguments(delete_item_parser)
+    delete_item_parser.add_argument("--force", action="store_true", help="确认不可逆删除（磁盘文件会一起删掉）")
+    delete_item_parser.add_argument("--allow-dangling-references", action="store_true", help="即使资源仍被引用也删除（会在引用方留下悬空引用）")
+    delete_item_parser.add_argument("--close-open-documents", action="store_true", help="允许关闭目标组件正在打开的文档（未保存改动一律拒绝）")
+    _add_write_verify_arguments(delete_item_parser)
+
+    rename_item_parser = subparsers.add_parser("rename-item", help="重命名包资源（磁盘文件同步改名）")
+    _add_package_item_arguments(rename_item_parser)
+    rename_item_parser.add_argument("--new-name", required=True, help="新名称，不带扩展名")
+    rename_item_parser.add_argument("--close-open-documents", action="store_true", help="允许关闭目标组件正在打开的文档（未保存改动一律拒绝）")
+    _add_write_verify_arguments(rename_item_parser)
+
+    move_item_parser = subparsers.add_parser("move-item", help="把包资源移动到包内另一个目录")
+    _add_package_item_arguments(move_item_parser)
+    move_item_parser.add_argument("--folder-path", required=True, help="目标包内目录，如 /ui/")
+    move_item_parser.add_argument("--no-create-folders", action="store_true", help="目标目录不存在时直接拒绝，不自动创建")
+    move_item_parser.add_argument("--close-open-documents", action="store_true", help="允许关闭目标组件正在打开的文档（未保存改动一律拒绝）")
+    _add_write_verify_arguments(move_item_parser)
+
+    duplicate_item_parser = subparsers.add_parser("duplicate-item", help="复制包资源（副本是新 id 的新资源）")
+    _add_package_item_arguments(duplicate_item_parser)
+    duplicate_item_parser.add_argument("--new-name", help="副本名称，不带扩展名；省略时用 <原名>_copy")
+    duplicate_item_parser.add_argument("--conflict", dest="conflict_policy", choices=("error", "auto_rename"), default="error", help="同名冲突策略，默认 error")
+    _add_write_verify_arguments(duplicate_item_parser)
+
 
     subparsers.add_parser("transitions", help="列出当前组件的全部 Transition")
     get_transition_parser = subparsers.add_parser("get-transition", help="读取当前组件的一个 Transition")
@@ -605,6 +674,8 @@ def main() -> int:
             }
             if args.resource_name:
                 params["resourceName"] = args.resource_name
+            if args.max_size is not None:
+                params["maxSize"] = args.max_size
             command_timeout = args.import_timeout
         elif args.command == "import-font":
             action = "import_font"
@@ -696,6 +767,41 @@ def main() -> int:
         elif args.command == "remove-movieclip":
             action = "remove_movieclip"
             params = {"url": args.url, "force": args.force, **_write_verify_params(args)}
+        elif args.command == "delete-item":
+            action = "delete_package_item"
+            params = {
+                **_package_item_params(args),
+                "force": args.force,
+                "allowDanglingReferences": args.allow_dangling_references,
+                "closeOpenDocuments": args.close_open_documents,
+                **_write_verify_params(args),
+            }
+        elif args.command == "rename-item":
+            action = "rename_package_item"
+            params = {
+                **_package_item_params(args),
+                "newName": args.new_name,
+                "closeOpenDocuments": args.close_open_documents,
+                **_write_verify_params(args),
+            }
+        elif args.command == "move-item":
+            action = "move_package_item"
+            params = {
+                **_package_item_params(args),
+                "folderPath": args.folder_path,
+                "createFolders": not args.no_create_folders,
+                "closeOpenDocuments": args.close_open_documents,
+                **_write_verify_params(args),
+            }
+        elif args.command == "duplicate-item":
+            action = "duplicate_package_item"
+            params = {
+                **_package_item_params(args),
+                "conflictPolicy": args.conflict_policy,
+                **_write_verify_params(args),
+            }
+            if args.new_name:
+                params["newName"] = args.new_name
         elif args.command == "transitions":
             action = "list_transitions"
         elif args.command == "get-transition":

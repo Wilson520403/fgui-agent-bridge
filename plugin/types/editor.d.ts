@@ -79,6 +79,9 @@ declare namespace CS {
             static ChangeColorSapce($p0: any): any;
             constructor(): any;
         }
+        class AssetSizeUtil extends System.Object {
+            static GetSize($p0: any): any;
+        }
         class AtlasSettings extends System.Object {
             name: string;
             compression: boolean;
@@ -553,23 +556,6 @@ declare namespace CS {
             include4x: any;
             constructor($p0?: any): any;
         }
-        class PackSettings extends System.Object {
-            pot: boolean;
-            mof: boolean;
-            padding: number;
-            rotation: boolean;
-            minWidth: number;
-            minHeight: number;
-            maxWidth: number;
-            maxHeight: number;
-            square: boolean;
-            fast: boolean;
-            edgePadding: boolean;
-            duplicatePadding: boolean;
-            multiPage: boolean;
-            CopyFrom($p0: any): any;
-            constructor(): any;
-        }
         namespace PluginManager {
             class PluginInfo extends System.Object {
                 name: string;
@@ -629,6 +615,36 @@ declare namespace CS {
             valueType: any;
             Update($p0: any): any;
             constructor(): any;
+        }
+        class VImage extends System.Object {
+            width: any;
+            height: any;
+            transparent: any;
+            bandCount: any;
+            static New($p0: any, $p1?: any, $p2?: any, $p3?: any): any;
+            static Thumbnail($p0: any, $p1: any): any;
+            static GetImageSize($p0: any, $p1: any, $p2: any): any;
+            Dispose(): any;
+            Resize($p0: any, $p1: any, $p2?: any): any;
+            ResizeBy($p0: any, $p1: any, $p2?: any): any;
+            Rotate($p0: any): any;
+            FindTrim(): any;
+            Crop($p0: any): any;
+            Embed($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any): any;
+            AlphaBlend($p0: any, $p1: any, $p2: any): any;
+            CopyPixels($p0: any, $p1: any, $p2: any): any;
+            Composite($p0: any, $p1: any, $p2: any, $p3: any, $p4?: any): any;
+            ExtractAlpha($p0: any): any;
+            Clear($p0: any): any;
+            DrawRect($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any): any;
+            GetRawData(): any;
+            GetRawDataSize(): any;
+            GetPixels(): any;
+            ToTexture($p0: any, $p1: any): any;
+            GetAnimation(): any;
+            Save($p0: any, $p1?: any, $p2?: any): any;
+            Clone(): any;
+            static InitLibrary(): any;
         }
         namespace View {
             class DocElement extends System.Object {
@@ -1009,6 +1025,44 @@ declare namespace CS {
             static add_unloading($p0: any): any;
             static remove_unloading($p0: any): any;
             constructor(): any;
+        }
+        class Color extends System.ValueType {
+            r: number;
+            g: number;
+            b: number;
+            a: number;
+            static red: any;
+            static green: any;
+            static blue: any;
+            static white: any;
+            static black: any;
+            static yellow: any;
+            static cyan: any;
+            static magenta: any;
+            static gray: any;
+            static grey: any;
+            static clear: any;
+            grayscale: any;
+            linear: any;
+            gamma: any;
+            maxColorComponent: any;
+            ToString($p0?: any, $p1?: any): any;
+            Equals($p0: any): any;
+            static op_Addition($p0: any, $p1: any): any;
+            static op_Subtraction($p0: any, $p1: any): any;
+            static op_Multiply($p0: any, $p1: any): any;
+            static op_Division($p0: any, $p1: any): any;
+            static op_Equality($p0: any, $p1: any): any;
+            static op_Inequality($p0: any, $p1: any): any;
+            static Lerp($p0: any, $p1: any, $p2: any): any;
+            static LerpUnclamped($p0: any, $p1: any, $p2: any): any;
+            static op_Implicit($p0: any): any;
+            get_Item($p0: any): any;
+            set_Item($p0: any, $p1: any): any;
+            static RGBToHSV($p0: any, $p1: any, $p2: any, $p3: any): any;
+            static HSVToRGB($p0: any, $p1: any, $p2: any, $p3?: any): any;
+            constructor($p0?: any, $p1?: any, $p2?: any, $p3?: any): any;
+            static Equals($p0: any, $p1: any): any;
         }
         class Vector2 extends System.ValueType {
             x: number;

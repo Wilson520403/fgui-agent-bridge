@@ -149,6 +149,18 @@ AUDIT_CAPABILITIES = frozenset(
     }
 )
 
+# P9-4 (0.8.22)：包资源管理（删除/改名/移动/复制）。
+# 真机 6.1.4 实测：四个原语都立即落盘、不进 Agent 撤销栈；原生 DeleteItem 不拦引用，
+# 原生 MoveItem 要求目标目录已存在，因此最低版本单独提示。
+PACKAGE_ITEM_CAPABILITIES = frozenset(
+    {
+        "delete_package_item",
+        "rename_package_item",
+        "move_package_item",
+        "duplicate_package_item",
+    }
+)
+
 
 class BridgeError(RuntimeError):
     """桥接器连接、协议或命令错误。"""

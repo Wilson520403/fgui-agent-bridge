@@ -1,0 +1,787 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "fgui-bridge-p9-4-probe-report",
+  "generatedAt": "2026-10-20T18:46:32.726844+08:00",
+  "editor": "FairyGUI Editor 6.1.4 (macOS)",
+  "project": "sample（隔离工程，Package1）",
+  "question": "FPackage.DeleteItem / RenameItem / MoveItem / DuplicateItem 在 6.1.4 上的真实语义",
+  "method": "插件内临时探针动作 p9_4_probe / p9_4_probe2，逐属性归因：内存态 → 落盘前磁盘态 → 落盘后磁盘态三段分开记录",
+  "rounds": [
+    {
+      "round": 1,
+      "action": "p9_4_probe",
+      "steps": [
+        {
+          "step": "S0_setup",
+          "folder": {
+            "id": "/P94ProbeDir/",
+            "name": "P94ProbeDir",
+            "type": "folder",
+            "path": "/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir",
+            "fileExists": false,
+            "exported": false
+          },
+          "victim": {
+            "id": "b3ar9",
+            "name": "P94Victim",
+            "type": "component",
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Victim.xml",
+            "fileExists": true,
+            "exported": false
+          },
+          "save": {
+            "ok": true
+          },
+          "diskEntry": {
+            "tag": "component",
+            "id": "b3ar9",
+            "name": "P94Victim.xml",
+            "path": "/P94ProbeDir/",
+            "exported": ""
+          },
+          "diskFileExists": true,
+          "manifestCount": 11
+        },
+        {
+          "step": "S1_rename",
+          "error": null,
+          "memoryBefore": {
+            "name": "P94Victim",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Victim.xml",
+            "fileExists": false
+          },
+          "memoryAfter": {
+            "id": "b3ar9",
+            "name": "P94Renamed",
+            "type": "component",
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Renamed.xml",
+            "fileExists": true,
+            "exported": false
+          },
+          "diskEntryBeforeSave": {
+            "tag": "component",
+            "id": "b3ar9",
+            "name": "P94Renamed.xml",
+            "path": "/P94ProbeDir/",
+            "exported": ""
+          },
+          "save": {
+            "ok": true
+          },
+          "diskEntryAfterSave": {
+            "tag": "component",
+            "id": "b3ar9",
+            "name": "P94Renamed.xml",
+            "path": "/P94ProbeDir/",
+            "exported": ""
+          },
+          "oldFileExists": false,
+          "newFileExists": true
+        },
+        {
+          "step": "S2_move",
+          "error": "Error: c# exception:The given key '/P94ProbeDir/sub/' was not present in the dictionary.,stack:  at System.Collections.Generic.Dictionary`2[TKey,TValue].get_Item (TKey key) [0x00000] in <00000000000000000000000000000000>:0 \n  at FairyEditor.FPackage.MoveItem (FairyEditor.FPackageItem pi, System.String path) [0x00000] in <00000000000000000000000000000000>:0 \n  at System.Reflection.RuntimeMethodInfo.Invoke (System.Object obj, System.Reflection.BindingFlags invokeAttr, System.Reflection.Binder binder, System.Object[] parameters, System.Globalization.CultureInfo culture) [0x00000] in <00000000000000000000000000000000>:0 \n  at Puerts.OverloadReflectionWrap.Invoke (Puerts.JSCallInfo jsCallInfo) [0x00000] in <00000000000000000000000000000000>:0 \n  at Puerts.MethodReflectionWrap.Invoke (System.IntPtr isolate, System.IntPtr info, System.IntPtr self, System.Int32 argumentsLen) [0x00000] in <00000000000000000000000000000000>:0 \n  at Puerts.StaticCallbacks.JsEnvCallbackWrap (System.IntPtr isolate, System.IntPtr info, System.IntPtr self, System.Int32 paramLen, System.Int64 data) [0x00000] in <00000000000000000000000000000000>:0 \n  at Puerts.GenericDelegate.Action () [0x00000] in <00000000000000000000000000000000>:0 \n  at FairyEditor.App.OnUpdate () [0x00000] in <00000000000000000000000000000000>:0 \n  at FairyGUI.Stage.InternalUpdate () [0x00000] in <00000000000000000000000000000000>:0 \n  at FairyGUI.StageEngine.LateUpdate () [0x00000] in <00000000000000000000000000000000>:0 ",
+          "memoryBefore": {
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Renamed.xml"
+          },
+          "memoryAfter": {
+            "id": "b3ar9",
+            "name": "P94Renamed",
+            "type": "component",
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Renamed.xml",
+            "fileExists": true,
+            "exported": false
+          },
+          "diskEntryBeforeSave": {
+            "tag": "component",
+            "id": "b3ar9",
+            "name": "P94Renamed.xml",
+            "path": "/P94ProbeDir/",
+            "exported": ""
+          },
+          "save": {
+            "ok": true
+          },
+          "diskEntryAfterSave": {
+            "tag": "component",
+            "id": "b3ar9",
+            "name": "P94Renamed.xml",
+            "path": "/P94ProbeDir/",
+            "exported": ""
+          },
+          "oldFileExists": true,
+          "newFileExists": true,
+          "subDirExists": false
+        },
+        {
+          "step": "S3_duplicate",
+          "error": null,
+          "source": {
+            "id": "b3ar9",
+            "name": "P94Renamed",
+            "type": "component",
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Renamed.xml",
+            "fileExists": true,
+            "exported": false
+          },
+          "copy": {
+            "id": "b3ara",
+            "name": "P94Copy",
+            "type": "component",
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Copy.xml",
+            "fileExists": true,
+            "exported": false
+          },
+          "copyIdSameAsSource": false,
+          "copyContentSameAsSource": true,
+          "save": {
+            "ok": true
+          },
+          "copyDiskEntry": {
+            "tag": "component",
+            "id": "b3ara",
+            "name": "P94Copy.xml",
+            "path": "/P94ProbeDir/",
+            "exported": ""
+          },
+          "copyDiskFileExists": true
+        },
+        {
+          "step": "S4_reference",
+          "error": null,
+          "host": {
+            "id": "b3arb",
+            "name": "P94Host",
+            "type": "component",
+            "path": "/P94ProbeDir/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94ProbeDir/P94Host.xml",
+            "fileExists": true,
+            "exported": false
+          },
+          "insertedId": "n0_b3ar",
+          "hostXmlMentionsVictimId": true,
+          "hostXmlSnippet": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_b3ar\" name=\"n0\" src=\"b3ar9\" fileName=\"P94ProbeDir/P94Renamed.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+        },
+        {
+          "step": "S5_delete_referenced",
+          "error": null,
+          "returnValue": 1,
+          "returnType": "number",
+          "stillInPackage": false,
+          "save": {
+            "ok": true
+          },
+          "diskEntryAfterSave": null,
+          "victimFileExists": false,
+          "hostXmlStillMentionsVictimId": true,
+          "hostXmlAfterDelete": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_b3ar\" name=\"n0\" src=\"b3ar9\" fileName=\"P94ProbeDir/P94Renamed.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+        },
+        {
+          "step": "S6_delete_unreferenced",
+          "error": null,
+          "returnValue": 1,
+          "returnType": "number",
+          "save": {
+            "ok": true
+          },
+          "copyDiskEntryAfterSave": null,
+          "copyFileExists": false
+        },
+        {
+          "step": "S7_history",
+          "agentUndoCount": 0,
+          "agentRedoCount": 0,
+          "projectModified": false
+        },
+        {
+          "step": "S8_cleanup",
+          "deleted": [
+            {
+              "name": "P94Host",
+              "returnValue": 1
+            },
+            {
+              "name": "P94ProbeDir",
+              "returnValue": 1
+            }
+          ],
+          "save": {
+            "ok": true
+          },
+          "manifestEntries": [
+            {
+              "tag": "component",
+              "id": "7vc10",
+              "name": "Component1.xml",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "image",
+              "id": "p93m1",
+              "name": "Red.png",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "image",
+              "id": "p93m2",
+              "name": "Blue.png",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "component",
+              "id": "p93m3",
+              "name": "BridgeTestButton.xml",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "component",
+              "id": "mvx64",
+              "name": "BridgeTextTest.xml",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "component",
+              "id": "fix01",
+              "name": "BridgeFixture.xml",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "image",
+              "id": "x5h75",
+              "name": "AtlasFixture_Small.png",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "image",
+              "id": "x5h76",
+              "name": "AtlasFixture_HD.png",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "image",
+              "id": "x5h77",
+              "name": "AtlasFixture_Huge.png",
+              "path": "/",
+              "exported": "true"
+            },
+            {
+              "tag": "image",
+              "id": "n4yz8",
+              "name": "AtlasFixture_Probe.png",
+              "path": "/",
+              "exported": "true"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "action": "p9_4_probe2",
+      "steps": [
+        {
+          "step": "P0_purge",
+          "deleted": [
+            {
+              "name": "P94BDir",
+              "type": "folder",
+              "returnValue": 2
+            },
+            {
+              "name": "P94BImg",
+              "type": "image",
+              "returnValue": 0
+            },
+            {
+              "name": "P94BHost",
+              "type": "component",
+              "returnValue": 1
+            },
+            {
+              "name": "P94BHost2",
+              "type": "component",
+              "returnValue": 1
+            },
+            {
+              "name": "P94BHost3",
+              "type": "component",
+              "returnValue": 1
+            }
+          ],
+          "manifestAfter": [
+            {
+              "tag": "component",
+              "id": "7vc10",
+              "name": "Component1.xml",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "p93m1",
+              "name": "Red.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "p93m2",
+              "name": "Blue.png",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "p93m3",
+              "name": "BridgeTestButton.xml",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "mvx64",
+              "name": "BridgeTextTest.xml",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "fix01",
+              "name": "BridgeFixture.xml",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "x5h75",
+              "name": "AtlasFixture_Small.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "x5h76",
+              "name": "AtlasFixture_HD.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "x5h77",
+              "name": "AtlasFixture_Huge.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "n4yz8",
+              "name": "AtlasFixture_Probe.png",
+              "path": "/"
+            }
+          ]
+        },
+        {
+          "step": "P1_setup",
+          "dir": {
+            "id": "/P94BDir/",
+            "name": "P94BDir",
+            "type": "folder",
+            "path": "/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BDir",
+            "fileExists": false
+          },
+          "victim": {
+            "id": "axzaf",
+            "name": "P94BVictim",
+            "type": "component",
+            "path": "/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BVictim.xml",
+            "fileExists": true
+          },
+          "host": {
+            "id": "axzag",
+            "name": "P94BHost",
+            "type": "component",
+            "path": "/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BHost.xml",
+            "fileExists": true
+          },
+          "saved": {
+            "ok": true
+          },
+          "hostXml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_axza\" name=\"n0\" src=\"axzaf\" fileName=\"P94BVictim.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>",
+          "diskEntry": {
+            "tag": "component",
+            "id": "axzaf",
+            "name": "P94BVictim.xml",
+            "path": "/"
+          }
+        },
+        {
+          "step": "B1_rename",
+          "error": null,
+          "before": {
+            "memory": {
+              "id": "axzaf",
+              "name": "P94BVictim",
+              "type": "component",
+              "path": "/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BVictim.xml",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "component",
+              "id": "axzaf",
+              "name": "P94BVictim.xml",
+              "path": "/"
+            },
+            "hostXml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_axza\" name=\"n0\" src=\"axzaf\" fileName=\"P94BVictim.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+          },
+          "immediate": {
+            "memory": {
+              "id": "axzaf",
+              "name": "P94BRenamed",
+              "type": "component",
+              "path": "/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BRenamed.xml",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "component",
+              "id": "axzaf",
+              "name": "P94BRenamed.xml",
+              "path": "/"
+            },
+            "hostXml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_axza\" name=\"n0\" src=\"axzaf\" fileName=\"P94BVictim.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+          },
+          "saved": {
+            "ok": true
+          },
+          "afterSave": {
+            "diskEntry": {
+              "tag": "component",
+              "id": "axzaf",
+              "name": "P94BRenamed.xml",
+              "path": "/"
+            },
+            "hostXml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_axza\" name=\"n0\" src=\"axzaf\" fileName=\"P94BVictim.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+          },
+          "byNewName": {
+            "id": "axzaf",
+            "name": "P94BRenamed",
+            "type": "component",
+            "path": "/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BRenamed.xml",
+            "fileExists": true
+          },
+          "byOldName": null,
+          "hostFileNameBefore": "P94BVictim.xml",
+          "hostFileNameImmediate": "P94BVictim.xml",
+          "hostFileNameAfterSave": "P94BVictim.xml",
+          "hostSrcBefore": "axzaf",
+          "hostSrcImmediate": "axzaf",
+          "victimFileExistsAfterRename": false
+        },
+        {
+          "step": "B2_move",
+          "error": null,
+          "beforeFile": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BRenamed.xml",
+          "immediate": {
+            "memory": {
+              "id": "axzaf",
+              "name": "P94BRenamed",
+              "type": "component",
+              "path": "/P94BDir/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BDir/P94BRenamed.xml",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "component",
+              "id": "axzaf",
+              "name": "P94BRenamed.xml",
+              "path": "/P94BDir/"
+            }
+          },
+          "saved": {
+            "ok": true
+          },
+          "afterSave": {
+            "memory": {
+              "id": "axzaf",
+              "name": "P94BRenamed",
+              "type": "component",
+              "path": "/P94BDir/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BDir/P94BRenamed.xml",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "component",
+              "id": "axzaf",
+              "name": "P94BRenamed.xml",
+              "path": "/P94BDir/"
+            }
+          },
+          "oldFileExists": false,
+          "newFileExists": true,
+          "dirOnDisk": false
+        },
+        {
+          "step": "B3_delete_multi",
+          "error": null,
+          "returnValue": 1,
+          "returnType": "number",
+          "after": {
+            "diskEntry": null,
+            "victimFileExists": false
+          },
+          "hostRefs": [
+            {
+              "name": "P94BHost2",
+              "stillReferencesVictim": true,
+              "hostXml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_axza\" name=\"n0\" src=\"axzaf\" fileName=\"P94BDir/P94BRenamed.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+            },
+            {
+              "name": "P94BHost3",
+              "stillReferencesVictim": true,
+              "hostXml": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<component size=\"200,200\">\n  <displayList>\n    <component id=\"n0_axza\" name=\"n0\" src=\"axzaf\" fileName=\"P94BDir/P94BRenamed.xml\" xy=\"0,0\"/>\n  </displayList>\n</component>"
+            }
+          ],
+          "referenceCountBeforeDelete": 3
+        },
+        {
+          "step": "B4_delete_folder",
+          "error": null,
+          "returnValue": 2,
+          "after": {
+            "childDiskEntry": null,
+            "folderDiskEntry": null,
+            "childFileExists": false,
+            "nestedDirOnDisk": false
+          }
+        },
+        {
+          "step": "B5_image_move",
+          "error": null,
+          "beforeMove": {
+            "item": {
+              "id": "axzak",
+              "name": "P94BImg",
+              "type": "image",
+              "path": "/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BImg.png",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "image",
+              "id": "axzak",
+              "name": "P94BImg.png",
+              "path": "/"
+            }
+          },
+          "immediate": {
+            "item": {
+              "id": "axzak",
+              "name": "P94BImg",
+              "type": "image",
+              "path": "/P94BDir/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BDir/P94BImg.png",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "image",
+              "id": "axzak",
+              "name": "P94BImg.png",
+              "path": "/P94BDir/"
+            }
+          },
+          "saved": {
+            "ok": true
+          },
+          "afterSave": {
+            "item": {
+              "id": "axzak",
+              "name": "P94BImg",
+              "type": "image",
+              "path": "/P94BDir/",
+              "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94BDir/P94BImg.png",
+              "fileExists": true
+            },
+            "diskEntry": {
+              "tag": "image",
+              "id": "axzak",
+              "name": "P94BImg.png",
+              "path": "/P94BDir/"
+            }
+          }
+        },
+        {
+          "step": "P9_purge",
+          "deleted": [
+            {
+              "name": "P94BDir",
+              "type": "folder",
+              "returnValue": 2
+            },
+            {
+              "name": "P94BImg",
+              "type": "image",
+              "returnValue": 0
+            },
+            {
+              "name": "P94BHost",
+              "type": "component",
+              "returnValue": 1
+            },
+            {
+              "name": "P94BHost2",
+              "type": "component",
+              "returnValue": 1
+            },
+            {
+              "name": "P94BHost3",
+              "type": "component",
+              "returnValue": 1
+            }
+          ],
+          "manifestAfter": [
+            {
+              "tag": "component",
+              "id": "7vc10",
+              "name": "Component1.xml",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "p93m1",
+              "name": "Red.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "p93m2",
+              "name": "Blue.png",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "p93m3",
+              "name": "BridgeTestButton.xml",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "mvx64",
+              "name": "BridgeTextTest.xml",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "fix01",
+              "name": "BridgeFixture.xml",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "x5h75",
+              "name": "AtlasFixture_Small.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "x5h76",
+              "name": "AtlasFixture_HD.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "x5h77",
+              "name": "AtlasFixture_Huge.png",
+              "path": "/"
+            },
+            {
+              "tag": "image",
+              "id": "n4yz8",
+              "name": "AtlasFixture_Probe.png",
+              "path": "/"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "A1",
+      "claim": "四个原语都是立即落盘的：调用返回后 package.xml 已是新值，不需要 Save",
+      "evidence": "round1 S1 diskEntryBeforeSave 读到 P94Renamed.xml（rename 后未 Save）；round2 B1 immediate.diskEntry 同理；B3/B4 删除后清单条目即刻消失",
+      "impact": "Bridge 的 save 参数只是再刷一次工程状态，语义上必须声明「已落盘」"
+    },
+    {
+      "id": "A2",
+      "claim": "DeleteItem 返回值 = 本次实际移除的条目数（含目录递归子项），不是引用数",
+      "evidence": "round2 P0_purge：目录 P94BDir 返回 2（含 1 个子项）、组件返回 1；B3 中被 3 处引用的组件返回 1；round1 S5 被 1 处引用也返回 1",
+      "impact": "规划文档里「疑似受影响引用数」的猜测被证伪，响应里不能把它当引用数报告"
+    },
+    {
+      "id": "A3",
+      "claim": "DeleteItem 不拦引用：被引用的资源照样删，引用方 XML 留悬空 src",
+      "evidence": "round2 B3：hostRefs 三个宿主仍引用被删 id（hostXmlStillMentionsVictimId=true）；round1 S5 同样",
+      "impact": "Bridge 必须自己前置挡（复用 P8-2 引用图），force 时显式回报悬空引用"
+    },
+    {
+      "id": "A4",
+      "claim": "DeleteItem 连带删磁盘文件",
+      "evidence": "round1 S5 victimFileExists=false；round2 B3 after.victimFileExists=false；B4 childFileExists=false、nestedDirOnDisk=false",
+      "impact": "删除是不可逆操作，必须 force 显式确认"
+    },
+    {
+      "id": "A5",
+      "claim": "RenameItem 改 id 之外的 name 与磁盘文件名，并同步 package.xml；但不更新引用方文档的 fileName 属性",
+      "evidence": "round2 B1：immediate.memory.name=P94BRenamed、old file 消失、新 file 存在、immediate.diskEntry.name=P94BRenamed.xml；但 hostFileNameBefore/Immediate/AfterSave 恒为 P94BVictim.xml（hostSrc 恒为 axzaf）",
+      "impact": "id 不变、fileName 变旧 = 半状态；运行时按 id 解析不受影响，但要显式回报 staleFileNameSlots"
+    },
+    {
+      "id": "A6",
+      "claim": "MoveItem 要求目标目录已存在，否则抛原生 KeyNotFoundException",
+      "evidence": "round1 S2：error=The given key '/P94ProbeDir/sub/' was not present in the dictionary（原生栈）；round2 B2 目标目录存在时成功",
+      "impact": "Bridge 必须前置校验/按需建目录，否则会把原生长栈抛给调用方"
+    },
+    {
+      "id": "A7",
+      "claim": "MoveItem 会真的移动磁盘文件并同步 package.xml 的 path 属性（立即落盘）",
+      "evidence": "round2 B2：immediate.memory.path=/P94BDir/、immediate.diskEntry.path=/P94BDir/、oldFileExists=false、newFileExists=true；round2 B5 图片同理（P94BImg.png 真的搬进目录）",
+      "impact": "移动是不可逆的包级操作；引用方 fileName 的目录前缀同样会变旧"
+    },
+    {
+      "id": "A8",
+      "claim": "DuplicateItem 返回新 id 的资源，磁盘文件被复制，清单登记新条目",
+      "evidence": "round1 S3：copyIdSameAsSource=false、copyContentSameAsSource=true、copyDiskEntry 有登记；round2 P0_purge 与 B5 均可复制图片",
+      "impact": "复制是安全的收尾手段：不动原资源"
+    },
+    {
+      "id": "A9",
+      "claim": "包级操作不进 Agent 撤销栈",
+      "evidence": "round1 S7：agentUndoCount=0、agentRedoCount=0；packageModified=false（保存后）",
+      "impact": "四个动作的 undoable 恒为 false，strength 上限 disk"
+    },
+    {
+      "id": "A10",
+      "claim": "改名后按新名解析命中、按旧名解析落空",
+      "evidence": "round2 B1：byNewName 命中 P94BRenamed，byOldName=null",
+      "impact": "名字寻址跟随改名，不需要额外缓存"
+    },
+    {
+      "id": "A11",
+      "claim": "同包内用 ImportResource 导入素材时 Task 永不结算，会挂死整条请求",
+      "evidence": "第一版 round2 卡在 await pkg.ImportResource(包内 Red.png) 上：请求停在 processing/ 无响应，CLI 120s 超时",
+      "impact": "探针改用 DuplicateItem 复制图片；实现层不要把包内文件当导入源"
+    }
+  ],
+  "cleanup": "两轮探针都只用 P94* 前缀的临时资源；round2 的 P0_purge / P9_purge 清掉了全部残留，隔离工程最终回到 10 个基线资源"
+}

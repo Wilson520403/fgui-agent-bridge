@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "fgui-bridge-p9-6-probe-report",
+  "generatedAt": "2026-10-20T20:09:14+08:00",
+  "editor": "FairyGUI Editor 6.1.4 (macOS)",
+  "project": "sample（隔离工程，Package1）",
+  "question": "导入前想按 max_size 等比缩放，插件里做得到吗？缩放后重新导入的尺寸、透明通道、命名与图集判定各是什么？",
+  "method": "插件内临时探针动作 p9_6_probe：读源图像素尺寸 → FairyEditor.VImage 加载 → Resize(LANCZOS3) → 存临时文件 → FPackage.ImportResource 入库 → 用 analyze_atlas_fit 的同一套约束函数判定缩放后尺寸 → 清场",
+  "sourceImage": {
+    "path": "/tmp/fgui_p96/p96_big.png",
+    "generator": "PIL 12.2.0，RGBA 2560x1440（左上不透明渐变 + 半透明红圆），colorType=6 表示带 alpha",
+    "bytes": 24404
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "action": "p9_6_probe",
+      "params": {
+        "maxSize": 1024
+      },
+      "steps": [
+        {
+          "step": "S0_source_size",
+          "file": "/tmp/fgui_p96/p96_big.png",
+          "width": 2560,
+          "height": 1440,
+          "type": "png",
+          "bitDepth": 8,
+          "colorType": 6
+        },
+        {
+          "step": "S1_load",
+          "width": 2560,
+          "height": 1440,
+          "transparent": true,
+          "bandCount": 4
+        },
+        {
+          "step": "S2_resize_save",
+          "tempPath": "/var/folders/0w/6_2m2v9x30l1rhrxdbb09yqm0000gn/T/fgui_p96_1792497581661.png",
+          "requested": {
+            "width": 1024,
+            "height": 576
+          },
+          "actual": {
+            "width": 1024,
+            "height": 576,
+            "type": "png"
+          }
+        },
+        {
+          "step": "S3_import_scaled",
+          "resourceName": "P96Probemvgms1v0.png",
+          "item": {
+            "id": "8r2sb",
+            "name": "P96Probemvgms1v0",
+            "title": "P96Probemvgms1v0",
+            "type": "image",
+            "path": "/",
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P96Probemvgms1v0.png",
+            "width": 1024,
+            "height": 576,
+            "exported": false,
+            "folderAtlas": "",
+            "branch": "",
+            "isBranchRoot": false,
+            "url": "ui://qsezbqtw8r2sb"
+          },
+          "fileSize": {
+            "width": 1024,
+            "height": 576,
+            "type": "png"
+          },
+          "folderAtlas": ""
+        },
+        {
+          "step": "S4_atlas_fit_scaled",
+          "constraints": [
+            {
+              "source": "global",
+              "atlas": "",
+              "maxWidth": 2048,
+              "maxHeight": 2048,
+              "fits": true,
+              "binding": "",
+              "requiredWidth": 1024,
+              "requiredHeight": 576
+            }
+          ]
+        },
+        {
+          "step": "S5_cleanup",
+          "cleanup": {
+            "tempDeleted": true,
+            "itemDeleted": 1
+          }
+        }
+      ]
+    }
+  ],
+  "conclusions": [
+    "编辑器自带 FairyEditor.VImage 能读 PNG（含 alpha 通道，transparent=true、bandCount=4），能按 LANCZOS3 缩放并存盘，不需要任何外部图像库。",
+    "2560×1440 → 1024×576 后重新导入：包内 item.width/height 就是 1024×576，磁盘文件尺寸也是 1024×576，类型仍是 png。",
+    "图集判定完全按入库后的像素尺寸走：缩放到 1024×576 后在全局约束（maxWidth/maxHeight=2048）下 fits=true，而原尺寸 2560×1440 会超出 maxWidth——所以缩放必须发生在入库之前，判定必须复用同一套函数。",
+    "临时文件与探针资源清场正常（tempDeleted=true、DeleteItem 返回 1），缩放中间产物不会留在工程里。"
+  ],
+  "implication": "import_image 增加可选 max_size（长边上限），缩放用编辑器原生 VImage，并在响应里回报 scaled（from/to/scale）与 atlasPrecheck（入库尺寸的图集前置判定）。"
+}

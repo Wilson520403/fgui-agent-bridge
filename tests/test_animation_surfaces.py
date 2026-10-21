@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fairygui_agent import mcp_server
-from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, AUDIT_CAPABILITIES, BRANCH_CAPABILITIES, LAYOUT_CAPABILITIES, PUBLISH_SETTINGS_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, TRANSITION_KEYFRAME_CAPABILITIES, TRANSITION_VERIFY_CAPABILITIES, BridgeClient, BridgeError
+from fairygui_agent.bridge_client import ANIMATION_CAPABILITIES, AUDIT_CAPABILITIES, BRANCH_CAPABILITIES, LAYOUT_CAPABILITIES, PACKAGE_ITEM_CAPABILITIES, PUBLISH_SETTINGS_CAPABILITIES, REFERENCE_CAPABILITIES, REFERENCE_REPLACE_CAPABILITIES, REQUIRED_CAPABILITIES, TRANSITION_KEYFRAME_CAPABILITIES, TRANSITION_VERIFY_CAPABILITIES, BridgeClient, BridgeError
 from fairygui_agent.cli import build_parser
 
 
@@ -221,12 +221,28 @@ class CapabilityConsistencyTests(unittest.TestCase):
             self.assertIn(f'case "{action}"', plugin)
             self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
 
+    def test_package_item_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        plugin = (root / "plugin/main.ts").read_text(encoding="utf-8")
+        parser = build_parser()
+        for action in PACKAGE_ITEM_CAPABILITIES:
+            self.assertIn(f'"{action}"', plugin)
+            self.assertIn(f'case "{action}"', plugin)
+            self.assertTrue(hasattr(mcp_server, f"fgui_{action}"), action)
+
+    def test_package_item_cli_subcommands_exist(self) -> None:
+        parser = build_parser()
+        actions = [action for action in parser._actions if hasattr(action, "choices") and action.choices]
+        commands = set(actions[0].choices)
+        for command in ("delete-item", "rename-item", "move-item", "duplicate-item"):
+            self.assertIn(command, commands)
+
     def test_documented_mcp_tool_count_is_current(self) -> None:
         root = Path(__file__).resolve().parents[1]
         documented = (root / ".agents/skills/fgui-agent-bridge/references/current-capabilities.md").read_text(encoding="utf-8")
         tool_names = [name for name in vars(mcp_server) if name.startswith("fgui_")]
-        self.assertEqual(len(tool_names), 65)
-        self.assertIn("MCP 工具数：65", documented)
+        self.assertEqual(len(tool_names), 69)
+        self.assertIn("MCP 工具数：69", documented)
 
     def test_branch_capabilities_match_plugin_dispatch_and_mcp_functions(self) -> None:
         root = Path(__file__).resolve().parents[1]

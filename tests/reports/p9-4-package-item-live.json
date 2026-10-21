@@ -1,0 +1,1272 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "fgui-bridge-p9-4-live-report",
+  "generatedAt": "2026-10-20T19:16:27.952828+08:00",
+  "phase": "actions",
+  "editor": "FairyGUI Editor 6.1.4 (macOS)",
+  "project": "/Volumes/HardM2App/fgui-agent-bridge/sample",
+  "package": "Package1",
+  "steps": [
+    {
+      "step": "A1_create_victim",
+      "action": "create_component",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "operation": "created",
+        "requestedName": "P94LiveVictim",
+        "actualName": "P94LiveVictim",
+        "autoRenamed": false,
+        "folderPath": "/",
+        "item": {
+          "id": "kxw4b",
+          "name": "P94LiveVictim",
+          "title": "P94LiveVictim",
+          "type": "component",
+          "path": "/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictim.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "document": null,
+        "packageModified": true,
+        "requiresSave": true,
+        "branch": "",
+        "ok": true,
+        "target": {
+          "id": "kxw4b",
+          "name": "P94LiveVictim",
+          "path": "/",
+          "type": "component",
+          "url": "ui://qsezbqtwkxw4b",
+          "branch": ""
+        },
+        "saved": false,
+        "persisted": false,
+        "strength": "none",
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": false,
+          "externalReload": false,
+          "expected": {
+            "present": true,
+            "id": "kxw4b",
+            "name": "P94LiveVictim"
+          },
+          "editor": {
+            "present": true,
+            "id": "kxw4b",
+            "name": "P94LiveVictim",
+            "type": "component",
+            "exported": false,
+            "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictim.xml",
+            "fileExists": true
+          },
+          "xml": null,
+          "file": null,
+          "reload": null
+        },
+        "writePath": "object-model",
+        "note": "包资源验证覆盖 package.xml 条目与资源文件；未验证持久化。失败不自动回滚。"
+      }
+    },
+    {
+      "step": "A2_reference_unsaved",
+      "action": "insert_object",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "victimUrl": "ui://qsezbqtwkxw4b",
+        "victimId": "kxw4b"
+      },
+      "note": "插入实例后不保存文档：引用只在内存里，磁盘引用图查不到"
+    },
+    {
+      "step": "A3_delete_blocked_by_open_doc_reference",
+      "action": "delete_package_item",
+      "expected": "rejected",
+      "status": "pass",
+      "error": "delete_package_item 失败：目标资源正被 0 处已保存引用、1 个打开文档引用，删除后这些引用会变成悬空；请先移除引用，或显式传 allowDanglingReferences=true",
+      "errorCode": "invalid_argument",
+      "note": "已保存引用=0，打开文档引用=1"
+    },
+    {
+      "step": "A3b_open_doc_reference_reported",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "openDocumentReferences": [
+          {
+            "url": "ui://qsezbqtwkxw4c",
+            "itemId": "kxw4c",
+            "itemName": "P94LiveHost",
+            "modified": true,
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ],
+            "objectNames": [
+              "n0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "step": "A4_delete_blocked_by_saved_reference",
+      "action": "delete_package_item",
+      "expected": "rejected",
+      "status": "pass",
+      "error": "delete_package_item 失败：目标资源正被 1 处已保存引用、1 个打开文档引用，删除后这些引用会变成悬空；请先移除引用，或显式传 allowDanglingReferences=true",
+      "errorCode": "invalid_argument",
+      "note": "已保存引用=1"
+    },
+    {
+      "step": "A4b_saved_reference_reported",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "references": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "propKey": "src",
+            "fileName": "P94LiveVictim.xml"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A5_delete_without_force_blocked",
+      "action": "delete_package_item",
+      "expected": "rejected",
+      "status": "pass",
+      "error": "delete_package_item 失败：删除包资源是不可逆操作（磁盘文件会一起删掉）；请显式传 force=true 确认",
+      "errorCode": "invalid_argument"
+    },
+    {
+      "step": "A6_rename_conflict_blocked",
+      "action": "rename_package_item",
+      "expected": "rejected",
+      "status": "pass",
+      "error": "rename_package_item 失败：目标目录已存在同名资源：P94LiveHost",
+      "errorCode": "invalid_argument"
+    },
+    {
+      "step": "A7_move_missing_dir_blocked",
+      "action": "move_package_item",
+      "expected": "rejected",
+      "status": "pass",
+      "error": "move_package_item 失败：包 Package1 中不存在目录：/P94LiveMissing/",
+      "errorCode": "editor_rejected"
+    },
+    {
+      "step": "A8_rename_with_open_document",
+      "action": "rename_package_item",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "ok": true,
+        "operation": "renamed",
+        "target": {
+          "id": "kxw4b",
+          "name": "P94LiveVictim",
+          "title": "P94LiveVictim",
+          "type": "component",
+          "path": "/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictim.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "previousName": "P94LiveVictim",
+        "actualName": "P94LiveVictimRenamed",
+        "nameAdjusted": false,
+        "item": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimRenamed",
+          "title": "P94LiveVictimRenamed",
+          "type": "component",
+          "path": "/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictimRenamed.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "staleFileNameSlots": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "staleFileName": "P94LiveVictim.xml",
+            "expectedFileName": "P94LiveVictimRenamed.xml"
+          }
+        ],
+        "openDocumentReferences": [
+          {
+            "url": "ui://qsezbqtwkxw4b",
+            "itemId": "kxw4b",
+            "itemName": "P94LiveVictimRenamed",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              ""
+            ],
+            "objectNames": [
+              "DocContent"
+            ]
+          },
+          {
+            "url": "ui://qsezbqtwkxw4c",
+            "itemId": "kxw4c",
+            "itemName": "P94LiveHost",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ],
+            "objectNames": [
+              "n0"
+            ]
+          }
+        ],
+        "persisted": true,
+        "strength": "disk",
+        "undoable": false,
+        "writePath": "package-model",
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": true,
+          "diskEntryName": "P94LiveVictimRenamed.xml",
+          "diskEntryPath": "/",
+          "oldFileExists": false,
+          "newFileExists": true,
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/package.xml",
+          "saved": false
+        },
+        "note": "改名已落盘且不可撤销；1 处引用方的 fileName 属性不会自动更新（id 不变，运行时按 id 解析不受影响），需要时让那些文档经编辑器重新保存一次即可补齐。"
+      },
+      "note": "文档开着也允许改名：编辑器让文档跟随新文件名"
+    },
+    {
+      "step": "A9_open_document_follows_rename",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "activeDocument": {
+          "url": "ui://qsezbqtwkxw4b",
+          "title": "P94LiveVictimRenamed",
+          "itemId": "kxw4b",
+          "itemName": "P94LiveVictimRenamed",
+          "packageName": "Package1",
+          "branch": "",
+          "isBranchRoot": false,
+          "modified": false,
+          "savedVersion": 3,
+          "selectionCount": 0,
+          "transitionCount": 0,
+          "transitions": []
+        }
+      }
+    },
+    {
+      "step": "A10_rename",
+      "action": "rename_package_item",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "ok": true,
+        "operation": "renamed",
+        "target": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimRenamed",
+          "title": "P94LiveVictimRenamed",
+          "type": "component",
+          "path": "/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictimRenamed.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "previousName": "P94LiveVictimRenamed",
+        "actualName": "P94LiveVictimFinal",
+        "nameAdjusted": false,
+        "item": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimFinal",
+          "title": "P94LiveVictimFinal",
+          "type": "component",
+          "path": "/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictimFinal.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "staleFileNameSlots": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "staleFileName": "P94LiveVictim.xml",
+            "expectedFileName": "P94LiveVictimFinal.xml"
+          }
+        ],
+        "openDocumentReferences": [
+          {
+            "url": "ui://qsezbqtwkxw4b",
+            "itemId": "kxw4b",
+            "itemName": "P94LiveVictimFinal",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              ""
+            ],
+            "objectNames": [
+              "DocContent"
+            ]
+          },
+          {
+            "url": "ui://qsezbqtwkxw4c",
+            "itemId": "kxw4c",
+            "itemName": "P94LiveHost",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ],
+            "objectNames": [
+              "n0"
+            ]
+          }
+        ],
+        "persisted": true,
+        "strength": "disk",
+        "undoable": false,
+        "writePath": "package-model",
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": true,
+          "diskEntryName": "P94LiveVictimFinal.xml",
+          "diskEntryPath": "/",
+          "oldFileExists": false,
+          "newFileExists": true,
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/package.xml",
+          "saved": false
+        },
+        "note": "改名已落盘且不可撤销；1 处引用方的 fileName 属性不会自动更新（id 不变，运行时按 id 解析不受影响），需要时让那些文档经编辑器重新保存一次即可补齐。"
+      }
+    },
+    {
+      "step": "A11_rename_stale_file_name_reported",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "staleFileNameSlots": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "staleFileName": "P94LiveVictim.xml",
+            "expectedFileName": "P94LiveVictimFinal.xml"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A12_rename_disk_entry",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "manifest": [
+          {
+            "tag": "component",
+            "id": "kxw4b",
+            "name": "P94LiveVictimFinal.xml",
+            "path": "/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4c",
+            "name": "P94LiveHost.xml",
+            "path": "/"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A13_rename_old_file_gone",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "files": [
+          ".DS_Store",
+          "AtlasFixture_HD.png",
+          "AtlasFixture_Huge.png",
+          "AtlasFixture_Probe.png",
+          "AtlasFixture_Small.png",
+          "Blue.png",
+          "BridgeFixture.xml",
+          "BridgeTestButton.xml",
+          "BridgeTextTest.xml",
+          "Component1.xml",
+          "P94LiveHost.xml",
+          "P94LiveVictimFinal.xml",
+          "Red.png"
+        ]
+      }
+    },
+    {
+      "step": "A14_move",
+      "action": "move_package_item",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "ok": true,
+        "operation": "moved",
+        "target": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimFinal",
+          "title": "P94LiveVictimFinal",
+          "type": "component",
+          "path": "/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveVictimFinal.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "previousPath": "/",
+        "actualPath": "/P94LiveDir/",
+        "folderCreated": true,
+        "item": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimFinal",
+          "title": "P94LiveVictimFinal",
+          "type": "component",
+          "path": "/P94LiveDir/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveVictimFinal.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "staleFileNameSlots": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "staleFileName": "P94LiveVictim.xml",
+            "expectedFileName": "P94LiveDir/P94LiveVictimFinal.xml"
+          }
+        ],
+        "openDocumentReferences": [
+          {
+            "url": "ui://qsezbqtwkxw4b",
+            "itemId": "kxw4b",
+            "itemName": "P94LiveVictimFinal",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              ""
+            ],
+            "objectNames": [
+              "DocContent"
+            ]
+          },
+          {
+            "url": "ui://qsezbqtwkxw4c",
+            "itemId": "kxw4c",
+            "itemName": "P94LiveHost",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ],
+            "objectNames": [
+              "n0"
+            ]
+          }
+        ],
+        "persisted": true,
+        "strength": "disk",
+        "undoable": false,
+        "writePath": "package-model",
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": true,
+          "diskEntryName": "P94LiveVictimFinal.xml",
+          "diskEntryPath": "/P94LiveDir/",
+          "oldFileExists": false,
+          "newFileExists": true,
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/package.xml",
+          "saved": false
+        },
+        "note": "移动已落盘且不可撤销（磁盘文件同步移动）；1 处引用方的 fileName 属性不会自动更新（id 不变，运行时按 id 解析不受影响），需要时让那些文档经编辑器重新保存一次即可补齐。"
+      }
+    },
+    {
+      "step": "A15_move_folder_created",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "folderCreated": true
+      }
+    },
+    {
+      "step": "A16_move_disk_path",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "manifest": [
+          {
+            "tag": "component",
+            "id": "kxw4b",
+            "name": "P94LiveVictimFinal.xml",
+            "path": "/P94LiveDir/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4c",
+            "name": "P94LiveHost.xml",
+            "path": "/"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A17_move_file_relocated",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "files": [
+          ".DS_Store",
+          "AtlasFixture_HD.png",
+          "AtlasFixture_Huge.png",
+          "AtlasFixture_Probe.png",
+          "AtlasFixture_Small.png",
+          "Blue.png",
+          "BridgeFixture.xml",
+          "BridgeTestButton.xml",
+          "BridgeTextTest.xml",
+          "Component1.xml",
+          "P94LiveDir/P94LiveVictimFinal.xml",
+          "P94LiveHost.xml",
+          "Red.png"
+        ]
+      }
+    },
+    {
+      "step": "A18_duplicate",
+      "action": "duplicate_package_item",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "ok": true,
+        "operation": "duplicated",
+        "source": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimFinal",
+          "title": "P94LiveVictimFinal",
+          "type": "component",
+          "path": "/P94LiveDir/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveVictimFinal.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "requestedName": "P94LiveCopy",
+        "actualName": "P94LiveCopy",
+        "nameAdjusted": false,
+        "copy": {
+          "id": "kxw4d",
+          "name": "P94LiveCopy",
+          "title": "P94LiveCopy",
+          "type": "component",
+          "path": "/P94LiveDir/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveCopy.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4d"
+        },
+        "newItemId": "kxw4d",
+        "persisted": true,
+        "strength": "disk",
+        "undoable": false,
+        "writePath": "package-model",
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": true,
+          "diskEntryName": "P94LiveCopy.xml",
+          "diskEntryPath": "/P94LiveDir/",
+          "newFileExists": true,
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/package.xml",
+          "saved": false
+        },
+        "note": "副本是新 id 的新资源（磁盘文件一并复制），不进 Agent 撤销栈；原资源不受影响。"
+      }
+    },
+    {
+      "step": "A19_duplicate_new_id",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "source": "kxw4b",
+        "copy": "kxw4d"
+      }
+    },
+    {
+      "step": "A20_duplicate_disk_entry",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "manifest": [
+          {
+            "tag": "component",
+            "id": "kxw4b",
+            "name": "P94LiveVictimFinal.xml",
+            "path": "/P94LiveDir/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4c",
+            "name": "P94LiveHost.xml",
+            "path": "/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4d",
+            "name": "P94LiveCopy.xml",
+            "path": "/P94LiveDir/"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A21_duplicate_auto_rename",
+      "action": "duplicate_package_item",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "ok": true,
+        "operation": "duplicated",
+        "source": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimFinal",
+          "title": "P94LiveVictimFinal",
+          "type": "component",
+          "path": "/P94LiveDir/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveVictimFinal.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "requestedName": "P94LiveCopy",
+        "actualName": "P94LiveCopy_1",
+        "nameAdjusted": true,
+        "copy": {
+          "id": "kxw4e",
+          "name": "P94LiveCopy_1",
+          "title": "P94LiveCopy_1",
+          "type": "component",
+          "path": "/P94LiveDir/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveCopy_1.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4e"
+        },
+        "newItemId": "kxw4e",
+        "persisted": true,
+        "strength": "disk",
+        "undoable": false,
+        "writePath": "package-model",
+        "verification": {
+          "editorReadback": true,
+          "xmlReadback": true,
+          "diskEntryName": "P94LiveCopy_1.xml",
+          "diskEntryPath": "/P94LiveDir/",
+          "newFileExists": true,
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/package.xml",
+          "saved": false
+        },
+        "note": "副本是新 id 的新资源（磁盘文件一并复制），不进 Agent 撤销栈；原资源不受影响。"
+      }
+    },
+    {
+      "step": "A22_duplicate_auto_renamed",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "actualName": "P94LiveCopy_1"
+      }
+    },
+    {
+      "step": "A23_delete_open_document_blocked",
+      "action": "delete_package_item",
+      "expected": "rejected",
+      "status": "pass",
+      "error": "delete_package_item 失败：目标组件的文档正在编辑器里打开，拒绝删除包资源；请先关闭它，或显式传 closeOpenDocuments=true",
+      "errorCode": "invalid_argument"
+    },
+    {
+      "step": "A24_delete_with_dangling_allowed",
+      "action": "delete_package_item",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "ok": true,
+        "operation": "deleted",
+        "target": {
+          "id": "kxw4b",
+          "name": "P94LiveVictimFinal",
+          "title": "P94LiveVictimFinal",
+          "type": "component",
+          "path": "/P94LiveDir/",
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveVictimFinal.xml",
+          "width": 100,
+          "height": 100,
+          "exported": false,
+          "folderAtlas": "",
+          "branch": "",
+          "isBranchRoot": false,
+          "url": "ui://qsezbqtwkxw4b"
+        },
+        "removedCount": 1,
+        "removedCountNote": "编辑器返回的是本次实际移除的条目数（目录含递归子项），不是引用数。",
+        "references": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "propKey": "src",
+            "fileName": "P94LiveVictim.xml"
+          }
+        ],
+        "openDocumentReferences": [
+          {
+            "url": "ui://qsezbqtwkxw4c",
+            "itemId": "kxw4c",
+            "itemName": "P94LiveHost",
+            "modified": false,
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ],
+            "objectNames": [
+              "n0"
+            ]
+          }
+        ],
+        "danglingReferences": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "propKey": "src",
+            "fileName": "P94LiveVictim.xml"
+          },
+          {
+            "source": "open-document",
+            "hostItemId": "kxw4c",
+            "hostItemName": "P94LiveHost",
+            "url": "ui://qsezbqtwkxw4c",
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ]
+          }
+        ],
+        "fileDeleted": true,
+        "deletedFile": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P94LiveDir/P94LiveVictimFinal.xml",
+        "persisted": true,
+        "strength": "disk",
+        "undoable": false,
+        "writePath": "package-model",
+        "verification": {
+          "editorReadback": true,
+          "memoryPresent": false,
+          "xmlReadback": true,
+          "diskEntryPresent": false,
+          "diskFileExists": false,
+          "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/package.xml",
+          "saved": false
+        },
+        "note": "删除已落盘且不可撤销；被引用方的引用没有自动清理，会留下悬空 src，请按 references 自行处理。"
+      }
+    },
+    {
+      "step": "A25_delete_dangling_reported",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "danglingReferences": [
+          {
+            "hostItemId": null,
+            "hostItemName": null,
+            "objectId": "n0_kxw4",
+            "objectName": "n0",
+            "element": "component",
+            "propKey": "src",
+            "fileName": "P94LiveVictim.xml"
+          },
+          {
+            "source": "open-document",
+            "hostItemId": "kxw4c",
+            "hostItemName": "P94LiveHost",
+            "url": "ui://qsezbqtwkxw4c",
+            "referenceCount": 1,
+            "objectIds": [
+              "n0_kxw4"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "step": "A26_delete_removed_count",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "removedCount": 1
+      }
+    },
+    {
+      "step": "A27_delete_disk_entry_gone",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "manifest": [
+          {
+            "tag": "component",
+            "id": "kxw4c",
+            "name": "P94LiveHost.xml",
+            "path": "/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4d",
+            "name": "P94LiveCopy.xml",
+            "path": "/P94LiveDir/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4e",
+            "name": "P94LiveCopy_1.xml",
+            "path": "/P94LiveDir/"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A28_delete_file_gone",
+      "expected": "condition",
+      "status": "pass",
+      "detail": {
+        "files": [
+          ".DS_Store",
+          "AtlasFixture_HD.png",
+          "AtlasFixture_Huge.png",
+          "AtlasFixture_Probe.png",
+          "AtlasFixture_Small.png",
+          "Blue.png",
+          "BridgeFixture.xml",
+          "BridgeTestButton.xml",
+          "BridgeTextTest.xml",
+          "Component1.xml",
+          "P94LiveDir/P94LiveCopy.xml",
+          "P94LiveDir/P94LiveCopy_1.xml",
+          "P94LiveHost.xml",
+          "Red.png"
+        ]
+      }
+    },
+    {
+      "step": "A29_persist_artifact",
+      "action": "rename+move",
+      "expected": "success",
+      "status": "pass",
+      "result": {
+        "name": "P94LivePersistRenamed",
+        "path": "/P94LiveDir/",
+        "manifest": [
+          {
+            "tag": "component",
+            "id": "kxw4c",
+            "name": "P94LiveHost.xml",
+            "path": "/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4d",
+            "name": "P94LiveCopy.xml",
+            "path": "/P94LiveDir/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4e",
+            "name": "P94LiveCopy_1.xml",
+            "path": "/P94LiveDir/"
+          },
+          {
+            "tag": "component",
+            "id": "kxw4f",
+            "name": "P94LivePersistRenamed.xml",
+            "path": "/P94LiveDir/"
+          }
+        ],
+        "files": [
+          ".DS_Store",
+          "AtlasFixture_HD.png",
+          "AtlasFixture_Huge.png",
+          "AtlasFixture_Probe.png",
+          "AtlasFixture_Small.png",
+          "Blue.png",
+          "BridgeFixture.xml",
+          "BridgeTestButton.xml",
+          "BridgeTextTest.xml",
+          "Component1.xml",
+          "P94LiveDir/P94LiveCopy.xml",
+          "P94LiveDir/P94LiveCopy_1.xml",
+          "P94LiveDir/P94LivePersistRenamed.xml",
+          "P94LiveHost.xml",
+          "Red.png"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "total": 38,
+    "pass": 38,
+    "fail": 0,
+    "unexpected": 0
+  },
+  "manifest": [
+    {
+      "tag": "component",
+      "id": "7vc10",
+      "name": "Component1.xml",
+      "path": "/"
+    },
+    {
+      "tag": "image",
+      "id": "p93m1",
+      "name": "Red.png",
+      "path": "/"
+    },
+    {
+      "tag": "image",
+      "id": "p93m2",
+      "name": "Blue.png",
+      "path": "/"
+    },
+    {
+      "tag": "component",
+      "id": "p93m3",
+      "name": "BridgeTestButton.xml",
+      "path": "/"
+    },
+    {
+      "tag": "component",
+      "id": "mvx64",
+      "name": "BridgeTextTest.xml",
+      "path": "/"
+    },
+    {
+      "tag": "component",
+      "id": "fix01",
+      "name": "BridgeFixture.xml",
+      "path": "/"
+    },
+    {
+      "tag": "image",
+      "id": "x5h75",
+      "name": "AtlasFixture_Small.png",
+      "path": "/"
+    },
+    {
+      "tag": "image",
+      "id": "x5h76",
+      "name": "AtlasFixture_HD.png",
+      "path": "/"
+    },
+    {
+      "tag": "image",
+      "id": "x5h77",
+      "name": "AtlasFixture_Huge.png",
+      "path": "/"
+    },
+    {
+      "tag": "image",
+      "id": "n4yz8",
+      "name": "AtlasFixture_Probe.png",
+      "path": "/"
+    },
+    {
+      "tag": "component",
+      "id": "kxw4c",
+      "name": "P94LiveHost.xml",
+      "path": "/"
+    },
+    {
+      "tag": "component",
+      "id": "kxw4d",
+      "name": "P94LiveCopy.xml",
+      "path": "/P94LiveDir/"
+    },
+    {
+      "tag": "component",
+      "id": "kxw4e",
+      "name": "P94LiveCopy_1.xml",
+      "path": "/P94LiveDir/"
+    },
+    {
+      "tag": "component",
+      "id": "kxw4f",
+      "name": "P94LivePersistRenamed.xml",
+      "path": "/P94LiveDir/"
+    }
+  ],
+  "files": [
+    ".DS_Store",
+    "AtlasFixture_HD.png",
+    "AtlasFixture_Huge.png",
+    "AtlasFixture_Probe.png",
+    "AtlasFixture_Small.png",
+    "Blue.png",
+    "BridgeFixture.xml",
+    "BridgeTestButton.xml",
+    "BridgeTextTest.xml",
+    "Component1.xml",
+    "P94LiveDir/P94LiveCopy.xml",
+    "P94LiveDir/P94LiveCopy_1.xml",
+    "P94LiveDir/P94LivePersistRenamed.xml",
+    "P94LiveHost.xml",
+    "Red.png"
+  ],
+  "afterRestart": {
+    "schemaVersion": "1.0",
+    "kind": "fgui-bridge-p9-4-live-report",
+    "generatedAt": "2026-10-20T19:16:27.951388+08:00",
+    "phase": "after-restart",
+    "editor": "FairyGUI Editor 6.1.4 (macOS)",
+    "project": "/Volumes/HardM2App/fgui-agent-bridge/sample",
+    "package": "Package1",
+    "steps": [
+      {
+        "step": "B1_persist_item_exists_after_restart",
+        "expected": "condition",
+        "status": "pass",
+        "detail": {
+          "items": [
+            "P94D1Dir",
+            "P94LiveDir",
+            "Component1",
+            "Red",
+            "Blue",
+            "BridgeTestButton",
+            "BridgeTextTest",
+            "BridgeFixture",
+            "AtlasFixture_Small",
+            "AtlasFixture_HD",
+            "AtlasFixture_Huge",
+            "AtlasFixture_Probe",
+            "P94LiveHost",
+            "P94LiveCopy",
+            "P94LiveCopy_1",
+            "P94LivePersistRenamed"
+          ]
+        }
+      },
+      {
+        "step": "B2_persist_item_path_after_restart",
+        "expected": "condition",
+        "status": "pass",
+        "detail": {
+          "path": "/P94LiveDir/"
+        }
+      },
+      {
+        "step": "B3_persist_file_after_restart",
+        "expected": "condition",
+        "status": "pass",
+        "detail": {
+          "files": [
+            ".DS_Store",
+            "AtlasFixture_HD.png",
+            "AtlasFixture_Huge.png",
+            "AtlasFixture_Probe.png",
+            "AtlasFixture_Small.png",
+            "Blue.png",
+            "BridgeFixture.xml",
+            "BridgeTestButton.xml",
+            "BridgeTextTest.xml",
+            "Component1.xml",
+            "P94LiveDir/P94LiveCopy.xml",
+            "P94LiveDir/P94LiveCopy_1.xml",
+            "P94LiveDir/P94LivePersistRenamed.xml",
+            "P94LiveHost.xml",
+            "Red.png"
+          ]
+        }
+      },
+      {
+        "step": "B4_manifest_after_restart",
+        "expected": "condition",
+        "status": "pass",
+        "detail": {
+          "manifest": [
+            {
+              "tag": "component",
+              "id": "kxw4c",
+              "name": "P94LiveHost.xml",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "kxw4d",
+              "name": "P94LiveCopy.xml",
+              "path": "/P94LiveDir/"
+            },
+            {
+              "tag": "component",
+              "id": "kxw4e",
+              "name": "P94LiveCopy_1.xml",
+              "path": "/P94LiveDir/"
+            },
+            {
+              "tag": "component",
+              "id": "kxw4f",
+              "name": "P94LivePersistRenamed.xml",
+              "path": "/P94LiveDir/"
+            }
+          ]
+        }
+      },
+      {
+        "step": "B5_deleted_item_stays_deleted",
+        "expected": "condition",
+        "status": "pass",
+        "detail": {
+          "manifest": [
+            {
+              "tag": "component",
+              "id": "kxw4c",
+              "name": "P94LiveHost.xml",
+              "path": "/"
+            },
+            {
+              "tag": "component",
+              "id": "kxw4d",
+              "name": "P94LiveCopy.xml",
+              "path": "/P94LiveDir/"
+            },
+            {
+              "tag": "component",
+              "id": "kxw4e",
+              "name": "P94LiveCopy_1.xml",
+              "path": "/P94LiveDir/"
+            },
+            {
+              "tag": "component",
+              "id": "kxw4f",
+              "name": "P94LivePersistRenamed.xml",
+              "path": "/P94LiveDir/"
+            }
+          ]
+        }
+      },
+      {
+        "step": "B6_cleanup_dir",
+        "action": "delete_package_item",
+        "expected": "rejected",
+        "status": "pass",
+        "error": "delete_package_item 失败：未找到指定 FairyGUI 资源，请提供 url，或 packageName 与 itemName/itemPath",
+        "errorCode": "target_not_found"
+      },
+      {
+        "step": "B7_cleanup_complete",
+        "expected": "condition",
+        "status": "pass",
+        "detail": {
+          "manifest": [],
+          "files": [
+            ".DS_Store",
+            "AtlasFixture_HD.png",
+            "AtlasFixture_Huge.png",
+            "AtlasFixture_Probe.png",
+            "AtlasFixture_Small.png",
+            "Blue.png",
+            "BridgeFixture.xml",
+            "BridgeTestButton.xml",
+            "BridgeTextTest.xml",
+            "Component1.xml",
+            "Red.png"
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "total": 7,
+      "pass": 7,
+      "fail": 0,
+      "unexpected": 0
+    }
+  }
+}

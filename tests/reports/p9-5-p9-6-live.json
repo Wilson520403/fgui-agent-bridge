@@ -1,0 +1,540 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "fgui-bridge-p9-5-p9-6-live-report",
+  "editor": "FairyGUI Editor 6.1.4 (macOS)",
+  "project": "/Volumes/HardM2App/fgui-agent-bridge/sample",
+  "package": "Package1",
+  "sourceImage": {
+    "path": "/tmp/fgui_p96/p96_big.png",
+    "size": "2560x1440 RGBA（带 alpha）"
+  },
+  "notes": [
+    "宿主缺陷①（本次真机实测，与本次改动无关）：编辑器把 scale 写成 3 位小数（scale=\"0.333\"）。写 scaleX=0.3333 会「写成功但过不了 Bridge 的 XML 严格比对」，报「验证失败：xml」。这轮用可精确表示的 0.333 验证「浮点属性不被整数化」。",
+    "宿主缺陷②（本次真机实测）：在 sample 工程里**新增文本节点**后，编辑器会在检视器里抛 NullReferenceException 并停摆主循环，桥接随即失联（请求一直排队没人认领）。空文本、有无字体都一样；导入一个真实 .ttf 也不解决。因此：① insert_text 的取整回报用「响应 + 磁盘 XML」取证（响应已回、磁盘已落）；② set_text_style 改用夹具里**本来就存在**的文本节点（BridgeFixture / n2_fix01 / txtLabel）验证，验证完把宽度改回 202，夹具快照不受影响。",
+    "阶段顺序是刻意排的：所有不含文本的路径先跑完，文本路径单独一轮，且每一步结果立即落盘，避免编辑器挂死吃掉前面的证据。"
+  ],
+  "steps": [
+    {
+      "step": "status",
+      "editorOnline": true,
+      "pluginVersion": "0.8.23",
+      "versionMatch": true
+    },
+    {
+      "step": "A1_create_float_size",
+      "requested": {
+        "width": 172.5,
+        "height": 44.25
+      },
+      "rounded": [
+        {
+          "property": "width",
+          "from": 172.5,
+          "to": 172
+        },
+        {
+          "property": "height",
+          "from": 44.25,
+          "to": 44
+        }
+      ],
+      "itemSize": {
+        "width": 172,
+        "height": 44
+      }
+    },
+    {
+      "step": "A2_insert_object_float_xy",
+      "requested": {
+        "x": 50.5,
+        "y": 115.8
+      },
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        },
+        {
+          "property": "y",
+          "from": 115.8,
+          "to": 115
+        }
+      ],
+      "after": {
+        "x": 50,
+        "y": 115
+      },
+      "xml": {
+        "id": "n0_nd4j",
+        "name": "probeImage",
+        "type": "image",
+        "resourceURL": "ui://qsezbqtwp93m1",
+        "font": "",
+        "fontSize": 12,
+        "color": "#FFFFFF",
+        "align": "left",
+        "vAlign": "top",
+        "autoSize": "none",
+        "letterSpacing": 0,
+        "lineGap": 0,
+        "bold": false,
+        "italic": false,
+        "underline": false,
+        "strokeSize": 1,
+        "strokeColor": "#000000",
+        "shadowX": 0,
+        "shadowY": 0,
+        "shadowColor": "#000000",
+        "shadow": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "alpha": 1,
+        "visible": true,
+        "touchable": true,
+        "grayed": false,
+        "text": "",
+        "icon": "",
+        "x": 50,
+        "y": 115,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "step": "A3_set_property_float_x",
+      "requested": 50.5,
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        }
+      ],
+      "after": 50,
+      "xmlX": 50
+    },
+    {
+      "step": "phase_a_aborted",
+      "error": "set_property 失败：验证失败：xml"
+    },
+    {
+      "step": "phase_a_aborted",
+      "error": "create_component 失败：资源已存在：P95LiveCheck"
+    },
+    {
+      "step": "A1_create_float_size",
+      "requested": {
+        "width": 172.5,
+        "height": 44.25
+      },
+      "rounded": [
+        {
+          "property": "width",
+          "from": 172.5,
+          "to": 172
+        },
+        {
+          "property": "height",
+          "from": 44.25,
+          "to": 44
+        }
+      ],
+      "itemSize": {
+        "width": 172,
+        "height": 44
+      }
+    },
+    {
+      "step": "A2_insert_object_float_xy",
+      "requested": {
+        "x": 50.5,
+        "y": 115.8
+      },
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        },
+        {
+          "property": "y",
+          "from": 115.8,
+          "to": 115
+        }
+      ],
+      "after": {
+        "x": 50,
+        "y": 115
+      },
+      "xml": {
+        "id": "n0_nd4j",
+        "name": "probeImage",
+        "type": "image",
+        "resourceURL": "ui://qsezbqtwp93m1",
+        "font": "",
+        "fontSize": 12,
+        "color": "#FFFFFF",
+        "align": "left",
+        "vAlign": "top",
+        "autoSize": "none",
+        "letterSpacing": 0,
+        "lineGap": 0,
+        "bold": false,
+        "italic": false,
+        "underline": false,
+        "strokeSize": 1,
+        "strokeColor": "#000000",
+        "shadowX": 0,
+        "shadowY": 0,
+        "shadowColor": "#000000",
+        "shadow": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "alpha": 1,
+        "visible": true,
+        "touchable": true,
+        "grayed": false,
+        "text": "",
+        "icon": "",
+        "x": 50,
+        "y": 115,
+        "width": 64,
+        "height": 64
+      }
+    },
+    {
+      "step": "A3_set_property_float_x",
+      "requested": 50.5,
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        }
+      ],
+      "after": 50,
+      "xmlX": 50
+    },
+    {
+      "step": "A4_set_property_float_scale",
+      "requested": 0.333,
+      "rounded": null,
+      "after": 0.3330000042915344,
+      "xmlScaleX": 0.333
+    },
+    {
+      "step": "A5_disk_xml",
+      "file": "/Volumes/HardM2App/fgui-agent-bridge/sample/assets/Package1/P95LiveCheck.xml",
+      "componentSize": "172,44",
+      "imageTag": "<image id=\"n0_nd4j\" name=\"probeImage\" src=\"p93m1\" fileName=\"Red.png\" xy=\"50,115\" scale=\"0.333,1\" />"
+    },
+    {
+      "step": "A6_import_with_max_size",
+      "scaled": {
+        "from": {
+          "width": 2560,
+          "height": 1440,
+          "type": "png"
+        },
+        "to": {
+          "width": 1024,
+          "height": 576
+        },
+        "scale": 0.4,
+        "maxSize": 1024,
+        "kernel": "lanczos3",
+        "source": "FairyEditor.VImage"
+      },
+      "atlasPrecheck": {
+        "original": {
+          "fit": "exceeds",
+          "binding": "maxWidth",
+          "requiredWidth": 2560,
+          "requiredHeight": 1440,
+          "width": 2560,
+          "height": 1440,
+          "constraintsSource": "global",
+          "atlas": "",
+          "maxWidth": 2048,
+          "maxHeight": 2048
+        },
+        "effective": {
+          "fit": "fits",
+          "binding": "",
+          "requiredWidth": 1024,
+          "requiredHeight": 576,
+          "width": 1024,
+          "height": 576,
+          "constraintsSource": "global",
+          "atlas": "",
+          "maxWidth": 2048,
+          "maxHeight": 2048
+        },
+        "note": "effective 是本次真正入库的尺寸判定；unknown 表示约束不足，不等于放行"
+      },
+      "atlasAssignment": {
+        "verdict": "leave-as-is",
+        "applied": false,
+        "shouldBeAlone": false,
+        "reason": "fits",
+        "fit": "fits",
+        "binding": "",
+        "constraintsSource": "global",
+        "atlas": "",
+        "width": 1024,
+        "height": 576,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "",
+        "retiredRuleWouldAssignAlone": false,
+        "requiredWidth": 1024,
+        "requiredHeight": 576,
+        "limitWidth": 2048,
+        "limitHeight": 2048,
+        "padding": 0,
+        "square": false,
+        "rotation": false
+      },
+      "item": {
+        "name": "P96LiveCheck",
+        "width": 1024,
+        "height": 576,
+        "folderAtlas": ""
+      },
+      "persisted": true,
+      "strength": "disk"
+    },
+    {
+      "step": "A8_import_without_max_size",
+      "scaled": null,
+      "atlasPrecheck": {
+        "original": {
+          "fit": "exceeds",
+          "binding": "maxWidth",
+          "requiredWidth": 2560,
+          "requiredHeight": 1440,
+          "width": 2560,
+          "height": 1440,
+          "constraintsSource": "global",
+          "atlas": "",
+          "maxWidth": 2048,
+          "maxHeight": 2048
+        },
+        "effective": {
+          "fit": "exceeds",
+          "binding": "maxWidth",
+          "requiredWidth": 2560,
+          "requiredHeight": 1440,
+          "width": 2560,
+          "height": 1440,
+          "constraintsSource": "global",
+          "atlas": "",
+          "maxWidth": 2048,
+          "maxHeight": 2048
+        },
+        "note": "effective 是本次真正入库的尺寸判定；unknown 表示约束不足，不等于放行"
+      },
+      "atlasAssignment": {
+        "verdict": "assign-alone",
+        "applied": true,
+        "shouldBeAlone": true,
+        "reason": "exceeds-pack-limits",
+        "fit": "exceeds",
+        "binding": "maxWidth",
+        "constraintsSource": "global",
+        "atlas": "",
+        "width": 2560,
+        "height": 1440,
+        "folderAtlasInMemory": "",
+        "folderAtlasOnDisk": "",
+        "retiredRuleWouldAssignAlone": true,
+        "requiredWidth": 2560,
+        "requiredHeight": 1440,
+        "limitWidth": 2048,
+        "limitHeight": 2048,
+        "padding": 0,
+        "square": false,
+        "rotation": false
+      },
+      "item": {
+        "width": 2560,
+        "height": 1440
+      },
+      "folderAtlas": "alone"
+    },
+    {
+      "step": "A9_reject_invalid_max_size",
+      "rejected": true,
+      "error": "import_image 失败：maxSize 必须是 1 到 32768 之间的整数"
+    },
+    {
+      "step": "phase_a_aborted",
+      "error": "record() takes 2 positional arguments but 3 were given"
+    },
+    {
+      "step": "A7_disk_image",
+      "images": [
+        {
+          "file": "sample/assets/Package1/P96LiveCheck.png",
+          "exists": true,
+          "width": 1024,
+          "height": 576,
+          "mode": "RGBA",
+          "hasAlpha": true,
+          "alphaExtrema": [
+            0,
+            255
+          ],
+          "nonTransparentRatio": 0.999,
+          "bytes": 61085,
+          "note": "缩放后入库的磁盘文件：尺寸 1024x576、保留 alpha、不是全透明"
+        }
+      ]
+    },
+    {
+      "step": "B1_insert_text_float",
+      "requested": {
+        "x": 50.5,
+        "y": -10.5,
+        "width": 172.5,
+        "height": 44.25
+      },
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        },
+        {
+          "property": "y",
+          "from": -10.5,
+          "to": -10
+        },
+        {
+          "property": "width",
+          "from": 172.5,
+          "to": 172
+        },
+        {
+          "property": "height",
+          "from": 44.25,
+          "to": 44
+        }
+      ],
+      "insertedName": "probeText"
+    },
+    {
+      "step": "phase_b_aborted",
+      "error": "等待 FairyGUI 响应超时：set_text_style (120.0s)。请求可能已被编辑器认领并继续执行，重试前请先检查状态，避免写操作重复执行。"
+    },
+    {
+      "step": "C1_insert_text_float_with_font",
+      "requested": {
+        "x": 50.5,
+        "y": -10.5,
+        "width": 172.5,
+        "height": 44.25
+      },
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        },
+        {
+          "property": "y",
+          "from": -10.5,
+          "to": -10
+        },
+        {
+          "property": "width",
+          "from": 172.5,
+          "to": 172
+        },
+        {
+          "property": "height",
+          "from": 44.25,
+          "to": 44
+        }
+      ],
+      "insertedName": "probeText"
+    },
+    {
+      "step": "phase_c_aborted",
+      "error": "等待 FairyGUI 响应超时：set_text_style (120.0s)。请求可能已被编辑器认领并继续执行，重试前请先检查状态，避免写操作重复执行。"
+    },
+    {
+      "step": "D1_insert_text_empty_float",
+      "requested": {
+        "x": 50.5,
+        "y": -10.5,
+        "width": 172.5,
+        "height": 44.25
+      },
+      "rounded": [
+        {
+          "property": "x",
+          "from": 50.5,
+          "to": 50
+        },
+        {
+          "property": "y",
+          "from": -10.5,
+          "to": -10
+        },
+        {
+          "property": "width",
+          "from": 172.5,
+          "to": 172
+        },
+        {
+          "property": "height",
+          "from": 44.25,
+          "to": 44
+        }
+      ],
+      "insertedName": "probeText"
+    },
+    {
+      "step": "phase_d_aborted",
+      "error": "等待 FairyGUI 响应超时：set_text_style (120.0s)。请求可能已被编辑器认领并继续执行，重试前请先检查状态，避免写操作重复执行。"
+    },
+    {
+      "step": "E1_set_text_style_float_width",
+      "requested": 172.5,
+      "rounded": [
+        {
+          "property": "width",
+          "from": 172.5,
+          "to": 172
+        }
+      ],
+      "persisted": true,
+      "strength": "disk",
+      "xmlWidth": 172
+    },
+    {
+      "step": "E2_restore_original_width",
+      "requested": 202,
+      "rounded": null,
+      "persisted": true,
+      "xmlWidth": 202
+    }
+  ],
+  "generatedAt": "2026-10-21T10:23:12+08:00",
+  "verdict": {
+    "P9-5": "通过。几何整数化在 6 个写入入口中的 5 个已在真机验证：create_component(172.5→172)、insert_object(50.5→50 / 115.8→115)、set_property(x 50.5→50)、insert_text(x/y/width/height 四项同时回报)、set_text_style(width 172.5→172，写在既有文本节点上)。磁盘 XML 同步为整数：size=\"172,44\"、xy=\"50,-10\"、xy=\"50,115\"。浮点属性（scaleX=0.333）不被整数化，响应无 rounded 字段。",
+    "P9-6": "通过。import_image 的 max_size=1024：scaled 回报 2560x1440 → 1024x576、scale 0.4、kernel lanczos3、source FairyEditor.VImage；atlasPrecheck.original=exceeds(maxWidth)、effective=fits；入库后 atlasAssignment=leave-as-is（**不再被标 alone**）。落盘文件实测 1024x576、RGBA、alpha 极值 (0,255)、99.9% 像素非透明。对照组（不带 max_size）：precheck=exceeds、atlasAssignment=assign-alone。负路径：maxSize=0 被拒（invalid_argument，maxSize 必须是 1 到 32768 之间的整数）。",
+    "未覆盖": "set_text_style 的 width/height/x/y 之外字段；import_image 的 replace 策略 + max_size 组合；JPG 源图缩放（探针只覆盖 PNG）；包级多图集配置下的 atlasPrecheck.atlas-not-determined 分支；Windows 版 Editor。"
+  },
+  "regression": {
+    "sample 夹具（真机）": "scripts/phase0_fixture.py verify --live → 21/21 通过（插件 0.8.23，versionMatch=true）",
+    "最终构建复验": "类型化宿主调用定稿后重新编译、同步、冷重启，再跑一次 import_image --max-size 1024：scaled 2560x1440→1024x576、precheck.effective=fits、atlasAssignment=leave-as-is、item 1024x576、persisted=true",
+    "样例工程状态": "已清干净：只剩 4 个组件 + 6 张图，与提交的夹具快照一致",
+    "模拟宿主": "276/276",
+    "Python 单测": "60 项通过",
+    "tsc": "0 error，main.js 与 main.ts 同步（重编译无差异）"
+  }
+}

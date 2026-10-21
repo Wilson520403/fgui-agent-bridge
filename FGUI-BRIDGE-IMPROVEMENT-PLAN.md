@@ -991,7 +991,7 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 
 ## Phase 9：设计稿还原实测暴露的原语缺口（2026-10-20 新增）
 
-**状态：P9-0 与 P9-1 已于 0.8.20 落地并真机验收**（证据 `tests/reports/p9-0-p9-1-probe-live.json`、`p9-0-insert-text-live.json`、`p9-1-text-style-live.json`）；**P9-2 已于 0.8.21 落地并真机验收，但按实测结论降级为『扩展级 override』**（证据 `tests/reports/p9-2-override-probe-live.json`、`p9-2-override-live.json`）；**P9-3 已于 0.8.21 落地并真机验收**（证据 `tests/reports/p9-3-replace-instance-live.json`）；P9-4 ~ P9-6 仍未实现。本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
+**状态：P9-0 与 P9-1 已于 0.8.20 落地并真机验收**（证据 `tests/reports/p9-0-p9-1-probe-live.json`、`p9-0-insert-text-live.json`、`p9-1-text-style-live.json`）；**P9-2 已于 0.8.21 落地并真机验收，但按实测结论降级为『扩展级 override』**（证据 `tests/reports/p9-2-override-probe-live.json`、`p9-2-override-live.json`）；**P9-3 已于 0.8.21 落地并真机验收**（证据 `tests/reports/p9-3-replace-instance-live.json`）；**P9-4 已于 0.8.22 落地并真机验收**（证据 `tests/reports/p9-4-probe-live.json`、`tests/reports/p9-4-package-item-live.json`）；**P9-5 与 P9-6 已于 0.8.23 落地并真机验收**（证据 `tests/reports/p9-5-geometry-probe-live.json`、`tests/reports/p9-6-image-scale-probe-live.json`、`tests/reports/p9-5-p9-6-live.json`）——两轮活体探针 + 24 步功能验收矩阵全部通过，sample 夹具真机回归 21/21。本节不是推演，是一次端到端实拼的账单：蓝湖「设置拳谱」
 （2560×1440 4×，逻辑 640×360）→ `Package1/SettingRoutine`，62 个对象（46 图片 + 16 文本），
 像素一致 91.16%。过程中每一处"做不下去"都记下了当时的报错原文与绕路方案。
 
@@ -1198,6 +1198,9 @@ Image/Loader 只能换 image 资源，类型不匹配在写入前拒绝。
 
 ### P9-4 包资源 `delete` / `rename` / `move` / `duplicate`
 
+**状态：已按真机结论落地（0.8.22）**。证据 `tests/reports/p9-4-probe-live.json`（四轮活体探针）、
+`tests/reports/p9-4-package-item-live.json`（31 项动作矩阵 + 7 项冷重启回读）。
+
 **现象。** Bridge 只能删 MovieClip（`remove_movieclip`），组件和图片没有任何删除入口。
 本次探测产生的 8 个废弃组件（`LblTest`/`BtnTest`/`Txt14C`/`Title10`/`Title15`/`Num24`/
 `Score30`/`Muted14`）只能关掉编辑器、手改 `package.xml` + 删 XML 文件收尾——这类"只能带外
@@ -1213,23 +1216,67 @@ FPackage.DuplicateItem(pi, newName)
 FPackage.CreateFolder(cname, path, autoRename)
 ```
 
-**要考虑的边界。**
+**真机 6.1.4 实测结论（与原文假设不同的地方已改正）。**
 
-- [ ] `DeleteItem` 的返回值语义（疑似受影响引用数），必须先把"被引用中的资源"挡在门外，
-      或至少要求 `--force` 并回读引用图（P8-2 的 `query_references` 正好复用）；
-- [ ] 删除是否连带删磁盘文件、是否可撤销（大概率不可撤销，需 `undoable:false` 显式声明）；
-- [ ] `RenameItem` 后所有引用是否需要同步（`replace_references` 只改引用不改名，两者不重叠）。
+- [x] **`DeleteItem` 的返回值不是受影响引用数**，而是**本次实际移除的条目数**
+      （目录含递归子项）。实测：被 3 处引用的组件返回 1、含 1 个子项的目录返回 2、
+      已被连带删掉的资源再单独删返回 0。原文「疑似受影响引用数」的猜测被证伪。
+- [x] **原生 `DeleteItem` 不拦引用**：被引用的资源照样删，引用方 XML 里留悬空 `src`。
+      所以 Bridge 自己前置挡：查引用图 → 有引用就拒绝；确要删时显式
+      `allow_dangling_references=true`，并在响应里回报所有会变悬空的引用位置。
+- [x] **磁盘引用图只反映已保存的内容**：插入实例后不保存文档时，引用只活在打开文档的内存里，
+      `DependencyQuery` 查不到——但保存那一刻就会落盘成悬空 `src`。
+      删除检查因此额外扫一层打开文档的内存引用。
+- [x] **删除连带删磁盘文件**，且**不可撤销**：四个原语都**立即落盘**、**不进 Agent 撤销栈**，
+      响应恒为 `undoable:false`、`writePath:package-model`、`strength` 上限 `disk`。
+- [x] **`RenameItem` 后引用不会自动同步**：id 不变、磁盘文件真改名、`package.xml` 立即落盘，
+      但**引用方文档的 `fileName` 属性不更新**（变旧）。运行时按 id 解析不受影响，属半状态；
+      Bridge 只回报 `staleFileNameSlots`，不做带外改写——让那些文档经编辑器重新保存一次即可补齐。
+- [x] **`MoveItem` 要求目标目录已存在**，否则原生抛 `KeyNotFoundException`（栈极长不可读）。
+      Bridge 前置校验，默认 `create_folders=true` 先建目录再移动，并回报 `folderCreated`。
+- [x] **文档开着也能改名/移动**：文档的 `packageItem.file` 跟着新路径走，之后保存不会把旧名写回来。
+      **删除**才要求目标文档先关闭（未保存改动一律拒绝）。
+- [x] `DuplicateItem` 返回**新 id** 的资源，磁盘文件一并复制，原资源不受影响；
+      同名策略 `error` / `auto_rename`。
+
+**落地形态。** 四个动作：`delete_package_item` / `rename_package_item` / `move_package_item` /
+`duplicate_package_item`（MCP `fgui_*`、CLI `delete-item` / `rename-item` / `move-item` /
+`duplicate-item`）。目录用 `--package` + `--item-path` 寻址（目录没有 `ui://` URL）。
 
 ### P9-5 坐标/尺寸的整数语义
 
+**状态：已按真机结论落地（0.8.23）**。证据 `tests/reports/p9-5-geometry-probe-live.json`（活体探针原始数据）。
+
 **现象。** FGUI 只存整数，设计稿是 4× 下采样出来的浮点（如 `50.5, 115.8`、`172.5×44.25`）。
-当前 `set_property` 接受浮点并在落盘时被静默取整，`get_tree` 读回来才看见差异——
+旧版 `set_property` 接受浮点并在落盘时被静默取整，`get_tree` 读回来才看见差异——
 Agent 无从判断"是我传错了还是编辑器截断了"。
 
-**建议。** 写入时对 `x/y/width/height` 做显式取整并在响应里回报 `rounded: {from, to}`，
-让调用方知道发生了精度损失，而不是靠事后比对发现。
+**真机 6.1.4 实测结论（与原文假设不同的地方已改正）。**
+
+- [x] **截断发生在序列化层，不是赋值层**：对象模型的 x/y 是 **float**，
+      `115.8` 在内存里读回是 `115.80000305175781`（float32 精度）——
+      写完立刻读回**看不到**任何异常，只有落盘后的 XML 才是整数。
+      这正是"写成功、读回来也对、存盘后变了"这种说不清的失败的来源。
+- [x] **取整规则是向零截断**：50.5→50、-10.5→-10、49.5→49、115.8→115。
+      不是四舍五入（49.5→49），不是地板（-10.5→-10 不是 -11）。
+- [x] **组件根尺寸更早一步就被截断**：`CreateComponentItem(172.5, 44.25)` 当场变成 172×44，
+      磁盘 `size="172,44"`——写侧不主动量化，编辑器也会替你截。
+- [x] **scale/rotation/pivot/alpha 是真浮点**，落盘保留小数
+      （`scale="0.333,1.5"` `rotation="45.6"` `pivot="0.5,0.25"` `alpha="0.333"`），
+      不在整数化范围内。原文"对 x/y/width/height 做显式取整"的范围判断是对的。
+
+**落地形态。** 写入前显式做**同一套**向零截断，并在响应里回报 `rounded: [{property, from, to}]`；
+没有精度损失时不出现该字段。覆盖 `set_property` / `insert_object` / `insert_text` /
+`set_text_style` / `create_component` / `create_button` 六个入口。
+量化后尺寸为 0 的组件创建请求直接拒绝，不造 0×0 的组件。
+
+- [x] **浮点属性不在量化范围内**：实测 `scaleX=0.333` 原样落盘（`scale="0.333,1"`），响应无 `rounded`。
+- [x] **但编辑器只给 scale 留 3 位小数**（`scale="0.333"`）：写 `0.3333` 会「写成功但过不了
+      XML 严格比对」，报 `验证失败：xml`。这是既有行为，与本次量化无关，但用的人一定会撞上。
 
 ### P9-6 大图导入与图集建议内置
+
+**状态：已按真机结论落地（0.8.23）**。证据 `tests/reports/p9-6-image-scale-probe-live.json`（活体探针原始数据）。
 
 **现象。** 直接导入 4× 切图后 `analyze_atlas_fit` 报：
 
@@ -1241,9 +1288,34 @@ bg_tint   2560×1440  exceeds  already-alone
 即"要么降采样、要么单独图集"。当前要靠 Agent 自己先算一遍再决定导入分辨率，
 而 `import_image` 没有任何缩放/校验钩子。
 
-- [ ] `import_image` 增加可选 `max_size`（超过则等比缩放到该尺寸再入库，并在响应里回报缩放比）；
-- [ ] 导入时（或 `--check-atlas`）直接给出"该图会进不了默认图集"的前置提示，
-      复用 `analyze_atlas_fit` 的判定，而不是等 Agent 事后发现。
+**真机 6.1.4 实测结论。**
+
+- [x] **缩放不需要外部图像库**：编辑器自带 `FairyEditor.VImage`
+      （`New(file)` / `Resize(w, h, Kernel)` / `Save(file)` / `Dispose()`，
+      `Kernel` 有 LANCZOS2/LANCZOS3）。实测 2560×1440 的 RGBA PNG 缩到 1024×576 后
+      alpha 通道保留、类型仍是 png；重新 `ImportResource` 入库后
+      包内 `FPackageItem.width/height` 就是 1024×576。
+- [x] **图集判定完全按入库后的像素尺寸走**：缩放后装得进默认图集就不该再被标 `alone`——
+      所以缩放必须发生在入库之前，判定必须复用同一套函数，不能各判各的。
+
+**落地形态。**
+
+- [x] `import_image` 增加可选 `max_size`（长边上限，1~32768；CLI `--max-size`）：
+      超过则等比缩放后再入库，响应回报 `scaled: {from, to, scale, maxSize, kernel}`。
+      缩放用的临时文件入库后立即删除，不留在工程里。
+- [x] 导入响应新增 `atlasPrecheck`：**入库前**的前置提示，分 `original`（原图尺寸）与
+      `effective`（真正入库的尺寸）两段，`fit` 取 `fits` / `exceeds` / `unknown`，
+      判定复用 `analyze_atlas_fit` 的同一套约束与 `judgeAtlasFit`。
+      **`unknown` 不是放行**——约束不足或落点不明时不下结论。
+
+**真机验收补充（两条宿主缺陷，都不是 Bridge 的 bug）**
+
+- [x] **缩放后的图不再被标 alone**：2560×1440 缩到 1024×576 后入库，
+      `atlasAssignment=leave-as-is`（原尺寸则 `assign-alone`）——判定确实按入库后的尺寸走。
+- [x] 落盘文件实测 1024×576、RGBA、alpha 极值 (0,255)、99.9% 像素非透明（缩放没有把图压成空白）。
+- [x] **在没有任何字体资源的工程里新增文本节点会让编辑器崩**：`NullReferenceException` 抛在检视器里、
+      主循环停摆、桥接随即失联。空文本、有无字体、导入真实 `.ttf` 都一样。
+      推论：这类工程里要验文本能力，得用**本来就存在**的文本节点。
 
 ### 执行顺序与关系
 
@@ -1251,8 +1323,8 @@ bg_tint   2560×1440  exceeds  already-alone
 | --- | --- | --- |
 | 1 | P9-0 + P9-1 | 文本是设计还原里最高频、当前最畸形的部分；两条合起来能把"文本必须做成组件"这个畸形结构拆掉 |
 | 2 | P9-2 + P9-3 | 组件实例真正可参数化，才谈得上组件化复用 |
-| 3 | P9-4 | 收尾卫生；没有它，任何试错都会在工程里留垃圾 |
-| 4 | P9-5 + P9-6 | 精度与图集属于体验优化，不阻塞主流程 |
+| 3 | P9-4（0.8.22 已落地） | 收尾卫生；没有它，任何试错都会在工程里留垃圾 |
+| 4 | P9-5 + P9-6（0.8.23 已落地） | 精度与图集属于体验优化，不阻塞主流程；但「设计稿 4× 下采样浮点」与「切图直接超图集上限」是设计还原里最高频的两处静默失真 |
 
 > 本节全部条目都应在 `sample` 隔离工程上先跑通再合入，并且**每条都要有真机证据**
 > （`tests/reports/p9-*.json`）。P9-0 尤其要先做探针：`CreateChild` 是否触发
@@ -1394,8 +1466,9 @@ Bridge 改进应在独立仓库完成：
 | 7 | ~~分支能力~~ **0.8.18 已完成** | P8-6 | 新增域，多端/多版本项目价值高。`list_branches` / `create_branch` / `switch_branch` 与分支寻址读写均已落地并真机验收（模拟宿主 230/230，证据 `tests/reports/p8-6-branches-live.json`）；剩余仅 `RenameBranch` / `RemoveBranch` / 分支发布 |
 | 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影。**0.8.19 已完成审计切片 `find_unused` / `find_duplicate`（免 Pro 授权，真机证据 `tests/reports/p8-7-audit-live.json`）**；i18n / 原生撤销栈 / 控制台可见性 / 全文搜索待做 |
 | 9 | ~~`insert_text` + 文本样式补全（`bold`/`stroke`/`shadow`）~~ **0.8.20 已完成** | P9-0 / P9-1 | 活体探针钉死了三件规划里没写对的事：`CreateChild` 缺 `AddChild` 不落盘、描边宽度属性是 `strokeSize` 不是 `stroke`、投影偏移是 `shadowOffset="x,y"`。已实现 `insert_text` 与 `set_text_style` 扩展（模拟宿主 248/248，真机 6.1.4 验收 `strength=reload`，证据 `tests/reports/p9-0-insert-text-live.json`、`p9-1-text-style-live.json`） |
-| 10 | 实例子对象写回 / 组件实例换资源 / 包资源增删 | P9-2 / P9-3 / P9-4 | 决定"组件能不能被参数化"。不做，每个文案变体都要单独建一个组件类型；不做增删，任何试错都会在工程里留垃圾 |
-| 11 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 10 项提供可靠写能力后再做，否则返工 |
+| 10 | 实例子对象写回 / 组件实例换资源 / 包资源增删 | P9-2 / P9-3 / P9-4 | 决定"组件能不能被参数化"。不做，每个文案变体都要单独建一个组件类型；不做增删，任何试错都会在工程里留垃圾。**P9-2/P9-3 已于 0.8.21、P9-4 已于 0.8.22 落地并真机验收** |
+| 11 | 几何整数语义 + 导入缩放与图集前置判定 | P9-5 / P9-6 | **0.8.23 已落地并真机验收**（探针 2 份 + 功能验收矩阵 24 步，夹具真机回归 21/21）。没有它，4× 下采样浮点坐标会被编辑器静默截断、切图超限要等 `analyze_atlas_fit` 事后才发现 |
+| 12 | Lanhu manifest 与映射报告 | Phase 6 | 依赖前 11 项提供可靠写能力后再做，否则返工 |
 
 **Phase 6 顺延到第 11 位**是本轮重排的主要变化：Lanhu 工作流的价值取决于 Bridge 写能力
 与验证能力的可靠性，在 P8-0 落地前先做映射工作流，等于把不稳定的能力放大到批量场景。
