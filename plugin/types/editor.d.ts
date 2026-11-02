@@ -90,6 +90,20 @@ declare namespace CS {
             CopyFrom($p0: any): any;
             constructor(): any;
         }
+        class Clipboard extends System.Object {
+            static TEXT: string;
+            static OBJECT_KEY: string;
+            static ITEM_KEY: string;
+            static TIMELINE_KEY: string;
+            static CONTROLLER_KEY: string;
+            static RELATION_PROPS_KEY: string;
+            static GEAR_PROPS_KEY: string;
+            static SetText($p0: any): any;
+            static GetText(): any;
+            static GetValue($p0: any): any;
+            static SetValue($p0: any, $p1: any): any;
+            static HasFormat($p0: any): any;
+        }
         class ComponentTemplates extends System.Object {
             CreateLabelItem($p0: any, $p1: any, $p2: any, $p3: any): any;
             CreateButtonItem($p0: any, $p1: any, $p2: any, $p3: any, $p4: any, $p5: any, $p6: any, $p7: any, $p8: any, $p9: any, $p10: any, $p11: any): any;

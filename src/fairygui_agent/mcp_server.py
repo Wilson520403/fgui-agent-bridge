@@ -1234,6 +1234,72 @@ def fgui_set_controller(
 
 
 @mcp.tool()
+def fgui_create_group(
+    targets: list[dict[str, str]],
+    name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """将至少两个根组件下未锁定、未分组对象组成组（0.8.24+）。
+
+    targets 每项仅含 id/name/path 一个定位键。原生操作把成员移到显示列表末尾。
+    返回成员归属和前后顺序；不进 Agent 撤销栈。save 保存整个当前文档；
+    external_reload 需 save=True，关闭重开验证顺序、名称和成员归属。
+    """
+    params: dict[str, Any] = {"targets": targets, "save": save, "verify": verify, "externalReload": external_reload}
+    if name is not None:
+        params["name"] = name
+    return _client.call("create_group", params)
+
+
+@mcp.tool()
+def fgui_duplicate_object(
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    name: str | None = None,
+    dx: float = 0,
+    dy: float = 0,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """原生复制一个根组件下未锁定、未分组的普通对象（0.8.24+）。
+
+    保留序列化属性、资源引用、Relation/Gear/扩展覆盖，生成新 ID，追加到末尾。
+    dx/dy 是相对源坐标偏移，默认原位；几何向零截断并返回 rounded。
+    不支持组或组成员，不进 Agent 撤销栈。save 保存整个当前文档；
+    external_reload 需 save=True，并验证副本序列化内容和显示列表。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "dx": dx, "dy": dy,
+                              "save": save, "verify": verify, "externalReload": external_reload}
+    if name is not None:
+        params["name"] = name
+    return _client.call("duplicate_object", params)
+
+
+@mcp.tool()
+def fgui_adjust_depth(
+    index: int,
+    object_id: str | None = None,
+    object_path: str | None = None,
+    object_name: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """将一个根组件下未锁定、未分组对象移到绝对层级 index（0.8.24+）。
+
+    index 从 0 开始，0 是最底层；不能越界或落入分组块。
+    返回完整前后顺序，不进 Agent 撤销栈；save 保存整个当前文档。
+    external_reload 需 save=True，关闭重开验证持久化顺序。
+    """
+    return _client.call("adjust_depth", {"target": _target(object_id, object_path, object_name), "index": index,
+                                        "save": save, "verify": verify, "externalReload": external_reload})
+
+
+@mcp.tool()
 def fgui_insert_text(
     text: str = "",
     x: float = 0,

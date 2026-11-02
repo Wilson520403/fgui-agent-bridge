@@ -1,0 +1,637 @@
+{
+  "schemaVersion": 1,
+  "editor": "FairyGUI Editor 6.1.4 macOS",
+  "project": "temporary sample copy",
+  "note": "Raw probe used obj.group, which is unavailable; group membership is stored in groupId and XML group. Production uses groupId.",
+  "steps": [
+    {
+      "params": {
+        "op": "depth",
+        "ids": [
+          "n2_fix01"
+        ],
+        "index": 0
+      },
+      "result": {
+        "before": [
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          }
+        ],
+        "after": [
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          },
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          }
+        ],
+        "error": null,
+        "selection": [
+          "n2_fix01"
+        ],
+        "modified": true,
+        "xml": "FairyGUI.Utils.XML"
+      }
+    },
+    {
+      "params": {
+        "op": "depth",
+        "ids": [
+          "n2_fix01"
+        ],
+        "index": 7
+      },
+      "result": {
+        "before": [
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          },
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          }
+        ],
+        "after": [
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          }
+        ],
+        "error": null,
+        "selection": [
+          "n2_fix01"
+        ],
+        "modified": true,
+        "xml": "FairyGUI.Utils.XML"
+      }
+    },
+    {
+      "params": {
+        "op": "copy",
+        "ids": [
+          "n0_fix01"
+        ],
+        "save": true
+      },
+      "result": {
+        "before": [
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          }
+        ],
+        "after": [
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          },
+          {
+            "id": "n8_m9h4",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          }
+        ],
+        "error": null,
+        "selection": [
+          "n8_m9h4"
+        ],
+        "modified": false,
+        "xml": "FairyGUI.Utils.XML"
+      }
+    },
+    {
+      "params": {
+        "op": "group",
+        "ids": [
+          "n0_fix01",
+          "n1_fix01"
+        ],
+        "save": true
+      },
+      "result": {
+        "before": [
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          },
+          {
+            "id": "n8_m9h4",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          }
+        ],
+        "after": [
+          {
+            "id": "n3_fix01",
+            "name": "btnMain",
+            "type": "component",
+            "x": 40,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n4_fix01",
+            "name": "listItems",
+            "type": "list",
+            "x": 440,
+            "y": 130,
+            "group": null
+          },
+          {
+            "id": "n5_fix01",
+            "name": "grpChildA",
+            "type": "graph",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n6_fix01",
+            "name": "grpChildB",
+            "type": "text",
+            "x": 40,
+            "y": 288,
+            "group": null
+          },
+          {
+            "id": "n7_fix01",
+            "name": "grpRows",
+            "type": "group",
+            "x": 40,
+            "y": 240,
+            "group": null
+          },
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel",
+            "type": "text",
+            "x": 200,
+            "y": 48,
+            "group": null
+          },
+          {
+            "id": "n8_m9h4",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n0_fix01",
+            "name": "imgIcon",
+            "type": "image",
+            "x": 40,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n1_fix01",
+            "name": "loaderItem",
+            "type": "loader",
+            "x": 120,
+            "y": 40,
+            "group": null
+          },
+          {
+            "id": "n9_m9h4",
+            "name": "n9",
+            "type": "group",
+            "x": 40,
+            "y": 40,
+            "group": null
+          }
+        ],
+        "error": null,
+        "selection": [
+          "n9_m9h4"
+        ],
+        "modified": false,
+        "xml": "FairyGUI.Utils.XML"
+      }
+    }
+  ]
+}

@@ -1,0 +1,2868 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-02T10:50:49.882703+08:00",
+  "editor": "FairyGUI Editor 6.1.4 (macOS)",
+  "bridgeVersion": "0.8.24",
+  "project": "temporary isolated sample copy",
+  "steps": [
+    {
+      "label": "duplicate image",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n0_fix01"
+        },
+        "name": "Copy_image",
+        "dx": 17.8,
+        "dy": -9.5,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n8_cbss",
+          "name": "Copy_image",
+          "type": "image",
+          "resourceURL": "ui://qsezbqtwp93m2",
+          "x": 57,
+          "y": 30,
+          "width": 64,
+          "height": 64,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": ""
+        },
+        "sourceId": "n0_fix01",
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss"
+        ],
+        "rounded": [
+          {
+            "property": "x",
+            "from": 57.8,
+            "to": 57
+          },
+          {
+            "property": "y",
+            "from": 30.5,
+            "to": 30
+          }
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "image",
+          "attrs": {
+            "fileName": "Blue.png",
+            "id": "n8_cbss",
+            "name": "Copy_image",
+            "size": "64,64",
+            "src": "p93m2",
+            "xy": "57,30"
+          },
+          "children": [
+            {
+              "tag": "gearDisplay",
+              "attrs": {
+                "controller": "ctrlState",
+                "pages": "0"
+              },
+              "children": []
+            },
+            {
+              "tag": "relation",
+              "attrs": {
+                "sidePair": "",
+                "target": ""
+              },
+              "children": []
+            }
+          ]
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "duplicate loader",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n1_fix01"
+        },
+        "name": "Copy_loader",
+        "dx": 17.8,
+        "dy": -9.5,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n9_cbss",
+          "name": "Copy_loader",
+          "type": "loader",
+          "resourceURL": null,
+          "x": 137,
+          "y": 30,
+          "width": 64,
+          "height": 64,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": true,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": "ui://qsezbqtwp93m1"
+        },
+        "sourceId": "n1_fix01",
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss"
+        ],
+        "rounded": [
+          {
+            "property": "x",
+            "from": 137.8,
+            "to": 137
+          },
+          {
+            "property": "y",
+            "from": 30.5,
+            "to": 30
+          }
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "loader",
+          "attrs": {
+            "align": "center",
+            "id": "n9_cbss",
+            "name": "Copy_loader",
+            "size": "64,64",
+            "url": "ui://qsezbqtwp93m1",
+            "vAlign": "middle",
+            "xy": "137,30"
+          },
+          "children": [
+            {
+              "tag": "gearDisplay",
+              "attrs": {
+                "controller": "ctrlState",
+                "pages": "1"
+              },
+              "children": []
+            },
+            {
+              "tag": "relation",
+              "attrs": {
+                "sidePair": "",
+                "target": ""
+              },
+              "children": []
+            }
+          ]
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "duplicate text",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "name": "Copy_text",
+        "dx": 17.8,
+        "dy": -9.5,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n10_cbss",
+          "name": "Copy_text",
+          "type": "text",
+          "resourceURL": null,
+          "x": 217,
+          "y": 38,
+          "width": 202,
+          "height": 44,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "Fixture Label",
+          "icon": ""
+        },
+        "sourceId": "n2_fix01",
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss"
+        ],
+        "rounded": [
+          {
+            "property": "x",
+            "from": 217.8,
+            "to": 217
+          },
+          {
+            "property": "y",
+            "from": 38.5,
+            "to": 38
+          }
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "text",
+          "attrs": {
+            "color": "#ffffff",
+            "fontSize": "32",
+            "id": "n10_cbss",
+            "name": "Copy_text",
+            "size": "202,44",
+            "text": "Fixture Label",
+            "xy": "217,38"
+          },
+          "children": []
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "duplicate component",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n3_fix01"
+        },
+        "name": "Copy_component",
+        "dx": 17.8,
+        "dy": -9.5,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n11_cbss",
+          "name": "Copy_component",
+          "type": "component",
+          "resourceURL": "ui://qsezbqtwp93m3",
+          "x": 57,
+          "y": 120,
+          "width": 200,
+          "height": 80,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": true,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": "",
+          "opaque": true,
+          "childCount": 2
+        },
+        "sourceId": "n3_fix01",
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss"
+        ],
+        "rounded": [
+          {
+            "property": "x",
+            "from": 57.8,
+            "to": 57
+          },
+          {
+            "property": "y",
+            "from": 120.5,
+            "to": 120
+          }
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "component",
+          "attrs": {
+            "fileName": "BridgeTestButton.xml",
+            "id": "n11_cbss",
+            "name": "Copy_component",
+            "src": "p93m3",
+            "xy": "57,120"
+          },
+          "children": []
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "duplicate list",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n4_fix01"
+        },
+        "name": "Copy_list",
+        "dx": 17.8,
+        "dy": -9.5,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n12_cbss",
+          "name": "Copy_list",
+          "type": "list",
+          "resourceURL": null,
+          "x": 457,
+          "y": 120,
+          "width": 320,
+          "height": 240,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": true,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": "",
+          "opaque": true,
+          "childCount": 2
+        },
+        "sourceId": "n4_fix01",
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss"
+        ],
+        "rounded": [
+          {
+            "property": "x",
+            "from": 457.8,
+            "to": 457
+          },
+          {
+            "property": "y",
+            "from": 120.5,
+            "to": 120
+          }
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "list",
+          "attrs": {
+            "align": "none",
+            "autoClearItems": "true",
+            "colGap": "8",
+            "defaultItem": "ui://qsezbqtwp93m3",
+            "id": "n12_cbss",
+            "name": "Copy_list",
+            "overflow": "scroll",
+            "size": "320,240",
+            "vAlign": "none",
+            "xy": "457,120"
+          },
+          "children": [
+            {
+              "tag": "relation",
+              "attrs": {
+                "sidePair": "",
+                "target": ""
+              },
+              "children": []
+            },
+            {
+              "tag": "item",
+              "attrs": {},
+              "children": []
+            },
+            {
+              "tag": "item",
+              "attrs": {},
+              "children": []
+            }
+          ]
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "duplicate instance override",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n3_fix01"
+        },
+        "name": "Copy_variant",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n13_cbss",
+          "name": "Copy_variant",
+          "type": "component",
+          "resourceURL": "ui://qsezbqtwp93m3",
+          "x": 40,
+          "y": 130,
+          "width": 200,
+          "height": 80,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": true,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "Variant",
+          "icon": "",
+          "opaque": true,
+          "childCount": 2
+        },
+        "sourceId": "n3_fix01",
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss"
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "component",
+          "attrs": {
+            "fileName": "BridgeTestButton.xml",
+            "id": "n13_cbss",
+            "name": "Copy_variant",
+            "src": "p93m3",
+            "xy": "40,130"
+          },
+          "children": [
+            {
+              "tag": "Button",
+              "attrs": {
+                "title": "Variant",
+                "titleColor": "#333333",
+                "titleFontSize": "28"
+              },
+              "children": []
+            }
+          ]
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "depth to bottom via MCP",
+      "action": "adjust_depth",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "index": 0,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "adjust_depth",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": null,
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n2_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss"
+        ],
+        "orderAfter": [
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss"
+        ],
+        "groups": [
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ]
+        ],
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "depth to top",
+      "action": "adjust_depth",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "index": 13,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "adjust_depth",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": null,
+        "orderBefore": [
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01"
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ]
+        ],
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "depth no-op",
+      "action": "adjust_depth",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "index": 13,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "adjust_depth",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": null,
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01"
+        ],
+        "orderAfter": [
+          "n0_fix01",
+          "n1_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01"
+        ],
+        "groups": [
+          [
+            "n0_fix01",
+            ""
+          ],
+          [
+            "n1_fix01",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ]
+        ],
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "group reverse input",
+      "action": "create_group",
+      "params": {
+        "targets": [
+          {
+            "id": "n1_fix01"
+          },
+          {
+            "id": "n0_fix01"
+          }
+        ],
+        "name": "Pair",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "create_group",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n14_cbss",
+          "name": "Pair",
+          "type": "group",
+          "resourceURL": null,
+          "x": 40,
+          "y": 40,
+          "width": 144,
+          "height": 64,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "",
+          "icon": ""
+        },
+        "orderBefore": [
+          "n0_fix01",
+          "n1_fix01",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01"
+        ],
+        "orderAfter": [
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss"
+        ],
+        "groups": [
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n0_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n1_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n14_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n14_cbss",
+            "Pair"
+          ]
+        ],
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "reject duplicate targets",
+      "action": "create_group",
+      "params": {
+        "targets": [
+          {
+            "id": "n2_fix01"
+          },
+          {
+            "id": "n2_fix01"
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject one member",
+      "action": "create_group",
+      "params": {
+        "targets": [
+          {
+            "id": "n2_fix01"
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject invalid target shape",
+      "action": "create_group",
+      "params": {
+        "targets": [
+          {
+            "id": "n2_fix01",
+            "name": "txtLabel"
+          },
+          {
+            "id": "n3_fix01"
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject member copy",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n0_fix01"
+        }
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject root copy",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "path": "root"
+        }
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject group copy",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n7_fix01"
+        }
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject out of range",
+      "action": "adjust_depth",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "index": 999
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject fractional index",
+      "action": "adjust_depth",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "index": 0.5
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject group destination",
+      "action": "adjust_depth",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "index": 14
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject reload without save",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "externalReload": true
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject reload without verification",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "save": true,
+        "verify": false,
+        "externalReload": true
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject invalid offset",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "dx": "2"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject empty name",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "name": ""
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "reject locked source",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        }
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "unchanged": true
+    },
+    {
+      "label": "duplicate via MCP by path",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "path": "root/txtLabel"
+        },
+        "name": "Mcp_copy",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n15_cbss",
+          "name": "Mcp_copy",
+          "type": "text",
+          "resourceURL": null,
+          "x": 200,
+          "y": 48,
+          "width": 202,
+          "height": 44,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "Fixture Label",
+          "icon": ""
+        },
+        "sourceId": "n2_fix01",
+        "orderBefore": [
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss"
+        ],
+        "orderAfter": [
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss",
+          "n15_cbss"
+        ],
+        "groups": [
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n0_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n1_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n14_cbss",
+            ""
+          ],
+          [
+            "n15_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n14_cbss",
+            "Pair"
+          ],
+          [
+            "n15_cbss",
+            "Mcp_copy"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "text",
+          "attrs": {
+            "color": "#ffffff",
+            "fontSize": "32",
+            "id": "n15_cbss",
+            "name": "Mcp_copy",
+            "size": "202,44",
+            "text": "Fixture Label",
+            "xy": "200,48"
+          },
+          "children": []
+        },
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "CLI adjust-depth by name",
+      "passed": true,
+      "result": {
+        "action": "adjust_depth",
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": null,
+        "orderBefore": [
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss",
+          "n15_cbss"
+        ],
+        "orderAfter": [
+          "n15_cbss",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss"
+        ],
+        "groups": [
+          [
+            "n15_cbss",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n0_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n1_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n14_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n15_cbss",
+            "Mcp_copy"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n14_cbss",
+            "Pair"
+          ]
+        ],
+        "reload": {
+          "performed": true,
+          "url": "ui://qsezbqtwfix01",
+          "closeStrategy": "CloseDocuments"
+        },
+        "xmlReadback": true
+      }
+    },
+    {
+      "label": "unsaved copy",
+      "action": "duplicate_object",
+      "params": {
+        "target": {
+          "id": "n2_fix01"
+        },
+        "name": "Discard_me",
+        "save": false
+      },
+      "passed": true,
+      "result": {
+        "action": "duplicate_object",
+        "saved": false,
+        "persisted": false,
+        "strength": "none",
+        "writePath": "document-model",
+        "undoable": false,
+        "created": {
+          "id": "n16_cbss",
+          "name": "Discard_me",
+          "type": "text",
+          "resourceURL": null,
+          "x": 200,
+          "y": 48,
+          "width": 202,
+          "height": 44,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0,
+          "alpha": 1,
+          "visible": true,
+          "touchable": false,
+          "grayed": false,
+          "enabled": true,
+          "locked": false,
+          "text": "Fixture Label",
+          "icon": ""
+        },
+        "sourceId": "n2_fix01",
+        "orderBefore": [
+          "n15_cbss",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss"
+        ],
+        "orderAfter": [
+          "n15_cbss",
+          "n3_fix01",
+          "n4_fix01",
+          "n5_fix01",
+          "n6_fix01",
+          "n7_fix01",
+          "n8_cbss",
+          "n9_cbss",
+          "n10_cbss",
+          "n11_cbss",
+          "n12_cbss",
+          "n13_cbss",
+          "n2_fix01",
+          "n0_fix01",
+          "n1_fix01",
+          "n14_cbss",
+          "n16_cbss"
+        ],
+        "groups": [
+          [
+            "n15_cbss",
+            ""
+          ],
+          [
+            "n3_fix01",
+            ""
+          ],
+          [
+            "n4_fix01",
+            ""
+          ],
+          [
+            "n5_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n6_fix01",
+            "n7_fix01"
+          ],
+          [
+            "n7_fix01",
+            ""
+          ],
+          [
+            "n8_cbss",
+            ""
+          ],
+          [
+            "n9_cbss",
+            ""
+          ],
+          [
+            "n10_cbss",
+            ""
+          ],
+          [
+            "n11_cbss",
+            ""
+          ],
+          [
+            "n12_cbss",
+            ""
+          ],
+          [
+            "n13_cbss",
+            ""
+          ],
+          [
+            "n2_fix01",
+            ""
+          ],
+          [
+            "n0_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n1_fix01",
+            "n14_cbss"
+          ],
+          [
+            "n14_cbss",
+            ""
+          ],
+          [
+            "n16_cbss",
+            ""
+          ]
+        ],
+        "names": [
+          [
+            "n15_cbss",
+            "Mcp_copy"
+          ],
+          [
+            "n3_fix01",
+            "btnMain"
+          ],
+          [
+            "n4_fix01",
+            "listItems"
+          ],
+          [
+            "n5_fix01",
+            "grpChildA"
+          ],
+          [
+            "n6_fix01",
+            "grpChildB"
+          ],
+          [
+            "n7_fix01",
+            "grpRows"
+          ],
+          [
+            "n8_cbss",
+            "Copy_image"
+          ],
+          [
+            "n9_cbss",
+            "Copy_loader"
+          ],
+          [
+            "n10_cbss",
+            "Copy_text"
+          ],
+          [
+            "n11_cbss",
+            "Copy_component"
+          ],
+          [
+            "n12_cbss",
+            "Copy_list"
+          ],
+          [
+            "n13_cbss",
+            "Copy_variant"
+          ],
+          [
+            "n2_fix01",
+            "txtLabel"
+          ],
+          [
+            "n0_fix01",
+            "imgIcon"
+          ],
+          [
+            "n1_fix01",
+            "loaderItem"
+          ],
+          [
+            "n14_cbss",
+            "Pair"
+          ],
+          [
+            "n16_cbss",
+            "Discard_me"
+          ]
+        ],
+        "copyPayload": {
+          "tag": "text",
+          "attrs": {
+            "color": "#ffffff",
+            "fontSize": "32",
+            "id": "n16_cbss",
+            "name": "Discard_me",
+            "size": "202,44",
+            "text": "Fixture Label",
+            "xy": "200,48"
+          },
+          "children": []
+        },
+        "reload": null,
+        "xmlReadback": false
+      }
+    },
+    {
+      "label": "discard unsaved copy",
+      "passed": true,
+      "diskUnchanged": true
+    }
+  ],
+  "limitations": [
+    "Windows Editor not tested",
+    "No Unity runtime or published-package acceptance",
+    "Whole groups and group members intentionally unsupported"
+  ],
+  "projectHandshake": {
+    "versionMatch": true,
+    "projectId": "7bef4574dd2a41babed66d372f6e62a1",
+    "packageCount": 1
+  },
+  "finalDiskSha256": "179a67c96c7d53416c407a6fdc3f08f5b83b384ed55768996bd684adc0c2ffb0",
+  "finalDocument": {
+    "url": "ui://qsezbqtwfix01",
+    "title": "BridgeFixture",
+    "itemId": "fix01",
+    "itemName": "BridgeFixture",
+    "packageName": "Package1",
+    "branch": "",
+    "isBranchRoot": false,
+    "modified": false,
+    "savedVersion": 76,
+    "selectionCount": 0,
+    "transitionCount": 1,
+    "transitions": [
+      {
+        "name": "transFade",
+        "frameRate": 60,
+        "maxFrame": 30,
+        "itemCount": 2,
+        "autoPlay": false
+      }
+    ]
+  },
+  "passed": 28,
+  "total": 28
+}

@@ -7,7 +7,7 @@ FairyGUI Agent Bridge 在 FairyGUI Editor 和 AI 编程助手之间架了一座�
 [![CI](https://github.com/Wilson520403/fgui-agent-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Wilson520403/fgui-agent-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`v0.8.23` · 队列协议 `1.0` · 基于 FairyGUI Editor `6.1.4` 开发与验证
+`v0.8.24` · 队列协议 `1.0` · 基于 FairyGUI Editor `6.1.4` 开发与验证
 
 > 本仓库只包含 Bridge 本身。FairyGUI 工程里只安装一个轻量插件，MCP/CLI 始终从本仓库运行。如果使用支持 Skill 的 Agent，还可以额外安装 Skill，让 AI 更熟悉 FairyGUI 的操作约定。
 
@@ -228,13 +228,14 @@ uv run fgui-agent publish --scope active
 
 ## MCP 工具一览
 
-共 69 个工具，按用途分组：
+共 72 个工具，按用途分组：
 
 | 类别 | 工具名称 | 功能描述 |
 | :--- | :--- | :--- |
 | **连接与定位** | `fgui_status`、`fgui_ping`、`fgui_use_project`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items` | 检查连接状态、切换工程、查看包列表与包内资源（`fgui_list_items` 可指定 `branch`） |
 | **分支** | `fgui_list_branches`、`fgui_create_branch`、`fgui_switch_branch` | 列出、创建和切换工程分支，切换后读写都会落在对应分支 |
 | **文档与对象** | `fgui_open_document`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_select_object`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_property`、`fgui_set_instance_override`、`fgui_remove_object` | 打开组件、查看对象树、选中元件、修改属性及增删显示对象；`fgui_insert_text` 创建文本对象（0.8.20+）；`fgui_set_instance_override` 写实例的扩展级 override（0.8.21+） |
+| **分组、复制与层级** | `fgui_create_group`、`fgui_duplicate_object`、`fgui_adjust_depth` | 将对象组成组、复制显示对象、调整绝对层级（0.8.24+） |
 | **资源创建/导入** | `fgui_create_component`、`fgui_create_button`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound` | 新建组件/按钮，从本地绝对路径导入图片、字体与声音；`fgui_import_image` 支持 `max_size` 按长边等比缩放后入库（0.8.23+） |
 | **包资源管理** | `fgui_delete_package_item`、`fgui_rename_package_item`、`fgui_move_package_item`、`fgui_duplicate_package_item` | 删除/改名/移动/复制包内资源（0.8.22+），删除前会检查引用 |
 | **MovieClip 序列帧** | `fgui_create_movieclip`、`fgui_get_movieclip`、`fgui_update_movieclip`、`fgui_remove_movieclip` | 从本地图片序列创建或更新序列帧动画（帧直接嵌入 `.jta`） |
@@ -262,6 +263,21 @@ uv run fgui-agent publish --scope active
 
 属性修改和 Transition 编辑会进入 Agent 撤销栈，可以用 `fgui_undo` / `fgui_redo` 回退。结构创建、删除和资源导入不属于可逆操作；`discard` 只放弃当前文档未保存的修改，不能替代 `undo` 或 `save`。
 
+### 分组、复制与层级（0.8.24+）
+
+- `fgui_create_group(targets, name?)`：至少两个目标，每项用 `id`、`path` 或唯一 `name` 定位。成员按原显示列表顺序移到末尾，新组追加在成员之后。
+- `fgui_duplicate_object(target, name?, dx=0, dy=0)`：复制显示对象，生成新 ID 并追加到末尾。保留节点序列化内容（文字样式、资源引用、Relation、Gear、实例扩展覆盖和 List 条目）；`dx/dy` 相对源坐标偏移，默认原位，最终坐标向零截断并回报 `rounded`。组件内的 Transition 属文档级内容，不随单个对象复制。
+- `fgui_adjust_depth(target, index)`：移到零基绝对层级，`0` 为最底层。返回 `orderBefore` / `orderAfter`，索引不能越界或落入已有分组块。
+- 三者首版均只接受**根组件下未锁定、未分组的普通对象**。组、组成员、根节点和嵌套组件内部对象会被拒绝；操作前须退出时间轴和组内编辑模式。
+- 默认仅修改内存，支持 `save` / `verify` / `external_reload`。`save` 保存整个当前文档；验证覆盖显示顺序、名称、组成员归属，复制还比对完整节点序列化内容。`external_reload` 需 `save=true`，关闭重开后再次比对。
+- 不进 Agent 撤销栈（`undoable:false`）；失败不自动回滚，未保存时可用 `discard` 放弃当前文档全部未保存修改。操作恢复原选择集和可读取的编辑器剪贴板槽位；关闭重开会重建文档选择状态。
+
+```bash
+uv run fgui-agent --project /PATH/TO/PROJECT create-group '[{"id":"n1"},{"id":"n2"}]' --name Header --save --external-reload
+uv run fgui-agent --project /PATH/TO/PROJECT duplicate-object --id n3 --new-name Copy --dx 20 --save --external-reload
+uv run fgui-agent --project /PATH/TO/PROJECT adjust-depth --id n3 0 --save --external-reload
+```
+
 ### 包资源管理（0.8.22+）
 
 `fgui_delete_package_item`、`fgui_rename_package_item`、`fgui_move_package_item`、`fgui_duplicate_package_item`
@@ -278,7 +294,7 @@ uv run fgui-agent publish --scope active
 - FairyGUI 只存整数：`x`/`y`/`width`/`height` 落盘时**向零截断**（`50.5`→`50`、`-10.5`→`-10`），组件根尺寸更早一步就被截断。
 - Bridge 写入前做同一套截断，响应里的 `rounded` 列出每一处精度损失（`[{property, from, to}]`），没有损失时不会出现该字段。
 - `scale`、`rotation`、`pivot`、`alpha` 是真浮点，保留小数。
-- 几何写入入口：`fgui_set_property`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_text_style`、`fgui_create_component`、`fgui_create_button`。
+- 几何写入入口：`fgui_set_property`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_text_style`、`fgui_create_component`、`fgui_create_button`，以及 `fgui_duplicate_object` 的最终坐标。
 
 ### 编辑器侧的两个老坑
 

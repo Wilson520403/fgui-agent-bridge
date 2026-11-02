@@ -49,6 +49,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 
 - 新建组件使用 `fgui_create_component`，明确包、目录、名称、宽高、导出状态和冲突策略。
 - 创建文本对象用 `fgui_insert_text`（0.8.20+）：FGUI 的文本是 displayList 里的裸节点、不是包资源，`fgui_insert_object` 插不进来。传 `text`/`x`/`y`/`name` 与 `style`（font、fontSize、color、align、vAlign、autoSize、letterSpacing、lineGap、width、height、bold、italic、underline、strokeSize、strokeColor、shadowX、shadowY、shadowColor）。**三个编辑器侧约束由 Bridge 自动兜住**：① 给 `width`/`height` 会先写 `autoSize=none`，否则编辑器在保存时按文字自然尺寸重算；② 没给 `font` 但给了 `fontSize` 时自动补编辑器默认字体 `UIDefault`（否则编辑器抛 NullReferenceException）；③ 给描边/投影参数会自动打开对应开关（编辑器只在开关打开时序列化这些属性）。文本的 `id` 由编辑器生成且只读，只能回读；同名时编辑器可能自行改名，响应里的 `inserted.nameAdjusted` 会显式回报。
+- 分组/复制/层级（0.8.24+）：`fgui_create_group` 传至少两个 `targets`（每项仅含 `id`/`name`/`path` 之一）与可选 `name`；`fgui_duplicate_object` 传 `target`、可选 `name`、相对偏移 `dx`/`dy`（默认 0）；`fgui_adjust_depth` 传 `target` 与零基绝对 `index`（0 为最底层）。首版只接受根组件下未锁定、未分组普通对象，拒绝根节点、组、组成员、嵌套内部对象和时间轴/组内编辑状态；层级目的地也不能落入组块。原生分组会把成员按原顺序移到末尾，复制会追加新 ID 的副本，两者均显式回报新节点与前后显示顺序。三者支持 `save`/`verify`/`external_reload`；验证顺序、名称、成员归属，复制还比对序列化节点（含 Relation/Gear/扩展覆盖/List 条目，文档级 Transition 不随对象复制）。坐标偏移先相加，再按整数几何截断并回报 `rounded`。不进 Agent 撤销栈；默认不保存，`save` 保存整个当前文档，未保存可 `discard`。操作会恢复原选择集与可读取的编辑器剪贴板槽位；external reload 会重建选择状态。
 - 图片、字体与声音导入使用绝对本地路径（`fgui_import_image` / `fgui_import_font` / `fgui_import_sound`）；`replace` 是磁盘覆盖，不能由文档放弃回滚。
 - 图片导入可带 `max_size`（长边上限，1~32768；CLI `--max-size`）：源图长边超过它就**先等比缩放再入库**，缩放用编辑器自带能力、alpha 保留，响应 `scaled` 回报 `{from,to,scale,maxSize,kernel}`。响应里的 `atlasPrecheck` 是**入库前**的图集前置判定，分 `original` 与 `effective` 两段，`fit` 取 `fits`/`exceeds`/`unknown`——**`unknown` 不是放行**（约束不足或落点不明）。缩放必须在入库前完成：图集归属按入库后的像素尺寸判定。
 - **编辑器侧两条硬事实**：①`scale` 只保留 3 位小数（磁盘 `scale="0.333"`），写 `scaleX=0.3333` 会「写成功但过不了落盘比对」，报 `验证失败：xml`；②**工程里没有任何字体资源时不要新增文本节点**——编辑器会在检视器里抛 `NullReferenceException` 并停摆主循环，桥接随即失联（空文本、有无字体都一样），要验文本能力就用工程里**本来就有**的文本节点。
@@ -214,8 +215,8 @@ git diff --check
 - 图片、声音、MovieClip 图片序列导入和发布是磁盘写入，执行前确认目标和冲突策略。Transition 声明式/关键帧修改与已有 MovieClip 更新/替换可由 Agent undo/redo 回退；全新资源创建、声音/图片导入和删除不能。
 - MovieClip 删除即使传 `force=true` 也会执行引用检查；仍被组件使用时必须先移除引用。
 - 包资源删除同样先做引用检查：磁盘引用（已保存内容）与打开文档的内存引用都算；确要留下悬空引用必须显式传 `allow_dangling_references=true`，响应会回报悬空位置。包资源改名/移动/删除都不可撤销（不进 Agent 撤销栈），失败不自动回滚。
-- `replace_object_resource` 本轮仅允许 Image 与 Loader，拒绝 Button `state` 替换，避免误将整个按钮组件替换为单一资源。
-- 文本样式修改支持类型与枚举检查，暂不支持自动 external reload。
+- `replace_object_resource` 支持 Image/Loader 换图片和组件实例换源组件；拒绝 Button `state` 替换，根组件不能替换。
+- 文本样式修改支持类型与枚举检查，并支持 `save` / `verify` / `external_reload`；external reload 需要保存且不能关闭验证。
 - `verify_document` 可传入 `target + expected` 执行磁盘 XML 持久化比对，`expected.children` 递归比对对象树；失败响应保留结构化 `error.details`（包含 `stage`、`node`（spec 路径）、expected、actual、differences）。
 - Transition 持久化验证只覆盖 `<transition>` 名称与公开条目数；`upsert_transition` 等操作可在保存前用 `fgui_verify_document` 之外的方式读取 `list_transitions` 做内存级确认，但不要据此声称属性级磁盘持久化。
 - `set_property` 的持久化验证只覆盖已钉住序列化含义的属性（`x`/`y`/`width`/`height`/`scale`/`rotation`/`alpha`/`visible`/`touchable`/`grayed`/`text`/`icon` 及文本样式字段）；其余白名单属性可写入但不进入 `expected`。

@@ -47,6 +47,8 @@ REQUIRED_CAPABILITIES = frozenset(
     }
 )
 
+DOCUMENT_PRIMITIVE_CAPABILITIES = frozenset({"create_group", "duplicate_object", "adjust_depth"})
+
 ANIMATION_CAPABILITIES = frozenset(
     {
         "import_sound",
@@ -305,6 +307,7 @@ class BridgeClient:
         context = self.project_context()
         status = self.ensure_ready()
         optional = {
+            DOCUMENT_PRIMITIVE_CAPABILITIES: ("组件原语", "0.8.24"),
             ANIMATION_CAPABILITIES: ("动画", "0.8.1"),
             TRANSITION_VERIFY_CAPABILITIES: ("Transition 校验", "0.8.15"),
             TRANSITION_KEYFRAME_CAPABILITIES: ("Transition 关键帧写入", "0.8.16"),

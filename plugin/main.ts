@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.23";
+const BRIDGE_VERSION = "0.8.24";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -221,6 +221,7 @@ function writeStatus(): void {
             "select_object",
             "set_property",
             "insert_object",
+            "insert_text", "create_group", "duplicate_object", "adjust_depth",
             "remove_object",
             "save_document",
             "save_all",
@@ -2128,6 +2129,182 @@ function writeVerification(doc: any, obj: any, before: any, after: any, params: 
         writePath: lastWritePath,
         note: `${strengthNote(checked, saved, "仅验证 expected 中的字段；")}失败不自动回滚。`
     };
+}
+
+// 0.8.24: native document primitives. Scope is direct, unlocked, ungrouped
+// children. Groups and their members need block-aware semantics and are rejected.
+function primitiveState(root: any): any {
+    const children = objectChildren(root);
+    return {
+        order: JSON.stringify(children.map(o => String(o.id))),
+        groups: JSON.stringify(children.map(o => [String(o.id), String(o.groupId || "")])),
+        names: JSON.stringify(children.map(o => [String(o.id), String(o.name || "")]))
+    };
+}
+
+function primitiveDiskState(doc: any): any {
+    const parsed = documentXml(doc, doc.content);
+    const nodes = displayListElements(parsed.xml);
+    return { file: parsed.file, values: {
+        order: JSON.stringify(nodes.map(n => String(n.GetAttribute("id") || ""))),
+        groups: JSON.stringify(nodes.map(n => [String(n.GetAttribute("id") || ""), String(n.GetAttribute("group") || "")])),
+        names: JSON.stringify(nodes.map(n => [String(n.GetAttribute("id") || ""), String(n.GetAttribute("name") || "")]))
+    } };
+}
+
+function primitiveNode(doc: any, id: string, disk: boolean): any {
+    const xml = disk ? documentXml(doc, doc.content).xml : doc.Serialize();
+    const node = displayListElements(xml).find(n => String(n.GetAttribute("id")) === id);
+    if (!node) verificationError(disk ? "persistence_failed" : "editor_rejected", "未找到结构操作节点", { stage: disk ? "xml" : "editor", id });
+    return node;
+}
+
+function primitivePayload(node: any, omitIdentity: boolean = false): string {
+    const normalize = (n: any, top: boolean): any => {
+        const raw = xmlAttributes(n);
+        // Never let an unavailable C# dictionary silently prove a clone equal.
+        if (top && !raw.id) verificationError("editor_rejected", "无法读取复制节点的序列化属性", { stage: "editor" });
+        const attrs: any = {};
+        for (const k of Object.keys(raw).sort()) {
+            if (top && omitIdentity && ["id", "name", "xy"].indexOf(k) >= 0) continue;
+            attrs[k] = raw[k];
+        }
+        const children: any[] = [];
+        if (n.elements) for (let i = 0; i < n.elements.Count; i++) children.push(normalize(n.elements.get_Item(i), false));
+        return { tag: String(n.name), attrs, children };
+    };
+    return JSON.stringify(normalize(node, true));
+}
+
+function documentPrimitive(action: string, params: any): any {
+    const doc = getActiveDocument();
+    validateReloadOptions(params, { path: "root" });
+    if (doc.timelineMode || doc.openedGroup)
+        verificationError("invalid_argument", "请先退出时间轴和组内编辑模式", { stage: "input" });
+    const root = doc.content;
+    const beforeChildren = objectChildren(root);
+    const targets = action === "create_group" ? params.targets : [params.target];
+    if (!Array.isArray(targets) || targets.length < (action === "create_group" ? 2 : 1))
+        verificationError("invalid_argument", "create_group 需要至少两个不同目标", { stage: "input" });
+    const selected = targets.map(target => {
+        if (!target || typeof target !== "object" || Array.isArray(target) ||
+            Object.keys(target).length !== 1 || !["id", "name", "path"].some(k => typeof target[k] === "string" && target[k].trim()))
+            verificationError("invalid_argument", "目标必须仅包含一个非空 id/name/path", { stage: "input" });
+        const obj = resolveObject(doc, target);
+        if (beforeChildren.indexOf(obj) < 0 || obj.locked || obj.groupId || String(obj.objectType).toLowerCase() === "group")
+            verificationError("invalid_argument", "仅支持根组件下未锁定、未分组的普通对象；不支持根节点、嵌套子对象或组", { stage: "input", target });
+        return obj;
+    });
+    if (new Set(selected.map(o => String(o.id))).size !== selected.length)
+        verificationError("invalid_argument", "目标不能重复", { stage: "input" });
+    if (params.name !== undefined && (typeof params.name !== "string" || !params.name.trim()))
+        verificationError("invalid_argument", "name 必须是非空字符串", { stage: "input" });
+    if (action === "adjust_depth" && (typeof params.index !== "number" || !Number.isInteger(params.index) || params.index < 0 || params.index >= beforeChildren.length))
+        verificationError("invalid_argument", "index 必须是显示列表范围内的零基整数", { stage: "input", count: beforeChildren.length });
+    // Moving an ordinary node through a group block would split that block.
+    if (action === "adjust_depth") {
+        const destination = beforeChildren[params.index];
+        if (destination.groupId || String(destination.objectType).toLowerCase() === "group")
+            verificationError("invalid_argument", "目标层级位于分组块内，请选择未分组对象的层级", { stage: "input" });
+    }
+    const source = selected[0];
+    let geometry: any = { values: {}, rounded: [] };
+    if (action === "duplicate_object") {
+        for (const k of ["dx", "dy"]) if (params[k] !== undefined && (typeof params[k] !== "number" || !Number.isFinite(params[k])))
+            verificationError("invalid_argument", `${k} 必须是有限数字`, { stage: "input" });
+        geometry = quantizeGeometryFields({ x: Number(source.x) + (params.dx || 0), y: Number(source.y) + (params.dy || 0) }, ["x", "y"]);
+    }
+    const before = primitiveState(root);
+    const sourcePayload = action === "duplicate_object" ? primitivePayload(primitiveNode(doc, String(source.id), false), true) : null;
+    const sourceId = String(source.id);
+    // Preserve the user's selection, including a failure before save/reload.
+    const oldSelection: string[] = [];
+    const selection = doc.GetSelection();
+    for (let i = 0; i < selection.Count; i++) oldSelection.push(String(selection.get_Item(i).id));
+    let created: any = null;
+    let after: any;
+    let copyPayload: string = null;
+    try {
+        doc.UnselectAll();
+        // Native CreateGroup orders members by display-list order.
+        for (const obj of beforeChildren) if (selected.indexOf(obj) >= 0) doc.SelectObject(obj, false, true);
+        if (action === "create_group") doc.CreateGroup();
+        else if (action === "adjust_depth") doc.AdjustDepth(params.index);
+        else {
+            const clipboard = FairyEditor.Clipboard;
+            const text = clipboard.GetText();
+            const keys = [clipboard.OBJECT_KEY, clipboard.ITEM_KEY, clipboard.TIMELINE_KEY, clipboard.CONTROLLER_KEY, clipboard.RELATION_PROPS_KEY, clipboard.GEAR_PROPS_KEY];
+            const values = keys.map(k => clipboard.GetValue(k));
+            try { doc.CopySelection(); doc.Paste(null, false); }
+            finally {
+                clipboard.SetText(text);
+                keys.forEach((k, i) => clipboard.SetValue(k, values[i]));
+            }
+        }
+        const children = objectChildren(root);
+        const added = children.filter(o => !beforeChildren.some(old => String(old.id) === String(o.id)));
+        if (action !== "adjust_depth") {
+            if (added.length !== 1 || (action === "create_group" && String(added[0].objectType).toLowerCase() !== "group"))
+                verificationError("editor_rejected", "原生操作未产生唯一预期节点", { stage: "editor", added: added.map(o => String(o.id)), mutationMayHaveOccurred: true });
+            created = added[0];
+            if (params.name !== undefined) writeObjectProperty(created, "name", params.name);
+            if (action === "duplicate_object") {
+                if (primitivePayload(primitiveNode(doc, String(created.id), false), true) !== sourcePayload)
+                    verificationError("editor_rejected", "复制没有保留源节点的序列化内容", { stage: "editor", mutationMayHaveOccurred: true });
+                writeObjectProperty(created, "x", geometry.values.x);
+                writeObjectProperty(created, "y", geometry.values.y);
+                compareVerification({ x: geometry.values.x, y: geometry.values.y }, { x: Number(created.x), y: Number(created.y) }, "editor", created);
+                copyPayload = primitivePayload(primitiveNode(doc, String(created.id), false));
+            }
+        }
+        const ids = beforeChildren.map(o => String(o.id));
+        let expectedOrder = ids.slice();
+        const groups = JSON.parse(before.groups);
+        const names = JSON.parse(before.names);
+        if (action === "adjust_depth") {
+            expectedOrder.splice(expectedOrder.indexOf(sourceId), 1);
+            expectedOrder.splice(params.index, 0, sourceId);
+        } else if (action === "create_group") {
+            const selectedIds = selected.map(o => String(o.id));
+            expectedOrder = ids.filter(id => selectedIds.indexOf(id) < 0).concat(ids.filter(id => selectedIds.indexOf(id) >= 0), [String(created.id)]);
+            for (const pair of groups) if (selectedIds.indexOf(pair[0]) >= 0) pair[1] = String(created.id);
+        } else expectedOrder.push(String(created.id));
+        if (created) { groups.push([String(created.id), ""]); names.push([String(created.id), params.name === undefined ? String(created.name || "") : params.name]); }
+        const expected: any = {
+            order: JSON.stringify(expectedOrder),
+            groups: JSON.stringify(expectedOrder.map(id => groups.find(p => p[0] === id))),
+            names: JSON.stringify(expectedOrder.map(id => names.find(p => p[0] === id)))
+        };
+        after = primitiveState(root);
+        compareVerification(expected, after, "editor", root);
+        if (copyPayload !== null) after.copyPayload = copyPayload;
+        // Structural operations invalidate Agent property history; they do not
+        // promise Agent undo even though native history may contain entries.
+        if (!valuesEqual(before, after)) { doc.SetModified(true); clearAgentHistory(); }
+    } finally {
+        if (!valuesEqual(before, primitiveState(root))) { doc.SetModified(true); clearAgentHistory(); }
+        doc.UnselectAll();
+        for (const id of oldSelection) { const o = findObjectById(root, id); if (o) doc.SelectObject(o, false, true); }
+    }
+    const createdId = created ? String(created.id) : null;
+    const createdSummary = created ? describeObject(created, 0, 0) : null;
+    const readers = {
+        memory: (r: any) => {
+            const state = primitiveState(r);
+            if (createdId && copyPayload !== null) state.copyPayload = primitivePayload(primitiveNode(getActiveDocument(), createdId, false));
+            return state;
+        },
+        persisted: (d: any) => {
+            const state = primitiveDiskState(d);
+            if (createdId && copyPayload !== null) state.values.copyPayload = primitivePayload(primitiveNode(d, createdId, true));
+            return state;
+        }
+    };
+    lastWritePath = "document-model";
+    const result = writeVerification(doc, root, before, after, { ...params, target: { path: "root" } }, after, readers);
+    return withRounded({ ...result, action, created: createdSummary, sourceId: action === "duplicate_object" ? sourceId : undefined,
+        orderBefore: JSON.parse(before.order), orderAfter: JSON.parse(after.order), undoable: false,
+        note: result.note + " 结构操作不进入 Agent 撤销栈；未保存时可 discard。external_reload 会重建文档选择状态。" }, geometry.rounded);
 }
 
 // ---------- Phase 4: typed layout / relation / gear / controller writes ----------
@@ -8851,6 +9028,10 @@ const DOCUMENT_WRITE_ACTIONS: { [action: string]: boolean } = {
     set_property: true,
     set_instance_override: true,
     insert_object: true,
+    insert_text: true,
+    create_group: true,
+    duplicate_object: true,
+    adjust_depth: true,
     remove_object: true,
     replace_object_resource: true,
     set_text_style: true,
@@ -9203,6 +9384,10 @@ function handleCommand(request: AgentRequest): any {
         set_property: true,
         set_instance_override: true,
         insert_object: true,
+        insert_text: true,
+        create_group: true,
+        duplicate_object: true,
+        adjust_depth: true,
         remove_object: true,
         set_list_layout: true,
         set_group_layout: true,
@@ -9568,6 +9753,11 @@ function handleCommand(request: AgentRequest): any {
                 expected.resourceURL = String(item.GetURL());
             return withRounded(writeVerification(doc, obj, null, describeObject(obj, 0, 1), params, expected), geometry.rounded);
         }
+
+        case "create_group":
+        case "duplicate_object":
+        case "adjust_depth":
+            return documentPrimitive(action, params);
 
         case "insert_text":
             return insertText(params);

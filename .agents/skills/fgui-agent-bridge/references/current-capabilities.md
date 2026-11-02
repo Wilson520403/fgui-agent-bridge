@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.23`
+- Bridge 版本：`0.8.24`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：69，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override、包资源管理（删除/改名/移动/复制）工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：72，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override、包资源管理（删除/改名/移动/复制）工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -49,6 +49,9 @@
 | `fgui_set_gear_display` | target、`controller`（null/空清除）、`pages?`、save?、verify?、external_reload? | 设置 gearDisplay 联动的控制器与可见页面 |
 | `fgui_list_controllers` / `fgui_set_controller` | 无 / `name`、pages/add_pages/selected_index/selected_page/exported/auto_radio_group_depth/home_page、create?、remove?、save?、verify?、external_reload? | 列出或创建/修改/删除当前组件 Controller |
 | `fgui_insert_object` / `fgui_remove_object` | 资源 URL、坐标 / 目标；均支持 `save?`、`verify?`、`external_reload?` | 插入已有资源或删除非根对象；删除按缺失性验证处理 |
+| `fgui_create_group` | `targets`、`name?`、`save?`、`verify?`、`external_reload?` | 至少两个未锁定、未分组直接子对象组成组，成员移到末尾 |
+| `fgui_duplicate_object` | target、`name?`、`dx?`、`dy?`、`save?`、`verify?`、`external_reload?` | 原生复制普通对象并生成新 ID；默认原位，相对偏移，保留序列化内容 |
+| `fgui_adjust_depth` | target、`index`、`save?`、`verify?`、`external_reload?` | 调整未分组对象的绝对层级，0 为最底层，不能落入组块 |
 | `fgui_insert_text` | text、x、y、name?、style?、save?、verify?、external_reload? | 0.8.20 新增：在当前文档根组件下创建文本对象（FGUI 的文本是裸节点，insert_object 插不进来） |
 | `fgui_set_instance_override` | target、`properties`（扩展属性集）、save?、verify?、external_reload? | 0.8.21 新增：写组件实例的**扩展级** override（Button/Label 的 title/icon/selectedTitle/selectedIcon/titleColor/titleFontSize），落盘形态是实例节点里的扩展子节点 `<Button title="..."/>`；编辑器与 FGUI 运行时都只支持这一层，**不支持**逐子对象（普通 text/image）覆盖 |
 | `fgui_list_transitions` / `fgui_get_transition` | 无 / `name` | 读取当前组件的 Transition |
@@ -113,6 +116,7 @@
 - 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`；均支持 `--save` / `--no-verify`，image/font/sound/movieclip 另支持 `--external-reload`（asset 重载）
 - Transition：`transitions`、`get-transition`、`verify-transition`（可选 `--no-bounds`）、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`、`add-keyframes`、`set-keyframe`（`--item-index` 或 `--target-id`+`--type`+`--frame`）、`duplicate-transition`（`--new-name`）；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
+- 组件原语（0.8.24）：`create-group`、`duplicate-object`、`adjust-depth`；支持 `--save` / `--no-verify` / `--external-reload`，复制的新名称使用 `--new-name`（`--name` 用于定位源对象）。
 - 布局与控制器（0.8.8）：`set-list-layout`、`set-group-layout`、`set-relation`、`set-gear-display`、`controllers`、`set-controller`；写命令支持 `--save` / `--no-verify` / `--external-reload`
 - 预览：`preview-transition`、`preview-movieclip`
 - 保存发布：`save`、`discard`、`save-all`、`history`、`undo`、`redo`、`publish-settings`、`publish`
@@ -145,7 +149,7 @@
 
 ### P0 可信持久化验证（0.8.3）
 
-- `replace_object_resource` 本轮仅允许 Image/Loader，拒绝 Button `state`，避免把整个 Button 替换误报为状态资源替换。
+- `replace_object_resource` 支持 Image/Loader 换图片与组件实例换源组件，拒绝 Button `state`；根组件不能替换。
 - 保存时检查 Editor 文档变为未修改；`save=false` 或 `verify=false` 不会声称磁盘已持久化。
 - `verify_document` 可传 `target + expected`，默认读取组件 XML 比对目标字段；无 `expected` 时只是快照；`expected` 含 `children` 时执行递归对象树比对（见下文 0.8.7）。
 - 失败响应保留 `error.details`，包含 `stage`、expected、actual 和 differences（如有）。
@@ -1124,3 +1128,24 @@ Label 的属性名按 FairyGUI-unity `GLabel.Setup_AfterAdd` 核对，标注为�
 **未在真机验证**：Windows 版 Editor；JPG 源图缩放（探针只覆盖 PNG）；
 `import_image` 的 replace 策略 + `max_size` 组合；
 包级多图集配置下的 `atlasPrecheck.atlas-not-determined` 分支。
+
+
+## 0.8.24：分组、复制与层级（P8-7 组件原语）
+
+- `create_group` 调用 `Document.CreateGroup`，接收至少两个 `targets`（每项只含 `id`/`name`/`path` 之一）与可选 `name`。原生 API 按显示列表顺序排列成员，把成员移到末尾，新组放在其后；FGUI 的成员仍是根组件的直接子节点，通过 `groupId` / XML `group` 归属，不是嵌套树。
+- `duplicate_object` 调用 `CopySelection` / `Paste(null,false)`，接收 `target`、可选 `name` 与相对偏移 `dx/dy`（默认 0）。新 ID 的副本追加到末尾；源/副本的序列化内容先作比对，仅排除节点自身的 `id/name/xy`，再写新名称与量化坐标。保留资源、文字样式、Relation/Gear、实例扩展覆盖和 List 条目；文档级 Transition 不随对象复制。操作恢复可读取的编辑器剪贴板槽位与文本。
+- `adjust_depth` 调用 `Document.AdjustDepth(index)`，`index` 为零基绝对层级，0 是最底层；不得越界或落入已有分组块。返回 `orderBefore` / `orderAfter`。
+- 首版三者只接受根组件下未锁定、未分组的普通对象；拒绝根、组、组成员、嵌套组件内部对象；须退出时间轴与组内编辑模式。操作恢复原选择集；external reload 会重建文档选择状态。
+- 支持统一 `save` / `verify` / `external_reload` 验证梯子：显示列表顺序、名称和成员归属完整比对，复制另比对完整节点 XML（包括子元素）。`save` 保存整个当前文档，`external_reload` 要求保存且不能关闭验证。
+- 不进入 Agent 撤销栈（`undoable:false`）；默认不保存，未保存可 `discard`。拒绝非法输入不产生修改；原生调用或持久化阶段失败不自动回滚。
+- `insert_text` 的能力心跳、发布期间封锁和分支写入检查在同版补齐，避免旧入口漏过这些保护。
+
+### 验证状态
+
+FairyGUI Editor 6.1.4 macOS 隔离 sample 副本验收 **28/28**，证据
+`tests/reports/p8-7-primitives-live.json`：图片/Loader/文本/组件/List 复制、实例扩展覆盖复制、
+末尾/底部/不变层级、逆序入参分组均通过保存、XML 回读和关闭重开验证；
+14 条非法输入拒绝，文档树与磁盘哈希均未变化；MCP/CLI 实际调用、未保存修改与 discard 已复验。
+模拟宿主 **290/290**，Python **63/63**，TypeScript 编译通过。
+
+Windows Editor、Unity 运行时与发布产物尚未验证；完整组复制、组成员操作、直接创建 List/Loader 不在本切片范围。

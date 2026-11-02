@@ -528,8 +528,11 @@ function setup() {
   return baseGetSize(p);};
  ctx.CS.System.IO.Path.GetTempPath=()=>'/tmp';
  ctx.CS.System.IO.File.Delete=p=>{delete files[p];};
+ const clipboardValues={objects:{sentinel:true},items:'old-items'};
+ ctx.CS.FairyEditor.Clipboard={OBJECT_KEY:'objects',ITEM_KEY:'items',TIMELINE_KEY:'timeline',CONTROLLER_KEY:'controller',RELATION_PROPS_KEY:'relation',GEAR_PROPS_KEY:'gear',
+  text:'previous clipboard',GetText(){return this.text;},SetText(t){this.text=t;},GetValue(k){return clipboardValues[k]??null;},SetValue(k,v){clipboardValues[k]=v;}};
  ctx.getActiveDocument=()=>doc;
- ctx.resolveObject=(_,t)=>{const o=objects.find(o=>o.id===t.id);if(!o)throw Error('未找到对象 ID');return o;};
+ ctx.resolveObject=(_,t)=>{if(t.path==='root'||t.id==='root')return doc.content;const o=objects.find(o=>o.id===t.id);if(!o)throw Error('未找到对象 ID');return o;};
  ctx.findObjectById=(_,id)=>objects.find(o=>o.id===id)||null;
  ctx.describeObject=o=>({id:o.id});ctx.describeDocument=()=>({modified:doc.isModified});
 }
@@ -547,7 +550,21 @@ function makeDoc(){
   GetController:n=>controllers.find(c=>c.name===n)||null,
   AddController(c){controllers.push(c);return c;},
   RemoveController(c){const i=controllers.indexOf(c);if(i>=0)controllers.splice(i,1);}};
- const d={content,docURL:'ui://fixture0component',dead:false,
+ const d={content,
+  _selection:[],
+  GetSelection(){return makeCSharpList(this._selection);},
+  UnselectAll(){this._selection=[];},
+  Serialize(){return new XML(serialize());},
+  CreateGroup(){
+   const members=objects.filter(o=>this._selection.includes(o));
+   const group={...objects[0],id:'group_new',name:'group_new',objectType:'group',groupId:'',resourceURL:null};
+   for(const o of members)o.groupId=group.id;
+   objects=objects.filter(o=>!members.includes(o)).concat(members,[group]);this._selection=[group];this.isModified=true;
+  },
+  CopySelection(){ctx.CS.FairyEditor.Clipboard.SetValue('objects',this._selection.slice());},
+  Paste(){const source=ctx.CS.FairyEditor.Clipboard.GetValue('objects')[0];const copy={...source,id:'copy_new'};if(source.objectType==='component'){const node=parseXML(serialize()).children.find(n=>n.name==='displayList').children.find(n=>n.attrs.id===source.id);attachInstanceExtension(copy,node);}objects.push(copy);this._selection=[copy];this.isModified=true;},
+  AdjustDepth(index){const o=this._selection[0];objects.splice(objects.indexOf(o),1);objects.splice(index,0,o);this.isModified=true;},
+  docURL:'ui://fixture0component',dead:false,
   packageItem:{id:'component0',name:'component',branch:''},
   timelineMode:false,editingTransition:null,head:0,
   EnterTimelineMode(name){const t=transitions.find(x=>x.name===name);if(!t)throw Error('未找到 Transition：'+name);this.editingTransition=t;this.timelineMode=true;},
@@ -592,7 +609,7 @@ function makeDoc(){
    return copy;
   },
   history:{CanUndo:()=>false,CanRedo:()=>false,GetPendingList:()=>({Count:0})},
-  SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;},SelectObject(){},
+  SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;this._selection=[o];},SelectObject(o){if(!this._selection.includes(o))this._selection.push(o);},
   UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
   ReplaceSelection(url){replaceCount++;if(replaceMode==='ignore')return;const i=objects.indexOf(this.selected);objects[i]={...this.selected,resourceURL:url};},
   InsertObject(url,pos,idx){const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
@@ -628,7 +645,7 @@ function reloadFromDisk(){
   const a=n.attrs;
   const xy=(a.xy||'0,0').split(',').map(Number),size=(a.size||'0,0').split(',').map(Number);
   const scale=(a.scale||'1,1').split(',').map(Number);
-  const o={id:a.id,name:a.name,x:xy[0],y:xy[1],width:size[0],height:size[1],scaleX:scale[0],scaleY:scale[1]??scale[0],rotation:Number(a.rotation||0),alpha:Number(a.alpha||1),visible:a.visible!=='false',touchable:a.touchable!=='false',grayed:a.grayed==='true',text:a.text??a.title??'',icon:a.icon||'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
+  const o={id:a.id,name:a.name,groupId:a.group||'',x:xy[0],y:xy[1],width:size[0],height:size[1],scaleX:scale[0],scaleY:scale[1]??scale[0],rotation:Number(a.rotation||0),alpha:Number(a.alpha||1),visible:a.visible!=='false',touchable:a.touchable!=='false',grayed:a.grayed==='true',text:a.text??a.title??'',icon:a.icon||'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
   if(n.name==='image'){o.objectType='image';o.resourceURL='ui://fixture0'+a.src;}
   if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;attachInstanceExtension(o,n);}
   if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
@@ -704,6 +721,7 @@ function serialize() {
  const ctrlXml=controllers.map(c=>`<controller name="${esc(c.name)}" pages="${c._pages.map(p=>`${p.id},${p.name}`).join(',')}" selected="${c._selectedIndex}"/>`).join('');
  return '<component size="400,300">'+ctrlXml+'<displayList>'+objects.map(o=>{
  const a={id:o.id,name:o.name,xy:`${o.x},${o.y}`,size:`${o.width},${o.height}`};
+ if(o.groupId)a.group=o.groupId;
  if(o.scaleX!==1||o.scaleY!==1)a.scale=`${o.scaleX},${o.scaleY}`;
  if(o.rotation)a.rotation=o.rotation;
  if(o.alpha!==1)a.alpha=o.alpha;
@@ -2470,6 +2488,87 @@ test('import_image keeps the scaled file out of the package and drops the tempor
  // 缩放中间产物留在工程里就是垃圾：临时文件必须被清掉。
  assert.deepEqual(Object.keys(files).filter(k=>k.indexOf('fgui_scale_')===0),[]);
  assert.ok(Object.keys(files).length>=before);
+});
+
+// P8-7 primitives: actual plugin, a mock of the observed native host contracts.
+const primitive=(action,params)=>ctx.documentPrimitive(action,{save:true,...params});
+test('create_group persists membership/order and survives reload',()=>{
+ const r=primitive('create_group',{targets:[{id:'loader1'},{id:'image1'}],name:'Pair',externalReload:true});
+ assert.equal(r.strength,'reload');assert.equal(r.undoable,false);
+ assert.deepEqual(plain(r.orderAfter.slice(-3)),['image1','loader1','group_new']);
+ assert.equal(objects.find(o=>o.id==='image1').groupId,'group_new');
+ assert.equal(objects.find(o=>o.id==='group_new').name,'Pair');
+});
+test('duplicate preserves serialized content and restores selection and clipboard',()=>{
+ doc.SelectObject(objects[2]);const cb=ctx.CS.FairyEditor.Clipboard;const old=cb.GetValue(cb.OBJECT_KEY);
+ const r=primitive('duplicate_object',{target:{id:'image1'},name:'New picture',dx:4.8,dy:-25.7});
+ assert.equal(r.strength,'disk');assert.equal(cb.GetValue(cb.OBJECT_KEY),old);assert.equal(cb.GetText(),'previous clipboard');
+ assert.deepEqual(doc._selection.map(o=>o.id),['text1']);
+ const copy=objects.find(o=>o.id==='copy_new');assert.equal(copy.x,14);assert.equal(copy.y,-5);assert.equal(copy.resourceURL,objects[0].resourceURL);
+ assert.equal(r.rounded.length,2);assert.equal(copy.name,'New picture');
+});
+test('duplicate component override and text style survive reload',()=>{
+ for(const id of ['comp1','text1']){
+  setup();if(id==='comp1')objects.find(o=>o.id===id).docElement.SetExtensionProperty('title','Variant');
+  const r=primitive('duplicate_object',{target:{id},externalReload:true});assert.equal(r.strength,'reload');
+  assert.ok(r.verification.xml.copyPayload);assert.equal(r.verification.xml.copyPayload,r.after.copyPayload);
+ }
+});
+test('depth uses absolute index and leaves other nodes ordered after reload',()=>{
+ const r=primitive('adjust_depth',{target:{id:'text1'},index:0,externalReload:true});
+ assert.equal(r.strength,'reload');assert.deepEqual(plain(r.orderAfter),['text1','image1','loader1','comp1']);
+});
+test('depth no-op succeeds without manufacturing a dirty document',()=>{
+ files['fixture.xml']=serialize();doc.isModified=false;
+ const r=primitive('adjust_depth',{target:{id:'image1'},index:0});assert.equal(r.strength,'disk');
+});
+test('invalid primitives reject before altering selection or document',()=>{
+ const before=serialize();doc.SelectObject(objects[2]);
+ const cases=[['create_group',{targets:[]}],['create_group',{targets:[{id:'image1'},{name:'picture',id:'image1'}]}],
+ ['create_group',{targets:[{id:'image1'},{id:'image1'}]}],['duplicate_object',{target:{path:'root'}}],
+ ['duplicate_object',{target:{id:'image1'},dx:'3'}],['duplicate_object',{target:{id:'image1'},name:''}],
+ ['adjust_depth',{target:{id:'image1'},index:99}],['adjust_depth',{target:{id:'image1'},index:0.5}],
+ ['duplicate_object',{target:{id:'image1'},save:false,externalReload:true}]];
+ for(const [action,params] of cases)rejects(()=>primitive(action,params),'invalid_argument','input');
+ assert.equal(serialize(),before);assert.deepEqual(doc._selection.map(o=>o.id),['text1']);
+});
+test('group members and locked objects reject without mutation',()=>{
+ objects[0].groupId='g';objects[1].locked=true;
+ for(const id of ['image1','loader1'])rejects(()=>primitive('duplicate_object',{target:{id}}),'invalid_argument','input');
+});
+test('depth refuses a destination inside a group block',()=>{
+ objects[1].groupId='g';rejects(()=>primitive('adjust_depth',{target:{id:'text1'},index:1}),'invalid_argument','input');
+});
+test('timeline and opened group mode refuse primitives',()=>{
+ doc.timelineMode=true;rejects(()=>primitive('adjust_depth',{target:{id:'text1'},index:0}),'invalid_argument','input');
+ doc.timelineMode=false;doc.openedGroup=objects[0];rejects(()=>primitive('duplicate_object',{target:{id:'text1'}}),'invalid_argument','input');
+});
+test('native no-op and damaged clone cannot report success',()=>{
+ doc.CreateGroup=()=>{};rejects(()=>primitive('create_group',{targets:[{id:'image1'},{id:'loader1'}]}),'editor_rejected','editor');
+ const paste=doc.Paste.bind(doc);doc.Paste=()=>{paste();objects.at(-1).alpha=0.1;};
+ rejects(()=>primitive('duplicate_object',{target:{id:'image1'}}),'editor_rejected','editor');
+ assert.equal(doc.isModified,true);assert.equal(ctx.CS.FairyEditor.Clipboard.GetText(),'previous clipboard');
+});
+test('ignored duplicate coordinates cannot pass acceptance',()=>{
+ const write=ctx.writeObjectProperty;ctx.writeObjectProperty=(o,k,v)=>{if(k!=='x')return write(o,k,v);};
+ rejects(()=>primitive('duplicate_object',{target:{id:'image1'},dx:15}),'editor_rejected','editor');
+});
+test('stale disk and failed save cannot claim persisted structure',()=>{
+ saveMode='stale';rejects(()=>primitive('adjust_depth',{target:{id:'text1'},index:0}),'persistence_failed','xml');
+ saveMode='dirty';rejects(()=>primitive('duplicate_object',{target:{id:'image1'}}),'persistence_failed','save');
+});
+test('unsaved primitives report none and invalidated Agent history',()=>{
+ const r=primitive('adjust_depth',{target:{id:'text1'},index:0,save:false});
+ assert.equal(r.strength,'none');assert.equal(r.persisted,false);assert.equal(r.saved,false);
+});
+test('primitives are blocked during publish and cross-branch writes',async()=>{
+ vm.runInContext('publishInProgress=true',ctx);
+ for(const action of ['create_group','duplicate_object','adjust_depth'])
+  assert.throws(()=>ctx.handleCommand({action,params:{}}),/发布进行中/);
+ vm.runInContext('publishInProgress=false',ctx);
+ ctx.CS.FairyEditor.App.project.activeBranch='other';
+ for(const action of ['create_group','duplicate_object','adjust_depth'])
+  assert.throws(()=>ctx.handleCommand({action,params:{}}));
 });
 
 // verification *logic* against a mocked host, never Editor acceptance.

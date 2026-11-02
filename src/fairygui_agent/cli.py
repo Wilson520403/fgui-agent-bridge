@@ -446,6 +446,22 @@ def build_parser() -> argparse.ArgumentParser:
     insert_text_parser.add_argument("--no-verify", action="store_true")
     insert_text_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认真实持久化（需 --save）")
 
+    group_parser = subparsers.add_parser("create-group", help="将至少两个未分组对象组成组（成员移到末尾）")
+    group_parser.add_argument("targets", help='目标 JSON 数组，例如 [{"id":"n1"},{"id":"n2"}]')
+    group_parser.add_argument("--name")
+    duplicate_parser = subparsers.add_parser("duplicate-object", help="复制未分组对象，保留属性并生成新 ID")
+    _add_target_arguments(duplicate_parser)
+    duplicate_parser.add_argument("--new-name", dest="new_name")
+    duplicate_parser.add_argument("--dx", type=float, default=0)
+    duplicate_parser.add_argument("--dy", type=float, default=0)
+    depth_parser = subparsers.add_parser("adjust-depth", help="移动未分组对象到零基绝对层级，0 为最底层")
+    _add_target_arguments(depth_parser)
+    depth_parser.add_argument("index", type=int)
+    for primitive_parser in (group_parser, duplicate_parser, depth_parser):
+        primitive_parser.add_argument("--save", action="store_true")
+        primitive_parser.add_argument("--no-verify", action="store_true")
+        primitive_parser.add_argument("--external-reload", action="store_true", help="保存后关闭重开验证（需 --save）")
+
     remove_parser = subparsers.add_parser("remove", help="删除对象；保存前可用 discard 放弃修改")
     _add_target_arguments(remove_parser)
     remove_parser.add_argument("--save", action="store_true")
@@ -970,6 +986,21 @@ def main() -> int:
             style = load_json_value(args.style)
             if style:
                 params["style"] = style
+        elif args.command in ("create-group", "duplicate-object", "adjust-depth"):
+            action = args.command.replace("-", "_")
+            params = {"save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+            if args.command == "create-group":
+                params["targets"] = load_json_value(args.targets)
+                if args.name is not None:
+                    params["name"] = args.name
+            else:
+                params["target"] = target_from_args(args)
+                if args.command == "adjust-depth":
+                    params["index"] = args.index
+                else:
+                    params.update(dx=args.dx, dy=args.dy)
+                    if args.new_name is not None:
+                        params["name"] = args.new_name
         elif args.command == "remove":
             action = "remove_object"
             params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
