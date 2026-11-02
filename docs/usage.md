@@ -27,6 +27,16 @@
 
 ## 使用说明与注意事项
 
+### 文字创建与失败结果（0.8.27）
+
+`fgui_insert_text` 通过 `Document.InsertObject("text")` 初始化文档节点。`style.vAlign` 对应原生 `verticalAlign`，`style.lineGap` 对应 `leading`；样式与已有文字修改接口共用校验。显式宽高优先于 `autoSize`，坐标用顶层 `x/y` 参数，不能放进 `style`。
+
+- 输入校验在创建前执行。原生创建、赋值或首次内存校验失败时，尝试只移除本次创建的节点，并恢复原有修改标记和选择；`details.rolledBack=true` 才表示清理完成。
+- 若原生创建在返回对象前中断，或清理失败，返回 `rolledBack=false`、`mutationMayHaveOccurred=true`，应先检查现场，不要直接重试。
+- 保存、磁盘比对或重开阶段失败不自动回滚；此时文件可能已写入。默认不保存，结构创建不进入 Agent 撤销栈。
+- MCP 编辑器错误仍使用 `isError=true`，`structuredContent` 与文本 JSON 保留 `{ok:false, action, error:{code,message,details}}`。`details` 可包含 `stage`、`differences` 和回滚状态；旧错误没有这些字段时保留空值。成功结果形状不变。
+- `fgui_list_items` 返回包含包信息和资源列表的对象，而非裸数组；通过 `items` 读取资源，通过 `package` 读取包信息。
+
 ### 写入、验证与撤销
 
 大多数写操作支持 `save`、`verify` 和 `external_reload` 三个选项（新建组件、删除组件等少数操作不支持 `external_reload`）：

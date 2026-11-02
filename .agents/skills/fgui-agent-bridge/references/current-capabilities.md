@@ -4,7 +4,7 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.26`
+- Bridge 版本：`0.8.27`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
@@ -1228,3 +1228,12 @@ FairyGUI Editor 6.1.4 macOS 隔离工程 **48/48**，证据 `tests/reports/list-
 
 原生自定义属性等负例仅在隔离副本注入辅助夹具，生产实现未包含调试 Action。
 Windows、Unity 运行时与发布产物未验证。
+
+## 0.8.27：文字创建稳定性与 MCP 错误契约
+
+- `insert_text` 改走 `Document.InsertObject("text")`；旧 `CreateChild + AddChild` 路径即使通过 XML 和同进程重开比对，也可能在下一次 `Document.OnUpdate` 异常。
+- 与 `set_text_style` 共用样式校验和 `vAlign → verticalAlign`、`lineGap → leading` 映射；宽高显式指定时，写入和断言统一为 `autoSize=none`。
+- 保存前创建/赋值/内存校验失败尝试清理本次节点，恢复原有 dirty 状态与选择；清理结果通过 `rolledBack`、`mutationMayHaveOccurred` 回报。创建未返回对象时不能定位清理，不声明回滚成功。保存/XML/重开失败不回滚。
+- `fgui_list_items` 的 MCP outputSchema 改为对象，匹配实际 `package/items` 响应。
+- MCP 保留编辑器 `BridgeCommandError` 的 `action/code/message/details`，仍以 `isError=true` 返回；成功结果和普通输入错误保持原 SDK 行为。
+- 回归包括实际编译插件的模拟宿主，以及真实 MCP SDK 内存传输。Windows 6.0.4、6.1.4 各通过 9 次文字创建、保存及同进程文档重开，非法输入前后树一致；原生用例、运行版本和未覆盖项见 `tests/reports/text-creation-windows.json`；模拟回滚不等于已注入原生失败，短时前台验证不等于长期后台稳定性。

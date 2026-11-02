@@ -3,19 +3,51 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any, Literal
 from typing_extensions import TypedDict
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import CallToolResult, TextContent
 
 from . import __version__
 from .animation_models import KeyframeChanges, KeyframeSpec, TransitionDefinition, TransitionItem
-from .bridge_client import BridgeClient
+from .bridge_client import BridgeClient, BridgeCommandError
 from .editor_launcher import EditorLauncher
 from .project_locator import ProjectLocator
 
-mcp = FastMCP(
+
+class BridgeMCP(FastMCP):
+    """保留编辑器业务错误详情，同时使用 MCP 的失败结果语义。"""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        try:
+            return await super().call_tool(name, arguments)
+        except ToolError as error:
+            # FastMCP 将工具异常包装为 ToolError，但保留原异常作为 cause。
+            # 成功结果继续由 SDK 校验；错误结果不应套用成功的 outputSchema。
+            command_error = error.__cause__
+            if not isinstance(command_error, BridgeCommandError):
+                raise
+            payload = {
+                "ok": False,
+                "action": command_error.action,
+                "error": {
+                    "code": command_error.code,
+                    "message": command_error.bridge_message,
+                    "details": command_error.details,
+                },
+            }
+            return CallToolResult(
+                isError=True,
+                structuredContent=payload,
+                content=[TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))],
+            )
+
+
+mcp = BridgeMCP(
     "FairyGUI Agent Bridge",
     instructions=(
         "先读取工程、包和对象树，再执行修改。文档属性和对象修改默认不保存；"
@@ -158,11 +190,12 @@ def fgui_list_items(
     package_name: str,
     item_type: str | None = None,
     branch: str | None = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """列出指定包中的资源，可按 FairyGUI 资源类型过滤。
 
     省略 branch 时跟随当前活跃分支，branch="" 表示主干。返回的分支视角中，
     分支资源覆盖同名主干资源；只读操作可以读取非活跃分支，不需要先切换。
+    返回包含 package、items 及分支信息的对象。
     """
     params: dict[str, Any] = {"packageName": package_name}
     if item_type:

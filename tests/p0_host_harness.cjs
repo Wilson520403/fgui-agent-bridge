@@ -634,7 +634,7 @@ function makeDoc(){
   SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;this._selection=[o];},SelectObject(o){if(!this._selection.includes(o))this._selection.push(o);},
   UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
   ReplaceSelection(url){replaceCount++;if(replaceMode==='ignore')return;const i=objects.indexOf(this.selected);objects[i]={...this.selected,resourceURL:url};},
-  InsertObject(url,pos,idx){if(url==='loader'||url==='list'){const o=makeCreationObject(url,pos);objects.push(o);this._selection=[o];this.isModified=true;return o;}const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
+  InsertObject(url,pos,idx){if(url==='text'){const o=content.CreateChild(XML.Create('text'));o.docElement={};objects.push(o);this._selection=[o];this.isModified=true;return o;}if(url==='loader'||url==='list'){const o=makeCreationObject(url,pos);objects.push(o);this._selection=[o];this.isModified=true;return o;}const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
   RemoveObject(o){const i=objects.indexOf(o);if(i>=0)objects.splice(i,1);},
   Save(){if(saveMode==='throw')throw Error('disk full');if(saveMode==='dirty')return;if(saveMode!=='stale')files['fixture.xml']=serialize();this.isModified=false;}};
  let modified=false;
@@ -763,7 +763,7 @@ function serialize() {
   if(o.bold)a.bold='true';
   if(o.italic)a.italic='true';
   if(o.underline)a.underline='true';
-  if(o.strokeSize!==undefined&&Number(o.strokeSize)!==1){a.strokeSize=String(o.strokeSize);if(o.strokeColor)a.strokeColor=ctx.colorHex(o.strokeColor);}
+  if(o.stroke&&o.strokeSize!==undefined){a.strokeSize=String(o.strokeSize);if(o.strokeColor)a.strokeColor=ctx.colorHex(o.strokeColor);}
   if(o.shadow&&(Number(o.shadowX)||Number(o.shadowY))){a.shadowOffset=`${Number(o.shadowX)||0},${Number(o.shadowY)||0}`;if(o.shadowColor)a.shadowColor=ctx.colorHex(o.shadowColor);}
  }
  if(o.objectType==='list'){
@@ -892,6 +892,72 @@ test('insert_text writes the new-style attributes too',()=>{
  assert.match(files['fixture.xml'],/bold="true"/);
  assert.match(files['fixture.xml'],/strokeSize="2"/);
  assert.match(files['fixture.xml'],/shadowOffset="1,1"/);
+});
+test('insert_text round-trips native vertical alignment and leading aliases',()=>{
+ const style={fontSize:28,vAlign:'middle',lineGap:8,width:160,height:60};
+ const r=ctx.insertText({text:'Two Lines',style,save:true,externalReload:true});
+ assert.equal(r.strength,'reload');assert.equal(r.verification.reload.values.vAlign,'middle');
+ assert.equal(r.verification.reload.values.lineGap,8);
+ assert.match(files['fixture.xml'],/vAlign="middle"/);assert.match(files['fixture.xml'],/leading="8"/);
+ assert.equal(style.autoSize,undefined,'caller style must not be mutated');
+});
+test('insert_text explicit size wins over autoSize and color-only outline is enabled',()=>{
+ const r=ctx.insertText({text:'Sized',style:{fontSize:28,width:160,height:40,autoSize:'both',strokeColor:'#ff00aa'},save:true});
+ assert.equal(r.verification.xml.autoSize,'none');assert.equal(r.verification.xml.strokeColor,'#FF00AA');
+ assert.equal(objects.at(-1).stroke,true);
+});
+test('insert_text rejects invalid styles before creating any node',()=>{
+ const cases=[[], 'bad', {vAlign:'center'}, {lineGap:'8'}, {bold:'true'}, {strokeColor:'wrong'},
+  {font:'ui://fixture0red'}, {unknown:1}, {x:9}, {shadow:false,shadowY:2}, {fontSize:Infinity}];
+ for(const style of cases){const before=serialize();const createdBefore=createdCount;
+  assert.throws(()=>ctx.insertText({text:'Invalid',style,save:true}));
+  assert.equal(serialize(),before);assert.equal(createdCount,createdBefore);assert.equal(doc.isModified,false);
+ }
+});
+test('insert_text readback failure removes only the new node and preserves prior dirty work',()=>{
+ objects[2].text='Unsaved existing text';doc.SetModified(true);doc.SelectObject(objects[2]);
+ const before=serialize(),selected=doc._selection[0].id;
+ const original=doc.content.CreateChild;doc.content.CreateChild=function(...args){const o=original.apply(this,args);
+  Object.defineProperty(o,'verticalAlign',{get:()=> 'top',set(){}});return o;};
+ assert.throws(()=>ctx.insertText({text:'Rejected',style:{fontSize:28,vAlign:'middle'},save:true}),e=>
+  e.code==='editor_rejected'&&e.details.rolledBack===true&&e.details.mutationMayHaveOccurred===false&&
+  e.details.differences.some(d=>d.property==='vAlign'&&d.actual==='top'));
+ assert.equal(serialize(),before);assert.equal(doc.isModified,true);assert.equal(doc._selection[0].id,selected);
+ assert.equal(files['fixture.xml'],fixture);
+});
+test('insert_text assignment failure cleans up and a later request succeeds',()=>{
+ const original=doc.content.CreateChild;doc.content.CreateChild=function(...args){const o=original.apply(this,args);
+  Object.defineProperty(o,'fontSize',{get:()=>12,set(){throw Error('native setter failed');}});return o;};
+ const before=serialize();assert.throws(()=>ctx.insertText({text:'Rejected',style:{fontSize:28}}),e=>e.details.rolledBack===true);
+ assert.equal(serialize(),before);assert.equal(doc.isModified,false);
+ doc.content.CreateChild=original;assert.equal(ctx.insertText({text:'Next',style:{fontSize:28},save:true}).persisted,true);
+});
+test('insert_text uses the native document creation entry and preserves selection',()=>{
+ doc.SelectObject(objects[0]);const selected=doc._selection[0].id;
+ const r=ctx.insertText({text:'Native',style:{fontSize:28}});
+ assert.equal(r.creationPath,'Document.InsertObject');assert.equal(r.writePath,'document-model');
+ assert.ok(objects.at(-1).docElement);assert.equal(doc._selection[0].id,selected);
+});
+test('insert_text reports incomplete cleanup without claiming rollback',()=>{
+ const original=doc.content.CreateChild;doc.content.CreateChild=function(...args){const o=original.apply(this,args);
+  Object.defineProperty(o,'verticalAlign',{get:()=> 'top',set(){}});return o;};
+ doc.RemoveObject=()=>{};const count=objects.length;
+ assert.throws(()=>ctx.insertText({text:'Left over',style:{vAlign:'middle'}}),e=>
+  e.details.rolledBack===false&&e.details.mutationMayHaveOccurred===true&&Boolean(e.details.rollbackError));
+ assert.equal(objects.length,count+1);assert.equal(doc.isModified,true);
+});
+test('insert_text cannot claim rollback when native creation throws before returning the object',()=>{
+ const original=doc.InsertObject;doc.InsertObject=function(...args){original.apply(this,args);throw Error('native creation interrupted');};
+ const count=objects.length;
+ assert.throws(()=>ctx.insertText({text:'Unknown result'}),e=>e.details.rolledBack===false&&e.details.mutationMayHaveOccurred===true);
+ assert.equal(objects.length,count+1);assert.equal(doc.isModified,true);
+});
+test('insert_text does not roll back after save or disk verification failure',()=>{
+ for(const mode of ['throw','stale']){const count=objects.length;saveMode=mode;
+  assert.throws(()=>ctx.insertText({text:'Retain for inspection',style:{fontSize:28},save:true}),e=>
+   e.code==='persistence_failed'&&e.details.rolledBack===false&&e.details.mutationMayHaveOccurred===true);
+  assert.equal(objects.length,count+1);
+ }
 });
 test('insert_text refuses a non-root parent',()=>{
  rejects(()=>ctx.insertText({target:{id:'text1'},text:'x',save:true}),'invalid_argument','input');
