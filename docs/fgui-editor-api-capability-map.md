@@ -708,3 +708,20 @@ npx -y rea-agents@6.4.0 analyze ~/Downloads/FairyGUI-Editor.app --format json
 
 结构创建不进入 Agent 撤销栈；默认不保存，discard 可放弃。参数及资源先校验，
 原生属性应用异常尝试移除新节点；保存/验证失败不自动回滚。Windows/Unity/发布产物仍未验收。
+
+## 0.8.26：已有 List 条目维护（2026-11-02）
+
+新增 `get_list_items` / `set_list_items`，使用 `FList.items.Clear/Add` 后回写 setter。
+条目全量替换前完成字段、批次长度和资源校验，现有条目含非六字段属性或嵌套自定义
+属性节点时拒绝修改，避免丢失数据。原生应用失败尝试恢复原条目、默认组件与修改状态；
+保存/验证失败不自动回滚。写路径明确为 object-model，不进入 Agent 撤销栈。
+
+| 问题 | 6.1.4 macOS 实测结论 |
+| --- | --- |
+| 继承默认组件的预览 | 直接把 null/空 URL 的 ListItemData 传给 items setter，会创建未解析资源的预览组件；读其 resourceURL 时 ResourceRef.GetURL 抛 NullReferenceException。必须先展开为有效组件 URL |
+| 序列化继承语义 | setter 使用有效 URL，保存时仍省略与 defaultItem 相同的 url；读取统一返回空串表示继承，另列 effectiveUrls |
+| 空覆盖 | 原生条目构造时使用 null 表示没有标题/图标/名称覆盖，避免写入空资源引用 |
+| 写后验证 | 比对有序条目、默认组件、几何/布局，以及预览数量与每项实际资源 URL；避免只有 XML 正确、预览已失效的假成功 |
+| 无变化回写 | get_list_items 返回的 items 可直接回写；相同数据不置脏、不清空 Agent 历史 |
+
+验收证据见 `tests/reports/list-items-live.json`。Windows、Unity 运行时与发布产物未验证。

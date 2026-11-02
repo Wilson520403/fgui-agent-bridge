@@ -431,8 +431,13 @@ function attachLayoutMembers(o){
 
 // 0.8.25 contracts observed in p8-7-creation-probe-live.json.
 function attachCreationList(o, initial=[]){
- let data=makeCSharpList(initial), children=[];
- Object.defineProperty(o,'items',{configurable:true,get(){return data;},set(next){data=next;children=data._items.map((item,i)=>({id:'item'+i,name:item.name||'',objectType:'component'}));}});
+ // Parsing XML resolves inherited URLs; the native items setter itself does
+ // not. Passing null/empty URLs to it creates broken preview ResourceRefs.
+ let data=makeCSharpList(initial.map(item=>({...item,url:item.url||o.defaultItem}))), children=[];
+ Object.defineProperty(o,'items',{configurable:true,get(){return data;},set(next){data=next;children=data._items.map((item,i)=>{
+  const child={id:'item'+i,name:item.name||'',objectType:'component'};
+  Object.defineProperty(child,'resourceURL',{get(){if(!item.url)throw Error('unresolved preview ResourceRef');return item.url;}});return child;
+ });}});
  Object.defineProperty(o,'numChildren',{configurable:true,get(){return children.length;}});
  o.GetChildAt=i=>children[i];o.items=data;
 }
@@ -2646,6 +2651,100 @@ test('creation respects publish, document branch, timeline and group edit guards
   doc.packageItem.branch='other';assert.throws(()=>createPrimitive(kind));doc.packageItem.branch='';
  }
  assert.equal(objects.length,4);
+});
+
+const listRead=id=>ctx.handleCommand({action:'get_list_items',params:{target:{id}}});
+const listWrite=(id,params)=>ctx.handleCommand({action:'set_list_items',params:{target:{id},...params}});
+test('List item reads are side effect free and normalize default inheritance',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'One'},{title:'Two',icon:'ui://fixture0blue'}]});
+ const disk=files['fixture.xml'],tree=serialize();doc._selection=[objects[0]];
+ const result=listRead(r.inserted.id);assert.equal(result.readOnly,true);assert.equal(result.defaultItem,'ui://fixture0panel');
+ assert.equal(result.items[0].url,'');assert.equal(result.effectiveUrls[0],'ui://fixture0panel');assert.equal(result.items[1].icon,'ui://fixture0blue');
+ assert.equal(serialize(),tree);assert.equal(files['fixture.xml'],disk);assert.equal(doc.isModified,false);assert.equal(doc._selection[0].id,'image1');
+});
+test('List inherited items use resolved native URLs and nullable empty overrides',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel'}),id=r.inserted.id;
+ listWrite(id,{items:[{title:'Inherited'}],save:true});
+ const o=objects.find(o=>o.id===id),data=o.items.get_Item(0);
+ assert.equal(data.url,'ui://fixture0panel');assert.equal(data.icon,null);assert.equal(data.selectedIcon,null);
+ assert.equal(o.GetChildAt(0).resourceURL,'ui://fixture0panel');assert.equal(listRead(id).items[0].url,'');
+ assert.equal(files['fixture.xml'].includes('<item title="Inherited"'),true);
+});
+test('List replacement reorders adds deletes and clears overrides through save and reload',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'One'},{title:'Two',icon:'ui://fixture0blue'}],layout:'flow_horizontal',lineGap:8,columnGap:4});
+ const id=r.inserted.id;
+ const updated=listWrite(id,{items:[{title:'Two updated',selectedTitle:'Selected',selectedIcon:'ui://fixture0red',name:'two'},{title:'Third'}],save:true,externalReload:true});
+ assert.equal(updated.strength,'reload');assert.equal(updated.undoable,false);assert.equal(updated.after.items[0].title,'Two updated');
+ assert.equal(updated.after.items[0].icon,'');assert.equal(updated.verification.xml.layout,'flow_hz');assert.equal(updated.verification.xml.lineGap,8);
+ assert.equal(listRead(id).items[1].title,'Third');assert.equal(objects.find(o=>o.id===id).numChildren,2);
+ const cleared=listWrite(id,{items:[],defaultItem:'',save:true,externalReload:true});assert.equal(cleared.after.itemCount,0);assert.equal(listRead(id).defaultItem,'');
+ assert.equal(objects.find(o=>o.id===id).numChildren,0);
+});
+test('List replacement preserves mixed explicit and inherited URLs when switching defaults',()=>{
+ resources['ui://fixture0other']={...resources['ui://fixture0panel'],id:'other',GetURL:()=>'ui://fixture0other'};
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel'}),id=r.inserted.id;
+ listWrite(id,{items:[{title:'Inherited'},{url:'ui://fixture0other',title:'Explicit'}],save:true,externalReload:true});
+ const read=listRead(id);assert.equal(read.items[0].url,'');assert.equal(read.items[1].url,'ui://fixture0other');
+ listWrite(id,{defaultItem:'ui://fixture0other',items:read.items,save:true,externalReload:true});
+ const next=listRead(id);assert.deepEqual(Array.from(next.effectiveUrls),['ui://fixture0other','ui://fixture0other']);
+ assert.equal(next.items[0].url,'');assert.equal(next.items[1].url,'');
+});
+test('List replacement rejects the entire batch before any mutation',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'Keep'}]}),id=r.inserted.id;
+ const disk=files['fixture.xml'],tree=serialize();doc._selection=[objects[0]];
+ const cases=[{}, {items:null},{items:{}},{items:Array(1001).fill({})},{items:[null]}, {items:[{title:'valid'},{title:5}]},
+  {items:[{unknown:'x'}]},{items:[{url:'ui://fixture0blue'}]}, {items:[{icon:'ui://fixture0panel'}]},
+  {items:[{selectedIcon:'https://example.invalid/i.png'}]}, {items:[{url:'ui://fixture0component'}]},
+  {items:[{}],defaultItem:''},{items:[],defaultItem:null},{items:[],defaultItem:'ui://fixture0blue'},
+  {items:[],defaultItem:'ui://fixture0component'},{items:[],unexpected:1}, {items:[],externalReload:true},
+  {items:[],save:true,verify:false,externalReload:true}];
+ for(const params of cases){assert.throws(()=>listWrite(id,params));assert.equal(serialize(),tree);assert.equal(files['fixture.xml'],disk);assert.equal(doc.isModified,false);assert.equal(doc._selection[0].id,'image1');}
+});
+test('List read roundtrip is a no-op and unsaved replacement can be discarded',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'Keep'}]}),id=r.inserted.id;
+ const before=listRead(id),disk=files['fixture.xml'];
+ const noop=listWrite(id,{items:before.items});assert.equal(noop.documentModified,false);assert.equal(noop.persisted,false);
+ const changed=listWrite(id,{items:[{title:'Unsaved'}]});assert.equal(changed.saved,false);assert.equal(changed.strength,'none');assert.equal(files['fixture.xml'],disk);
+ doc.DiscardChanges=()=>{reloadFromDisk();doc.isModified=false;};
+ ctx.handleCommand({action:'discard_document',params:{}});assert.equal(listRead(id).items[0].title,'Keep');
+});
+test('List replacement with verification disabled still reads back native acceptance',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel'}),id=r.inserted.id;
+ const out=listWrite(id,{items:[{title:'Saved'}],save:true,verify:false});assert.equal(out.saved,true);assert.equal(out.persisted,false);assert.equal(out.strength,'none');
+ assert.equal(listRead(id).items[0].title,'Saved');
+});
+test('List native apply rejection restores the original collection and dirty flag',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'Keep'}]}),id=r.inserted.id;
+ const o=objects.find(o=>o.id===id),descriptor=Object.getOwnPropertyDescriptor(o,'items');let once=true;
+ Object.defineProperty(o,'items',{...descriptor,set(next){if(once){once=false;throw Error('native setter failure');}descriptor.set(next);}});
+ const tree=serialize();
+ assert.throws(()=>listWrite(id,{items:[{title:'Wrong'}]}),e=>e.code==='editor_rejected'&&e.details.rolledBack===true);
+ assert.equal(serialize(),tree);assert.equal(doc.isModified,false);assert.equal(listRead(id).items[0].title,'Keep');
+});
+test('List replacement catches stale disk dropped fields and reload losses',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'Keep'}]}),id=r.inserted.id;
+ saveMode='stale';rejects(()=>listWrite(id,{items:[{title:'Stale'}],save:true}),'persistence_failed','xml');
+ saveMode='normal';const save=doc.Save;doc.Save=function(){save.call(this);files['fixture.xml']=files['fixture.xml'].replace('title="Dropped"','title="Wrong"');};
+ rejects(()=>listWrite(id,{items:[{title:'Dropped'}],save:true}),'persistence_failed','xml');
+ doc.Save=save;
+ const view=ctx.CS.FairyEditor.App.docView,open=view.OpenDocument;view.OpenDocument=function(...args){const out=open.apply(this,args);const o=objects.find(o=>o.id===id);o.items.get_Item(0).title='Lost';return out;};
+ rejects(()=>listWrite(id,{items:[{title:'Reload'}],save:true,externalReload:true}),'persistence_failed','reload');
+});
+test('List targets and publish branch timeline lock guards fail before updates',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel'}),id=r.inserted.id;
+ for(const target of [null,{}, {id,name:'x'}, {id:'image1'}, {id:'text1'}, {path:'root'}])
+  for(const action of ['get_list_items','set_list_items'])assert.throws(()=>ctx.handleCommand({action,params:{target,...(action==='set_list_items'?{items:[]}: {})}}));
+ doc.timelineMode=true;rejects(()=>listWrite(id,{items:[]}),'invalid_argument','input');doc.timelineMode=false;
+ doc.openedGroup=objects[0];rejects(()=>listWrite(id,{items:[]}),'invalid_argument','input');doc.openedGroup=null;
+ const o=objects.find(o=>o.id===id);o.locked=true;rejects(()=>listWrite(id,{items:[]}),'invalid_argument','input');assert.equal(listRead(id).itemCount,0);o.locked=false;
+ vm.runInContext('publishInProgress=true',ctx);assert.throws(()=>listWrite(id,{items:[]}),/发布进行中/);vm.runInContext('publishInProgress=false',ctx);
+ doc.packageItem.branch='other';assert.throws(()=>listWrite(id,{items:[]}));doc.packageItem.branch='';
+});
+test('List replacement refuses unsupported existing custom item data',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'Keep'}]}),id=r.inserted.id;
+ const original=doc.Serialize;doc.Serialize=function(){return new XML(serialize().replace('<item ','<item custom="preserve" '));};
+ assert.equal(listRead(id).unsupportedItemData.length,1);
+ rejects(()=>listWrite(id,{items:[]}),'unsupported_property','input');doc.Serialize=original;
 });
 
 // verification *logic* against a mocked host, never Editor acceptance.

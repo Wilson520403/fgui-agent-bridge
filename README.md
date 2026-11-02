@@ -7,7 +7,7 @@
 
 Bridge 提供组件创建、界面布局、资源管理、动效编辑和发布工具。支持 MCP stdio 的客户端可以调用这些工具；无需 AI 客户端时，也可以直接使用命令行。
 
-**当前版本：0.8.25** · **74 个 MCP 工具** · **主要验证环境：FairyGUI Editor 6.1.4 / macOS**
+**当前版本：0.8.26** · **76 个 MCP 工具** · **主要验证环境：FairyGUI Editor 6.1.4 / macOS**
 
 [快速开始](#快速开始) · [使用示例](#使用示例) · [工具与行为参考](docs/usage.md) · [兼容性](#兼容性与范围) · [参与开发](#参与开发)
 
@@ -17,6 +17,7 @@ Bridge 提供组件创建、界面布局、资源管理、动效编辑和发布�
 | --- | --- |
 | 搭建界面 | 创建组件、按钮、文本、List 和 Loader；插入资源实例；分组、复制和调整层级 |
 | 调整布局 | 修改位置、尺寸、文字样式、List/Group 布局、Relation、Controller 和 gearDisplay |
+| 维护列表 | 读取已有 List 的默认组件与条目，整批更新文案、图标及顺序，新增、删除或清空条目 |
 | 管理资源 | 导入图片、字体、声音；缩放大图；改名、移动、复制或删除包内资源 |
 | 处理引用 | 查询引用与依赖、替换对象资源或全工程引用、查找未使用及重复资源 |
 | 制作动效 | 创建和修改 Transition、编辑关键帧、生成 MovieClip、控制动画预览 |
@@ -159,6 +160,11 @@ uv run fgui-agent --project /PATH/TO/PROJECT insert-list \
   --items '[{"title":"开始"},{"title":"设置"},{"title":"退出"}]' \
   --save --external-reload
 
+# 读取并整批更新已有 List 的条目
+uv run fgui-agent --project /PATH/TO/PROJECT get-list-items --name menu
+uv run fgui-agent --project /PATH/TO/PROJECT set-list-items --name menu \
+  '[{"title":"设置"},{"title":"开始"}]' --save --external-reload
+
 # 读取对象树和发布设置
 uv run fgui-agent --project /PATH/TO/PROJECT tree
 uv run fgui-agent --project /PATH/TO/PROJECT publish-settings
@@ -180,7 +186,7 @@ uv run fgui-agent --project /PATH/TO/PROJECT publish-settings
 
 响应的 `strength` 表示实际验证范围：`none` 未证明持久化、`disk` 已比对磁盘、`reload` 已完成重载比对。不同工具的重载方式和验证字段有差异，详见 [验证说明](docs/usage.md#写入验证与撤销)。
 
-属性与部分动效修改支持 Agent 撤销；List/Loader 等结构创建不进入 Agent 撤销栈，未保存时可用 `discard` 放弃当前文档全部未保存修改。资源导入、包资源管理、分支等操作可能立即写盘，具体行为见各工具说明。
+属性与部分动效修改支持 Agent 撤销；List/Loader 等结构创建及 List 条目整批更新不进入 Agent 撤销栈，未保存时可用 `discard` 放弃当前文档全部未保存修改。资源导入、包资源管理、分支等操作可能立即写盘，具体行为见各工具说明。
 
 ## 工作原理
 

@@ -6,6 +6,20 @@
 >
 > 目标：让 FairyGUI 的常规 UI 拼装、Lanhu 设计还原、资源替换、文字样式调整、动画配置和发布验证尽可能通过 Bridge 完成，减少对 Computer Use 原生界面操作的依赖。
 
+## 当前进度补充（2026-11-02，0.8.26）
+
+新增 `get_list_items` / `set_list_items` Action、MCP 与 CLI，补齐已有 List 的条目维护。
+读取默认组件与完整有序条目，整批替换支持增删、排序、文案/图标覆盖及清空；
+省略默认组件保留，空/省略条目 URL 继承最终默认组件。先检查完整批次与资源，
+不支持的原生自定义条目数据在修改前拒绝。默认不保存、不进 Agent 撤销栈，
+原生应用失败尝试恢复原内容，保存/验证失败不自动回滚。
+验证同时覆盖 XML 条目、默认组件继承、List 几何/布局和实际预览资源引用。
+6.1.4 的 `items` setter 需要有效 URL，传继承空值会创建失效的预览资源引用；
+Bridge 写入前展开 URL，序列化仍使用编辑器的默认组件省略语义。
+模拟宿主 **312/312**、Python **70/70**、macOS Editor **48/48**，包含完整进程重启、
+预览资源、原生自定义属性挡写及 FastMCP schema 调用。
+验收证据见 `tests/reports/list-items-live.json`；Windows、Unity 和发布产物未验收。
+
 ## 当前进度补充（2026-11-02，0.8.25）
 
 新增 `insert_loader` / `insert_list` 正式 Action、MCP 工具与 CLI 命令，支持当前根组件下
@@ -990,6 +1004,9 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 改为 `DependencyQuery.QueryReferences` + `BuilderUtil.GetMD5HashFromFile` + `IOFileInfo.Length`，
 图片尺寸用免授权的 `AssetSizeUtil.GetSize`。`full_text_search` 仍需另找免授权路径，未暴露。
 真机验收证据 `tests/reports/p8-7-audit-live.json`。
+
+**0.8.26 已补齐已有 List 条目维护**：`get_list_items` / `set_list_items`，全量读取/替换，
+支持增删与排序、默认组件继承及覆盖数据；读写验证包含预览资源引用。
 
 **P8-7 剩余**：i18n（`import_strings` / `export_strings` / `list_langs`）、原生撤销栈评估、
 控制台可见性（`ConsoleView`）、`full_text_search`，以及完整组/组成员操作。0.8.25 已补齐直接创建 List/Loader。

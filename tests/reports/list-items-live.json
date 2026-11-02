@@ -1,0 +1,1041 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-02T12:11:33.276555+08:00",
+  "editor": "FairyGUI Editor 6.1.4 macOS",
+  "bridgeVersion": "0.8.26",
+  "project": "temporary isolated sample copy",
+  "steps": [
+    {
+      "label": "status ping project packages handshake",
+      "passed": true,
+      "result": {
+        "versionMatch": true
+      }
+    },
+    {
+      "label": "MCP read is side effect free",
+      "passed": true,
+      "result": {
+        "itemCount": 1,
+        "unsupportedItemData": []
+      }
+    },
+    {
+      "label": "read then write is a clean no-op",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Keep",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Keep",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": false,
+        "persisted": false,
+        "strength": "none",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "MCP replace existing entries and add one",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Keep",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "设置 & <返回> \"引号\"",
+              "icon": "ui://qsezbqtwp93m1",
+              "name": "settings",
+              "selectedTitle": "已选设置",
+              "selectedIcon": "ui://qsezbqtwp93m2"
+            },
+            {
+              "url": "",
+              "title": "开始",
+              "icon": "",
+              "name": "play",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "",
+              "title": "退出",
+              "icon": "",
+              "name": "exit",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 3,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "reorder delete and clear omitted overrides",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "设置 & <返回> \"引号\"",
+              "icon": "ui://qsezbqtwp93m1",
+              "name": "settings",
+              "selectedTitle": "已选设置",
+              "selectedIcon": "ui://qsezbqtwp93m2"
+            },
+            {
+              "url": "",
+              "title": "开始",
+              "icon": "",
+              "name": "play",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "",
+              "title": "退出",
+              "icon": "",
+              "name": "exit",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 3,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "退出",
+              "icon": "",
+              "name": "exit",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "",
+              "title": "设置",
+              "icon": "",
+              "name": "settings",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "mixed inherited and explicit component URLs",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "退出",
+              "icon": "",
+              "name": "exit",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "",
+              "title": "设置",
+              "icon": "",
+              "name": "settings",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Inherited",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "ui://qsezbqtwmvx64",
+              "title": "Explicit",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwmvx64"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "change default while retaining explicit source",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Inherited",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "ui://qsezbqtwmvx64",
+              "title": "Explicit",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwmvx64"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwmvx64",
+          "items": [
+            {
+              "url": "",
+              "title": "Inherited",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "ui://qsezbqtwp93m3",
+              "title": "Explicit old default",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwmvx64",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "clear default with per-item component URLs",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwmvx64",
+          "items": [
+            {
+              "url": "",
+              "title": "Inherited",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "ui://qsezbqtwp93m3",
+              "title": "Explicit old default",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwmvx64",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "",
+          "items": [
+            {
+              "url": "ui://qsezbqtwp93m3",
+              "title": "Standalone",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "clear all items and default",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "",
+          "items": [
+            {
+              "url": "ui://qsezbqtwp93m3",
+              "title": "Standalone",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "",
+          "items": [],
+          "itemCount": 0,
+          "effectiveUrls": []
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "restore default and items",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "",
+          "items": [],
+          "itemCount": 0,
+          "effectiveUrls": []
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Keep",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "reject missing items",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject null items",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject object instead of array",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject over limit",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject null entry",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject invalid last entry",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject unknown item field",
+      "passed": true,
+      "result": {
+        "errorCode": "unsupported_property",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject image component URL",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject component icon",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject external selected icon",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject self reference item",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject self reference default",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject missing default for inherited item",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject null default",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject image default",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject unknown top field",
+      "passed": true,
+      "result": {
+        "errorCode": "unsupported_property",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject reload without save",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject reload without verify",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject non List",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject root target",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject missing target",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject multiple locators",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "reject nested target",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "unsaved replacement",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Keep",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "Unsaved",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 1,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": false,
+        "persisted": false,
+        "strength": "none",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "discard restores original entries",
+      "passed": true
+    },
+    {
+      "label": "verify=false checks native but does not claim persistence",
+      "passed": true
+    },
+    {
+      "label": "CLI set-list-items",
+      "passed": true,
+      "result": {
+        "strength": "reload"
+      }
+    },
+    {
+      "label": "CLI get-list-items",
+      "passed": true
+    },
+    {
+      "label": "1000 item boundary",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "CLI first",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "",
+              "title": "CLI second",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 2,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "itemCount": 1000,
+          "itemsSummary": {
+            "count": 1000,
+            "sha256": "ed0c9cad407362b45860debcf0fb60464755c94f74acdff67ca9b08cafb91e84",
+            "firstThree": [
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              }
+            ],
+            "lastThree": [
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              }
+            ]
+          },
+          "effectiveUrlsSummary": {
+            "count": 1000,
+            "sha256": "732395fc335f93f3c06130948ee26e7b86f67f759cd94f60b9c1cec640de79b1",
+            "firstThree": [
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3"
+            ],
+            "lastThree": [
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3"
+            ]
+          }
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "final saved restart matrix",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "itemCount": 1000,
+          "itemsSummary": {
+            "count": 1000,
+            "sha256": "ed0c9cad407362b45860debcf0fb60464755c94f74acdff67ca9b08cafb91e84",
+            "firstThree": [
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              }
+            ],
+            "lastThree": [
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              },
+              {
+                "url": "",
+                "title": "",
+                "icon": "",
+                "name": "",
+                "selectedTitle": "",
+                "selectedIcon": ""
+              }
+            ]
+          },
+          "effectiveUrlsSummary": {
+            "count": 1000,
+            "sha256": "732395fc335f93f3c06130948ee26e7b86f67f759cd94f60b9c1cec640de79b1",
+            "firstThree": [
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3"
+            ],
+            "lastThree": [
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3",
+              "ui://qsezbqtwp93m3"
+            ]
+          }
+        },
+        "after": {
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "items": [
+            {
+              "url": "",
+              "title": "重启后保留",
+              "icon": "ui://qsezbqtwp93m1",
+              "name": "persisted",
+              "selectedTitle": "选中",
+              "selectedIcon": "ui://qsezbqtwp93m2"
+            },
+            {
+              "url": "ui://qsezbqtwmvx64",
+              "title": "Explicit",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            },
+            {
+              "url": "",
+              "title": "",
+              "icon": "",
+              "name": "",
+              "selectedTitle": "",
+              "selectedIcon": ""
+            }
+          ],
+          "itemCount": 3,
+          "effectiveUrls": [
+            "ui://qsezbqtwp93m3",
+            "ui://qsezbqtwmvx64",
+            "ui://qsezbqtwp93m3"
+          ]
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "empty replacement persists on new List",
+      "passed": true,
+      "result": {
+        "before": {
+          "defaultItem": "",
+          "items": [],
+          "itemCount": 0,
+          "effectiveUrls": []
+        },
+        "after": {
+          "defaultItem": "",
+          "items": [],
+          "itemCount": 0,
+          "effectiveUrls": []
+        },
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "writePath": "object-model"
+      }
+    },
+    {
+      "label": "full process restart listItems",
+      "passed": true,
+      "result": {
+        "itemCount": 3,
+        "previewUrls": [
+          "ui://qsezbqtwp93m3",
+          "ui://qsezbqtwmvx64",
+          "ui://qsezbqtwp93m3"
+        ],
+        "diskUnchanged": true
+      }
+    },
+    {
+      "label": "full process restart EmptyAfterEdit",
+      "passed": true,
+      "result": {
+        "itemCount": 0,
+        "previewUrls": [],
+        "diskUnchanged": true
+      }
+    },
+    {
+      "label": "native lock guard",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "native timeline guard",
+      "passed": true,
+      "result": {
+        "errorCode": "invalid_argument",
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "native custom item data is detected and replacement rejected",
+      "passed": true,
+      "result": {
+        "unsupportedItemData": [
+          {
+            "index": 0,
+            "attributes": [],
+            "children": [
+              "property"
+            ]
+          }
+        ],
+        "documentAndDiskUnchanged": true
+      }
+    },
+    {
+      "label": "discard native test fixture restores supported data",
+      "passed": true
+    },
+    {
+      "label": "FastMCP schema dispatch read and no-op replacement",
+      "passed": true,
+      "result": {
+        "schemaValidated": true,
+        "itemCount": 3,
+        "documentAndDiskUnchanged": true
+      }
+    }
+  ],
+  "limitations": [
+    "Windows Editor not tested",
+    "Unity runtime and published packages not tested",
+    "Nested component internals and Tree unsupported",
+    "Custom item properties are read-detected and rejected for full replacement"
+  ],
+  "passed": 48,
+  "total": 48,
+  "restartPending": false,
+  "crossRestartVerified": true,
+  "crossRestartScope": "Two saved Lists: mixed inherited/explicit URLs with all override fields, and an empty List; full tree preview resources and disk hash verified after complete Editor process restart.",
+  "nativeFixtureSetup": "An additional helper was injected only into the isolated copy for lock, timeline and custom-property fixtures; get_list_items and set_list_items use the unchanged compiled production implementation.",
+  "offlineValidation": {
+    "pythonTests": 70,
+    "mockedHostTests": 312,
+    "typescriptCompilation": "passed",
+    "mcpTools": 76
+  },
+  "finishedAt": "2026-11-02T12:17:19.905118+08:00",
+  "largeArrayEvidence": "Arrays longer than 10 items are summarized with count, SHA256 and samples; full live array readback was compared before summarization."
+}

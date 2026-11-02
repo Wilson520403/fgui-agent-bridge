@@ -1339,6 +1339,47 @@ class ListItemSpec(TypedDict, total=False):
 
 
 @mcp.tool()
+def fgui_get_list_items(
+    object_id: str | None = None,
+    object_name: str | None = None,
+    object_path: str | None = None,
+) -> dict[str, Any]:
+    """只读当前根组件下的 List 条目（0.8.26+），按原顺序返回完整数组。
+
+    items 的空 url 表示继承 defaultItem，effectiveUrls 返回实际组件 URL。
+    items 可直接用于 set_list_items；unsupportedItemData 非空时整批更新会拒绝。
+    """
+    return _client.call("get_list_items", {"target": _target(object_id, object_path, object_name)})
+
+
+@mcp.tool()
+def fgui_set_list_items(
+    items: list[ListItemSpec],
+    object_id: str | None = None,
+    object_name: str | None = None,
+    object_path: str | None = None,
+    default_item: str | None = None,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """整批替换已有 List 的条目（0.8.26+）；数组顺序即条目顺序，[] 清空。
+
+    最多 1000 项，支持 url/title/icon/name/selectedTitle/selectedIcon；省略的字段清空。
+    省略 default_item 保留默认组件，空串清除它。条目的空/省略 url 继承最终默认组件。
+    先校验全部输入；限当前根组件下未锁定的 List，须退出时间轴与组内编辑。
+    不进 Agent 撤销栈；默认不保存，未保存可 discard，save 保存整个文档。
+    原生应用失败尝试恢复原条目并回报 rolledBack；保存/验证失败不自动回滚。
+    external_reload 要求 save=True 且 verify=True。
+    """
+    params: dict[str, Any] = {"target": _target(object_id, object_path, object_name), "items": items,
+                              "save": save, "verify": verify, "externalReload": external_reload}
+    if default_item is not None:
+        params["defaultItem"] = default_item
+    return _client.call("set_list_items", params)
+
+
+@mcp.tool()
 def fgui_insert_loader(
     url: str = "",
     x: float = 0,

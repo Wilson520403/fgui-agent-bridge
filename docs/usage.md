@@ -4,7 +4,7 @@
 
 ## MCP 工具一览
 
-共 74 个工具，按用途分组：
+共 76 个工具，按用途分组：
 
 | 类别 | 工具名称 | 功能描述 |
 | :--- | :--- | :--- |
@@ -20,7 +20,7 @@
 | **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 撤销/重做、保存文档或放弃未保存修改 |
 | **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`（0.8.21+ 也可换组件实例的源组件）、`fgui_replace_references`、`fgui_query_references`、`fgui_query_dependencies`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树、替换资源引用、查询引用图、读写文本样式（0.8.20+ 支持 `bold`/`italic`/`underline`/`strokeSize`/`strokeColor`/`shadowX`/`shadowY`/`shadowColor`） |
 | **冗余资源** | `fgui_find_unused`、`fgui_find_duplicate` | 找出没有被引用的资源，以及内容完全重复的文件（只读） |
-| **布局与控制器** | `fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 修改 List/Group 布局、替换 Relation 绑定、设置 gearDisplay 联动、增删改 Controller |
+| **布局与控制器** | `fgui_get_list_items`、`fgui_set_list_items`、`fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 读取和整批更新 List 条目、修改 List/Group 布局、替换 Relation 绑定、设置 gearDisplay 联动、增删改 Controller |
 | **图集与发布** | `fgui_get_publish_settings`、`fgui_set_publish_settings`、`fgui_analyze_atlas_fit`、`fgui_clear_atlas_markers`、`fgui_publish` | 查询或修改发布设置、判断图片能否放进图集、修正图集标记、执行资源发布 |
 
 ---
@@ -53,6 +53,19 @@
 ```bash
 uv run fgui-agent --project /PATH/TO/PROJECT insert-loader --name cover --width 180 --height 90 --fill scale
 uv run fgui-agent --project /PATH/TO/PROJECT insert-list --default-item ui://PACKAGE_ID_COMPONENT_ID --items '[{"title":"One"},{"title":"Two"}]' --save --external-reload
+```
+
+### 维护已有 List 条目（0.8.26+）
+
+- `fgui_get_list_items` / CLI `get-list-items` 只读默认组件、完整条目数组和顺序。`items[].url` 为空表示继承 `defaultItem`，`effectiveUrls` 给出各项实际组件 URL。编辑器会省略与默认组件相同的显式 URL，读取统一为空串；返回的 `items` 可直接用于整批更新。
+- `fgui_set_list_items` / CLI `set-list-items` 接收完整 `items` 数组（最多 1000 项），数组顺序即条目顺序，`[]` 清空。每项支持 `url/title/icon/name/selectedTitle/selectedIcon`；省略的覆盖字段清空。省略 `default_item` 保留现值，传空串清除；条目的空/省略 URL 使用最终默认组件，没有默认组件时每项必须显式给组件 URL。图标只接受工程内图片。
+- 限当前根组件下的 List。更新要求目标未锁定、退出时间轴和组内编辑；嵌套组件内部与 Tree 不支持。先校验全部参数和资源；现有条目若包含自定义属性等未支持的数据，读取在 `unsupportedItemData` 列出，写入在修改前拒绝。
+- 保留 List 的身份、几何和布局；验证比对完整有序条目及默认组件继承关系。默认不保存、不进入 Agent 撤销栈；未保存可 `discard`，`save` 保存整个文档。原生应用失败尝试恢复原条目与默认组件并回报 `rolledBack`，保存/验证失败不自动回滚。无变化的读取回写不置脏；`verify=false` 仍比对内存接受结果，但不声明持久化。`external_reload` 需要同时开启保存和验证。
+
+```bash
+uv run fgui-agent --project /PATH/TO/PROJECT get-list-items --name menu
+uv run fgui-agent --project /PATH/TO/PROJECT set-list-items --name menu '[{"title":"设置"},{"title":"开始","name":"play"}]' --save --external-reload
+uv run fgui-agent --project /PATH/TO/PROJECT set-list-items --name menu '[]' --save
 ```
 
 ### 分组、复制与层级（0.8.24+）

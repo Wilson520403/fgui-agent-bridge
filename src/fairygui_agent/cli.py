@@ -494,6 +494,16 @@ def build_parser() -> argparse.ArgumentParser:
             create.add_argument("--no-auto-item-size", action="store_true")
             create.add_argument("--overflow", choices=("visible", "hidden", "scroll"), default="scroll")
 
+    list_get_parser = subparsers.add_parser("get-list-items", help="只读已有 List 的默认组件和完整条目（0.8.26+）")
+    _add_target_arguments(list_get_parser)
+    list_set_parser = subparsers.add_parser("set-list-items", help="整批替换 List 条目，数组顺序即显示顺序；[] 清空（0.8.26+）")
+    _add_target_arguments(list_set_parser)
+    list_set_parser.add_argument("items", help='完整条目 JSON 数组，例如 [{"title":"Play"}]；省略字段清空')
+    list_set_parser.add_argument("--default-item", help="省略保留默认组件；空串清除，条目须各自给组件 URL")
+    list_set_parser.add_argument("--save", action="store_true")
+    list_set_parser.add_argument("--no-verify", action="store_true")
+    list_set_parser.add_argument("--external-reload", action="store_true", help="保存后关闭重开验证（需 --save）")
+
     list_layout_parser = subparsers.add_parser("set-list-layout", help="修改 List 布局属性（layout/gap/defaultItem/align/overflow 等）")
     _add_target_arguments(list_layout_parser)
     list_layout_parser.add_argument("fields", help="布局字段 JSON 对象，如 {\"layout\":\"flow_vertical\",\"lineGap\":8}")
@@ -1044,6 +1054,14 @@ def main() -> int:
         elif args.command == "remove":
             action = "remove_object"
             params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}
+        elif args.command in ("get-list-items", "set-list-items"):
+            action = args.command.replace("-", "_")
+            params = {"target": target_from_args(args)}
+            if args.command == "set-list-items":
+                params.update(items=load_json_value(args.items), save=args.save,
+                              verify=not args.no_verify, externalReload=args.external_reload)
+                if args.default_item is not None:
+                    params["defaultItem"] = args.default_item
         elif args.command == "set-list-layout":
             action = "set_list_layout"
             params = {"target": target_from_args(args), "save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}

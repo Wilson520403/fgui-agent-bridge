@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 from fairygui_agent import mcp_server
 from fairygui_agent.cli import main
-from fairygui_agent.bridge_client import BridgeClient, BridgeError, DOCUMENT_PRIMITIVE_CAPABILITIES, PRIMITIVE_CREATION_CAPABILITIES
+from fairygui_agent.bridge_client import BridgeClient, BridgeError, DOCUMENT_PRIMITIVE_CAPABILITIES, PRIMITIVE_CREATION_CAPABILITIES, LIST_ITEMS_CAPABILITIES
 from fairygui_agent.project_locator import ProjectLocator
 
 
@@ -76,4 +76,42 @@ class DocumentPrimitiveTests(unittest.TestCase):
         with patch.object(client, 'ensure_ready', return_value={'bridgeVersion': '0.8.24', 'capabilities': []}):
             for action in PRIMITIVE_CREATION_CAPABILITIES:
                 with self.subTest(action=action), self.assertRaisesRegex(BridgeError, '0.8.25'):
+                    client.call_raw(action, {})
+
+    def test_list_items_mcp_preserves_replacement_and_optional_default(self):
+        entries = [{'title': 'Two'}, {'url': 'ui://pkgbutton', 'title': '', 'selectedIcon': ''}]
+        with patch.object(mcp_server._client, 'call', return_value={}) as call:
+            mcp_server.fgui_get_list_items(object_name='menu')
+            self.assertEqual(call.call_args.args, ('get_list_items', {'target': {'name': 'menu'}}))
+            mcp_server.fgui_set_list_items(entries, object_path='root/menu', save=True, external_reload=True)
+            self.assertEqual(call.call_args.args, ('set_list_items', {'target': {'path': 'root/menu'}, 'items': entries,
+                             'save': True, 'verify': True, 'externalReload': True}))
+            mcp_server.fgui_set_list_items([], object_id='one', default_item='')
+            self.assertEqual(call.call_args.args[1]['defaultItem'], '')
+            self.assertEqual(call.call_args.args[1]['items'], [])
+
+    def test_list_items_mcp_requires_one_locator(self):
+        for invoke in [lambda: mcp_server.fgui_get_list_items(),
+                       lambda: mcp_server.fgui_set_list_items([], object_id='one', object_name='menu')]:
+            with self.assertRaises(ValueError):
+                invoke()
+
+    def test_list_items_cli_distinguishes_missing_default_from_clear(self):
+        cases = [
+            (['get-list-items', '--name', 'menu'], 'get_list_items', {'target': {'name': 'menu'}}),
+            (['set-list-items', '--id', 'one', '[{"title":"Two"}]', '--save', '--external-reload'],
+             'set_list_items', {'target': {'id': 'one'}, 'items': [{'title': 'Two'}], 'save': True, 'verify': True, 'externalReload': True}),
+            (['set-list-items', '--path', 'root/menu', '[]', '--default-item', '', '--no-verify'],
+             'set_list_items', {'target': {'path': 'root/menu'}, 'items': [], 'defaultItem': '', 'save': False, 'verify': False, 'externalReload': False}),
+        ]
+        for argv, action, expected in cases:
+            with self.subTest(action=action, argv=argv), patch.object(BridgeClient, 'call_raw', return_value={'ok': True, 'result': {}}) as call, patch('builtins.print'), patch('sys.argv', ['fgui-agent', *argv]):
+                self.assertEqual(main(), 0)
+                self.assertEqual(call.call_args.args, (action, expected))
+
+    def test_list_items_capabilities_reject_an_old_plugin_before_enqueue(self):
+        client = BridgeClient(ProjectLocator('sample'))
+        with patch.object(client, 'ensure_ready', return_value={'bridgeVersion': '0.8.25', 'capabilities': []}):
+            for action in LIST_ITEMS_CAPABILITIES:
+                with self.subTest(action=action), self.assertRaisesRegex(BridgeError, '0.8.26'):
                     client.call_raw(action, {})

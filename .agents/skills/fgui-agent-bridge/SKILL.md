@@ -96,6 +96,14 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 文档与持久化验证：使用 `fgui_verify_document` 重新读取活动文档对象树并可传入 `target + expected` 比对组件 XML 磁盘持久化内容；`expected` 含 `children` 时执行递归对象树比对（`childrenMode` 默认 `exact` 按位置全等，`subset` 按 id/name/index 定位且允许多余节点；含 `children` 时 `target` 可省略，默认根组件）；无 `expected` 时仅作为对象树快照。XML 阶段仅覆盖活动文档序列化范围（根节点 + displayList 直接子节点），嵌套组件内部计入 `verification.xmlSkipped`。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
 
+### 已有 List 条目维护（0.8.26+）
+
+先用 `fgui_get_list_items`（CLI `get-list-items`）读取目标的默认组件与完整条目，再用 `fgui_set_list_items`（CLI `set-list-items`）提交完整数组。目标用 `object_id/object_name/object_path` 三选一。条目数组的顺序即显示顺序，增删与排序通过整批替换完成，`[]` 清空；每项仅支持 `url/title/icon/name/selectedTitle/selectedIcon`，省略的覆盖字段会清空。省略 `default_item` 保留现值，空串清除；空/省略的条目 URL 继承最终默认组件，`effectiveUrls` 列出有效 URL。编辑器会省略与默认组件相同的 URL，读取统一归为空串，`items` 可直接回写。默认组件与有效条目 URL 必须是工程内组件，图标必须是图片，全部输入在修改前校验。
+
+只支持当前根组件下的 List；写入前退出时间轴和组内编辑并解锁目标。嵌套组件内部、Tree 不支持。读取回报 `unsupportedItemData`，现有条目含自定义属性等不支持的数据时拒绝整批更新，不能忽略该提示。支持保存、XML 和文档重开验证，验证覆盖默认组件继承、全部有序条目及 List 几何/布局。无变化的读回写不置脏；原生应用失败尝试还原并回报 `rolledBack`，保存/验证失败不自动回滚。默认不保存、不进 Agent 撤销栈，未保存可 discard；save 保存整个当前文档。只读工具不改变选择与修改状态。
+
+6.1.4 原生约束：回写 `items` 时每项必须展开为有效组件 URL，直接传继承空值会创建无法读取 `resourceURL` 的预览组件；Bridge 自动展开，保存时编辑器仍省略与默认组件相同的 URL。空覆盖使用原生 null。写后比对预览数量与组件 URL，不能只用条目数据和 XML 宣称预览正常。
+
 ### 4. 发布
 
 1. 先调用 `fgui_get_publish_settings` 确认输出目录、格式、图集、代码生成和包级覆盖。

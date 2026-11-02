@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.25";
+const BRIDGE_VERSION = "0.8.26";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -221,7 +221,7 @@ function writeStatus(): void {
             "select_object",
             "set_property",
             "insert_object",
-            "insert_text", "insert_loader", "insert_list", "create_group", "duplicate_object", "adjust_depth",
+            "insert_text", "insert_loader", "insert_list", "get_list_items", "set_list_items", "create_group", "duplicate_object", "adjust_depth",
             "remove_object",
             "save_document",
             "save_all",
@@ -4163,6 +4163,168 @@ function creationItems(items: any[], defaultItem: string): string {
         for (const key of LIST_ITEM_FIELDS) out[key] = String(item[key] || (key === "url" ? defaultItem : ""));
         return out;
     }));
+}
+
+// Validate the entire replacement before touching the native collection. Empty
+// URLs inherit defaultItem; FairyGUI omits explicit URLs equal to that default.
+function validateListItems(items: any, defaultItem: string, doc: any): any[] {
+    if (!Array.isArray(items) || items.length > 1000)
+        verificationError("invalid_argument", "items 必须是最多 1000 项的数组", { stage: "input" });
+    return items.map((entry: any, index: number) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry))
+            verificationError("invalid_argument", "每个 List 条目必须是对象", { stage: "input", index });
+        for (const key of Object.keys(entry)) {
+            if (LIST_ITEM_FIELDS.indexOf(key) < 0)
+                verificationError("unsupported_property", `不支持的条目字段：${key}`, { stage: "input", index, property: key });
+            if (typeof entry[key] !== "string")
+                verificationError("invalid_argument", "条目字段必须是字符串", { stage: "input", index, property: key });
+        }
+        const out: any = {};
+        for (const key of LIST_ITEM_FIELDS) out[key] = entry[key] || "";
+        const url = creationResource(out.url || defaultItem, `items[${index}].url`, [FairyEditor.FPackageItemType.COMPONENT], doc, false);
+        out.url = url === defaultItem ? "" : url;
+        for (const key of ["icon", "selectedIcon"])
+            out[key] = creationResource(out[key], `items[${index}].${key}`, [FairyEditor.FPackageItemType.IMAGE], doc, true);
+        return out;
+    });
+}
+
+function listItemsSnapshot(obj: any): any {
+    const defaultItem = String(obj.defaultItem || "");
+    const items: any[] = [];
+    const data = (obj as FairyEditor.FList).items;
+    for (let i = 0; i < data.Count; i++) {
+        const item = data.get_Item(i), out: any = {};
+        for (const key of LIST_ITEM_FIELDS) out[key] = String(item[key] || "");
+        if (out.url === defaultItem) out.url = "";
+        items.push(out);
+    }
+    return { defaultItem, items, itemCount: items.length, effectiveUrls: items.map(item => item.url || defaultItem) };
+}
+
+function listItemsVerificationValues(obj: any): any {
+    const snapshot = listItemsSnapshot(obj);
+    const creation = creationValues(obj, "list");
+    // Compare inheritance as well as effective URLs. This catches a save that
+    // accidentally freezes a default-dependent entry to the old component.
+    const values: any = {};
+    for (const key of ["id", "name", "type", "x", "y", "width", "height"].concat(Object.keys(LIST_CREATE_KEYS)))
+        values[key] = creation[key];
+    const previewUrls: any[] = [];
+    for (let i = 0; i < obj.numChildren; i++) {
+        try { previewUrls.push(String(obj.GetChildAt(i).resourceURL || "")); }
+        catch (_) { previewUrls.push(null); }
+    }
+    return { ...values, items: JSON.stringify(snapshot.items), itemCount: snapshot.itemCount,
+        previewItemCount: previewUrls.length, previewUrls: JSON.stringify(previewUrls) };
+}
+
+function persistedListItemsValues(doc: any, obj: any): any {
+    const result = persistedCreationValues(doc, obj, "list");
+    const items = JSON.parse(result.values.items);
+    result.values.previewItemCount = items.length;
+    result.values.previewUrls = JSON.stringify(items.map(item => item.url));
+    for (const item of items) if (item.url === result.values.defaultItem) item.url = "";
+    result.values.items = JSON.stringify(items);
+    return result;
+}
+
+function listItemsTarget(doc: any, params: any): any {
+    const target = params.target;
+    if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).length !== 1 ||
+        !["id", "name", "path"].some(key => typeof target[key] === "string" && target[key].trim()))
+        verificationError("invalid_argument", "target 必须仅包含一个非空 id/name/path", { stage: "input" });
+    const obj = resolveObject(doc, target);
+    if (objectChildren(doc.content).indexOf(obj) < 0 || String(obj.objectType).toLowerCase() !== "list")
+        verificationError("invalid_argument", "仅支持当前文档根组件下的 List；嵌套组件内部与 Tree 不支持", { stage: "input", target });
+    return obj;
+}
+
+function unsupportedListItemData(doc: any, obj: any): any[] {
+    const node = primitiveNode(doc, String(obj.id), false);
+    const unsupported: any[] = [];
+    childXmlNodes(node, "item").forEach((item, index) => {
+        const attributes = Object.keys(xmlAttributes(item)).filter(key => LIST_ITEM_FIELDS.indexOf(key) < 0);
+        const children: string[] = [];
+        if (item.elements) for (let i = 0; i < item.elements.Count; i++) children.push(String(item.elements.get_Item(i).name));
+        if (attributes.length || children.length) unsupported.push({ index, attributes, children });
+    });
+    return unsupported;
+}
+
+function getListItems(params: any): any {
+    for (const key of Object.keys(params)) if (["target", "branch"].indexOf(key) < 0)
+        verificationError("unsupported_property", `不支持的读取字段：${key}`, { stage: "input", property: key });
+    const doc = getActiveDocument(), obj = listItemsTarget(doc, params);
+    return { ok: true, readOnly: true, target: targetSummary(obj, params.target), ...listItemsSnapshot(obj),
+        unsupportedItemData: unsupportedListItemData(doc, obj), documentModified: Boolean(doc.isModified) };
+}
+
+function setListItems(params: any): any {
+    const doc = getActiveDocument(), obj = listItemsTarget(doc, params);
+    validateReloadOptions(params, params.target);
+    for (const key of Object.keys(params)) if (["target", "items", "defaultItem", "branch", "save", "verify", "externalReload"].indexOf(key) < 0)
+        verificationError("unsupported_property", `不支持的条目更新字段：${key}`, { stage: "input", property: key });
+    if (doc.timelineMode || doc.openedGroup || obj.locked)
+        verificationError("invalid_argument", "请退出时间轴和组内编辑模式，并解锁目标 List", { stage: "input", target: params.target });
+    const unsupported = unsupportedListItemData(doc, obj);
+    if (unsupported.length)
+        verificationError("unsupported_property", "现有条目含不支持的数据，不能整批替换", { stage: "input", unsupportedItemData: unsupported });
+    const before = listItemsSnapshot(obj);
+    const defaultItem = creationResource(params.defaultItem === undefined ? before.defaultItem : params.defaultItem,
+        "defaultItem", [FairyEditor.FPackageItemType.COMPONENT], doc, true);
+    const entries = validateListItems(params.items, defaultItem, doc);
+    const beforeValues = listItemsVerificationValues(obj);
+    const expected = { ...beforeValues, defaultItem, items: JSON.stringify(entries), itemCount: entries.length,
+        previewItemCount: entries.length, previewUrls: JSON.stringify(entries.map(entry => entry.url || defaultItem)) };
+    const data = (obj as FairyEditor.FList).items;
+    // Construct native entries before clearing the user's existing collection.
+    const nativeEntries = (items: any[], fallback: string): any[] => items.map(entry => {
+        const item = new FairyEditor.ListItemData();
+        // In 6.1.4 the items setter needs effective component URLs, even for
+        // inherited entries, or it creates unresolved preview components.
+        // The serializer still omits URLs equal to defaultItem. Other absent
+        // overrides must use the constructor's nullable form, not empty refs.
+        for (const key of LIST_ITEM_FIELDS) item[key] = entry[key] || null;
+        item.url = entry.url || fallback;
+        return item;
+    });
+    const replacement = nativeEntries(entries, defaultItem);
+    const originals = nativeEntries(before.items, before.defaultItem);
+    const replace = (items: any[], fallback: string): void => {
+        obj.defaultItem = fallback;
+        data.Clear();
+        for (const item of items) data.Add(item);
+        (obj as FairyEditor.FList).items = data;
+    };
+    const modifiedBefore = doc.isModified;
+    if (!valuesEqual(beforeValues, expected)) {
+        try {
+            replace(replacement, defaultItem);
+            compareVerification(expected, listItemsVerificationValues(obj), "editor", obj);
+        } catch (error) {
+            let rolledBack = false;
+            try {
+                replace(originals, before.defaultItem);
+                compareVerification(beforeValues, listItemsVerificationValues(obj), "editor", obj);
+                doc.SetModified(modifiedBefore);
+                rolledBack = true;
+            } catch (_) { }
+            // A failed rollback invalidates older Agent transactions too.
+            if (!rolledBack) clearAgentHistory();
+            verificationError("editor_rejected", "更新 List 条目失败", { stage: "editor", reason: String(error), rolledBack, mutationMayHaveOccurred: !rolledBack });
+        }
+        doc.SetModified(true);
+        clearAgentHistory();
+        doc.RefreshInspectors();
+    }
+    const after = listItemsSnapshot(obj);
+    lastWritePath = WRITE_PATH_MODEL;
+    const readers = { memory: listItemsVerificationValues, persisted: persistedListItemsValues };
+    const result = writeVerification(doc, obj, beforeValues, listItemsVerificationValues(obj),
+        { ...params, target: { id: String(obj.id) } }, expected, readers);
+    return { ...result, before, after, undoable: false,
+        note: result.note + " items 为全量替换，省略字段清空；不进入 Agent 撤销栈，未保存可 discard。save 保存整个文档。" };
 }
 
 function creationValues(obj: any, kind: string): any {
@@ -9247,6 +9409,7 @@ const DOCUMENT_WRITE_ACTIONS: { [action: string]: boolean } = {
     insert_text: true,
     insert_loader: true,
     insert_list: true,
+    set_list_items: true,
     create_group: true,
     duplicate_object: true,
     adjust_depth: true,
@@ -9605,6 +9768,7 @@ function handleCommand(request: AgentRequest): any {
         insert_text: true,
         insert_loader: true,
         insert_list: true,
+        set_list_items: true,
         create_group: true,
         duplicate_object: true,
         adjust_depth: true,
@@ -9984,6 +10148,12 @@ function handleCommand(request: AgentRequest): any {
 
         case "insert_list":
             return insertPrimitive("list", params);
+
+        case "get_list_items":
+            return getListItems(params);
+
+        case "set_list_items":
+            return setListItems(params);
 
         case "insert_text":
             return insertText(params);
