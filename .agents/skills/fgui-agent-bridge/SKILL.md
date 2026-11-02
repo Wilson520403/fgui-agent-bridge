@@ -1,6 +1,6 @@
 ---
 name: fgui-agent-bridge
-description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridge 仓库时使用；包括连接 FairyGUI Editor、选择工程、读取/修改组件文档、保存/撤销、发布资源，以及新增或变更 Bridge Action、MCP 工具、CLI 参数、协议、安全边界、同步脚本和文档。
+description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridge 仓库时使用；包括连接 FairyGUI Editor、选择工程、拼装界面时的组件分层与复用、读取/修改组件文档、保存/撤销、发布资源，以及新增或变更 Bridge Action、MCP 工具、CLI 参数、协议、安全边界、同步脚本和文档。
 ---
 
 # FGUI Agent Bridge
@@ -23,6 +23,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 ## 何时使用
 
 - 使用 `fgui_*` MCP 工具或 `fgui-agent` CLI 操作 FairyGUI 组件。
+- 拼装界面、拆分子组件、选择公共组件或处理同样式的重复元素。
 - 查看包、资源、活动文档、对象树、对象 ID/路径、属性或撤销状态。
 - 修改组件属性、插入/删除已有 `ui://` 资源、替换 Image/Loader 资源引用、读取或修改文本样式、验证文档结构与持久化、保存、放弃、撤销或重做。
 - 发布当前包、指定包或全部包，或检查发布设置。
@@ -45,7 +46,19 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 4. 不知道包名时先 `fgui_list_packages`；不知道资源时用 `fgui_list_items`。
 5. 打开组件后先确认活动文档，再读取对象树。修改优先使用稳定对象 ID，其次对象路径；只有名称唯一时才使用名称。
 
-### 2. 创建、修改和保存
+### 2. 拼界面的组件分层与复用
+
+- **先查再建**：用 `fgui_list_packages` / `fgui_list_items` 检查目标包与已有公共包中的组件，再读取候选组件对象树，比较样式、结构、状态和扩展类型。不能只凭名称判断，也不能未检查已有组件就为每个位置新建资源。
+- **按职责分层**：按页面、业务区块、可复用基础组件组织界面；页面负责组合，区块负责局部布局，基础组件承载重复样式与交互。沿用工程现有包、目录和命名约定；跨页面通用组件放公共范围，业务专用组件保留在模块内。不要求固定层数，也不把每个一次性文本或图片都包成组件。Group 用于同一文档内的布局管理，成员仍是同级节点，不能代替可复用组件。
+- **同样式共用源组件**：样式、结构和交互状态一致时，插入同一个 `ui://` 组件资源的多个实例。复制组件实例仍应引用同一源资源；`fgui_duplicate_package_item` 会产生独立资源，不能把复制包资源称为组件共用。只有文案、图标、数据或摆放位置不同，不构成新建源组件的理由；尺寸差异先检查现有布局与 Relation 能否满足。
+- **差异放在实例或数据层**：Button/Label 的文案、图标等差异优先用 `fgui_set_instance_override` 支持的扩展属性；同样式列表项共用 List 的 `default_item`。普通嵌套子对象的任意属性不支持实例覆盖，不要声称已经改成；可把可变文案等留在使用方、组合公共视觉组件，或在确有必要时建立有明确差异的组件变体。
+- **新建有明确依据**：没有适用组件，或结构、状态、交互及当前能力无法表达的样式差异确实需要独立维护时再新建。新建的重复样式组件先完成一份，再实例化使用；不要按页面、条目或玩家编号生成多份相同定义。不要为整理层次顺带重构无关界面或改动已有代码绑定名称。
+- **修改公共源组件前查影响面**：先用 `fgui_query_references` 确认使用方，涉及跨包依赖时用 `fgui_query_dependencies(seek_level="all")` 检查依赖方向，避免循环引用。局部需求优先实例覆盖或局部组合；确需修改公共样式时检查受影响页面，不能把单个实例的差异写回公共定义。
+- **按引用验收**：回读对象树与保存后的资源引用，确认同样式实例指向同一源组件、覆盖数据各自正确、层级与布局符合预期；只有实例差异的操作还应确认公共源定义未被改动。完成时简要列出复用的组件、新建组件及理由。
+
+例如：三个样式相同、标题分别为“开始 / 设置 / 退出”的菜单按钮，应使用一个按钮源组件的三个实例（或同一模板的 List 条目），分别设置标题。
+
+### 3. 创建、修改和保存
 
 - 新建组件使用 `fgui_create_component`，明确包、目录、名称、宽高、导出状态和冲突策略。
 - 创建文本对象用 `fgui_insert_text`（0.8.20+）：FGUI 的文本是 displayList 里的裸节点、不是包资源，`fgui_insert_object` 插不进来。传 `text`/`x`/`y`/`name` 与 `style`（font、fontSize、color、align、vAlign、autoSize、letterSpacing、lineGap、width、height、bold、italic、underline、strokeSize、strokeColor、shadowX、shadowY、shadowColor）。**三个编辑器侧约束由 Bridge 自动兜住**：① 给 `width`/`height` 会先写 `autoSize=none`，否则编辑器在保存时按文字自然尺寸重算；② 没给 `font` 但给了 `fontSize` 时自动补编辑器默认字体 `UIDefault`（否则编辑器抛 NullReferenceException）；③ 给描边/投影参数会自动打开对应开关（编辑器只在开关打开时序列化这些属性）。文本的 `id` 由编辑器生成且只读，只能回读；同名时编辑器可能自行改名，响应里的 `inserted.nameAdjusted` 会显式回报。
@@ -83,7 +96,7 @@ description: 当通过 MCP、CLI 或源码使用和维护独立 FGUI Agent Bridg
 - 文档与持久化验证：使用 `fgui_verify_document` 重新读取活动文档对象树并可传入 `target + expected` 比对组件 XML 磁盘持久化内容；`expected` 含 `children` 时执行递归对象树比对（`childrenMode` 默认 `exact` 按位置全等，`subset` 按 id/name/index 定位且允许多余节点；含 `children` 时 `target` 可省略，默认根组件）；无 `expected` 时仅作为对象树快照。XML 阶段仅覆盖活动文档序列化范围（根节点 + displayList 直接子节点），嵌套组件内部计入 `verification.xmlSkipped`。
 - 保存使用 `fgui_save_document` 或 `fgui_save_all`；放弃全部未保存修改使用 `fgui_discard_document`。
 
-### 3. 发布
+### 4. 发布
 
 1. 先调用 `fgui_get_publish_settings` 确认输出目录、格式、图集、代码生成和包级覆盖。
 2. 明确发布范围：`active`、`packages` 或 `all`。
@@ -230,6 +243,7 @@ git diff --check
 完成操作或维护任务时报告：
 
 - 涉及的包、文档、对象或文件；
+- 拼装界面时复用了哪些组件、新建了哪些组件及理由；
 - 是否保存、发布、放弃或同步，以及作用范围；
 - 执行了哪些静态检查、MCP 握手和编辑器验证；
 - 哪些真实平台或环境仍未验证。

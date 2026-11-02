@@ -120,7 +120,7 @@ uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT packages
 
 ### 可选：安装 Agent Skill
 
-[fgui-agent-bridge Skill](.agents/skills/fgui-agent-bridge/SKILL.md) 提供操作流程、属性约定和验证边界。对于支持仓库 Skill 的 Agent，可将它同步到业务代码仓库：
+[fgui-agent-bridge Skill](.agents/skills/fgui-agent-bridge/SKILL.md) 提供组件分层与复用规范、操作流程、属性约定和验证边界。拼界面时先检查已有组件，同样式元素共用源组件，通过实例或数据表达差异。对于支持仓库 Skill 的 Agent，可将它同步到业务代码仓库：
 
 ```bash
 uv run python scripts/sync_to_project.py \
