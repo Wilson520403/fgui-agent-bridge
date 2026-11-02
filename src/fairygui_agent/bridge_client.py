@@ -48,6 +48,7 @@ REQUIRED_CAPABILITIES = frozenset(
 )
 
 DOCUMENT_PRIMITIVE_CAPABILITIES = frozenset({"create_group", "duplicate_object", "adjust_depth"})
+PRIMITIVE_CREATION_CAPABILITIES = frozenset({"insert_loader", "insert_list"})
 
 ANIMATION_CAPABILITIES = frozenset(
     {
@@ -307,6 +308,7 @@ class BridgeClient:
         context = self.project_context()
         status = self.ensure_ready()
         optional = {
+            PRIMITIVE_CREATION_CAPABILITIES: ("List/Loader 创建", "0.8.25"),
             DOCUMENT_PRIMITIVE_CAPABILITIES: ("组件原语", "0.8.24"),
             ANIMATION_CAPABILITIES: ("动画", "0.8.1"),
             TRANSITION_VERIFY_CAPABILITIES: ("Transition 校验", "0.8.15"),

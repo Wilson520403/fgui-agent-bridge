@@ -1,0 +1,1481 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-02T11:09:51.028278+08:00",
+  "editor": "FairyGUI Editor 6.1.4 macOS",
+  "project": "temporary isolated sample copy",
+  "steps": [
+    {
+      "params": {
+        "kind": "loader",
+        "props": {
+          "name": "ProbeLoader",
+          "url": "ui://qsezbqtwp93m1",
+          "align": "center",
+          "verticalAlign": "middle",
+          "fill": "scale",
+          "autoSize": false,
+          "shrinkOnly": true,
+          "x": 20,
+          "y": 30,
+          "width": 180,
+          "height": 90
+        },
+        "native": true
+      },
+      "result": {
+        "detached": {
+          "id": "n9_ha1m",
+          "name": "n9",
+          "objectType": "loader",
+          "url": "",
+          "autoSize": false,
+          "fill": "none",
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": false,
+          "width": 50,
+          "height": 50,
+          "layout": null,
+          "defaultItem": null,
+          "selectionMode": null,
+          "repeatX": null,
+          "repeatY": null,
+          "autoResizeItem": null,
+          "clearOnPublish": false,
+          "overflow": null,
+          "numChildren": null,
+          "items": []
+        },
+        "after": {
+          "id": "n9_ha1m",
+          "name": "ProbeLoader",
+          "objectType": "loader",
+          "url": "ui://qsezbqtwp93m1",
+          "autoSize": false,
+          "fill": "scale",
+          "align": "center",
+          "verticalAlign": "middle",
+          "shrinkOnly": true,
+          "width": 180,
+          "height": 90,
+          "layout": null,
+          "defaultItem": null,
+          "selectionMode": null,
+          "repeatX": null,
+          "repeatY": null,
+          "autoResizeItem": null,
+          "clearOnPublish": false,
+          "overflow": null,
+          "numChildren": null,
+          "items": []
+        },
+        "errors": [],
+        "serializedNode": "<loader id=\"n9_ha1m\" name=\"ProbeLoader\" xy=\"20,30\" size=\"180,90\" url=\"ui://qsezbqtwp93m1\" align=\"center\" vAlign=\"middle\" fill=\"scale\" shrinkOnly=\"true\" />"
+      }
+    },
+    {
+      "params": {
+        "kind": "loader",
+        "props": {
+          "name": "EmptyLoader",
+          "width": 100,
+          "height": 50
+        },
+        "native": true
+      },
+      "result": {
+        "detached": {
+          "id": "n10_ha1m",
+          "name": "n10",
+          "objectType": "loader",
+          "url": "",
+          "autoSize": false,
+          "fill": "none",
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": false,
+          "width": 50,
+          "height": 50,
+          "layout": null,
+          "defaultItem": null,
+          "selectionMode": null,
+          "repeatX": null,
+          "repeatY": null,
+          "autoResizeItem": null,
+          "clearOnPublish": false,
+          "overflow": null,
+          "numChildren": null,
+          "items": []
+        },
+        "after": {
+          "id": "n10_ha1m",
+          "name": "EmptyLoader",
+          "objectType": "loader",
+          "url": "",
+          "autoSize": false,
+          "fill": "none",
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": false,
+          "width": 100,
+          "height": 50,
+          "layout": null,
+          "defaultItem": null,
+          "selectionMode": null,
+          "repeatX": null,
+          "repeatY": null,
+          "autoResizeItem": null,
+          "clearOnPublish": false,
+          "overflow": null,
+          "numChildren": null,
+          "items": []
+        },
+        "errors": [],
+        "serializedNode": "<loader id=\"n10_ha1m\" name=\"EmptyLoader\" xy=\"278,305\" size=\"100,50\" />"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "props": {
+          "name": "EmptyList",
+          "width": 320,
+          "height": 220
+        },
+        "native": true
+      },
+      "result": {
+        "detached": {
+          "id": "n11_ha1m",
+          "name": "n11",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n11_ha1m",
+          "name": "EmptyList",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 220,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n11_ha1m\" name=\"EmptyList\" xy=\"278,305\" size=\"320,220\" overflow=\"scroll\" />"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "props": {
+          "name": "AddList",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "width": 320,
+          "height": 220
+        },
+        "mode": "add",
+        "items": [
+          {},
+          {}
+        ],
+        "native": true
+      },
+      "result": {
+        "detached": {
+          "id": "n12_ha1m",
+          "name": "n12",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n12_ha1m",
+          "name": "AddList",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 220,
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": false,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 2,
+          "items": []
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n12_ha1m\" name=\"AddList\" xy=\"278,305\" size=\"320,220\" layout=\"flow_hz\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\" />"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "props": {
+          "name": "DataList",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "width": 320,
+          "height": 220
+        },
+        "mode": "data",
+        "items": [
+          {
+            "title": "One",
+            "name": "one"
+          },
+          {
+            "url": "ui://qsezbqtwp93m3",
+            "title": "Two",
+            "icon": "ui://qsezbqtwp93m2"
+          }
+        ],
+        "native": true
+      },
+      "result": {
+        "detached": {
+          "id": "n13_ha1m",
+          "name": "n13",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n13_ha1m",
+          "name": "DataList",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 220,
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": "one",
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            },
+            {
+              "url": "ui://qsezbqtwp93m3",
+              "title": "Two",
+              "icon": "ui://qsezbqtwp93m2",
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n13_ha1m\" name=\"DataList\" xy=\"278,305\" size=\"320,220\" layout=\"row\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" name=\"one\" />\n      <item title=\"Two\" icon=\"ui://qsezbqtwp93m2\" />\n    </list>"
+      }
+    },
+    {
+      "result": {
+        "id": "n9_ha1m",
+        "name": "ProbeLoader",
+        "objectType": "loader",
+        "url": "ui://qsezbqtwp93m1",
+        "autoSize": false,
+        "fill": "scale",
+        "align": "center",
+        "verticalAlign": "middle",
+        "shrinkOnly": true,
+        "width": 180,
+        "height": 90,
+        "layout": null,
+        "defaultItem": null,
+        "selectionMode": null,
+        "repeatX": null,
+        "repeatY": null,
+        "autoResizeItem": null,
+        "clearOnPublish": false,
+        "overflow": null,
+        "numChildren": null,
+        "items": []
+      },
+      "sameProcessReadback": "ProbeLoader"
+    },
+    {
+      "result": {
+        "id": "n10_ha1m",
+        "name": "EmptyLoader",
+        "objectType": "loader",
+        "url": "",
+        "autoSize": false,
+        "fill": "none",
+        "align": "left",
+        "verticalAlign": "top",
+        "shrinkOnly": false,
+        "width": 100,
+        "height": 50,
+        "layout": null,
+        "defaultItem": null,
+        "selectionMode": null,
+        "repeatX": null,
+        "repeatY": null,
+        "autoResizeItem": null,
+        "clearOnPublish": false,
+        "overflow": null,
+        "numChildren": null,
+        "items": []
+      },
+      "sameProcessReadback": "EmptyLoader"
+    },
+    {
+      "result": {
+        "id": "n11_ha1m",
+        "name": "EmptyList",
+        "objectType": "list",
+        "url": null,
+        "autoSize": null,
+        "fill": null,
+        "align": "left",
+        "verticalAlign": "top",
+        "shrinkOnly": null,
+        "width": 320,
+        "height": 220,
+        "layout": "column",
+        "defaultItem": null,
+        "selectionMode": "single",
+        "repeatX": 0,
+        "repeatY": 0,
+        "autoResizeItem": true,
+        "clearOnPublish": false,
+        "overflow": "scroll",
+        "numChildren": 0,
+        "items": []
+      },
+      "sameProcessReadback": "EmptyList"
+    },
+    {
+      "result": {
+        "id": "n12_ha1m",
+        "name": "AddList",
+        "objectType": "list",
+        "url": null,
+        "autoSize": null,
+        "fill": null,
+        "align": "left",
+        "verticalAlign": "top",
+        "shrinkOnly": null,
+        "width": 320,
+        "height": 220,
+        "layout": "flow_hz",
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "selectionMode": "single",
+        "repeatX": 0,
+        "repeatY": 0,
+        "autoResizeItem": false,
+        "clearOnPublish": false,
+        "overflow": "scroll",
+        "numChildren": 2,
+        "items": []
+      },
+      "sameProcessReadback": "AddList"
+    },
+    {
+      "result": {
+        "id": "n13_ha1m",
+        "name": "DataList",
+        "objectType": "list",
+        "url": null,
+        "autoSize": null,
+        "fill": null,
+        "align": "left",
+        "verticalAlign": "top",
+        "shrinkOnly": null,
+        "width": 320,
+        "height": 220,
+        "layout": "row",
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "selectionMode": "single",
+        "repeatX": 0,
+        "repeatY": 0,
+        "autoResizeItem": true,
+        "clearOnPublish": false,
+        "overflow": "scroll",
+        "numChildren": 0,
+        "items": [
+          {
+            "url": null,
+            "title": "One",
+            "icon": null,
+            "name": "one",
+            "selectedTitle": null,
+            "selectedIcon": null,
+            "level": 0
+          },
+          {
+            "url": "ui://qsezbqtwp93m3",
+            "title": "Two",
+            "icon": "ui://qsezbqtwp93m2",
+            "name": null,
+            "selectedTitle": null,
+            "selectedIcon": null,
+            "level": 0
+          }
+        ]
+      },
+      "sameProcessReadback": "DataList"
+    },
+    {
+      "result": {
+        "id": "n13_ha1m",
+        "name": "DataList",
+        "objectType": "list",
+        "url": null,
+        "autoSize": null,
+        "fill": null,
+        "align": "left",
+        "verticalAlign": "top",
+        "shrinkOnly": null,
+        "width": 320,
+        "height": 220,
+        "layout": "row",
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "selectionMode": "single",
+        "repeatX": 0,
+        "repeatY": 0,
+        "autoResizeItem": true,
+        "clearOnPublish": false,
+        "overflow": "scroll",
+        "numChildren": 0,
+        "items": [
+          {
+            "url": null,
+            "title": "One",
+            "icon": null,
+            "name": "one",
+            "selectedTitle": null,
+            "selectedIcon": null,
+            "level": 0
+          },
+          {
+            "url": "ui://qsezbqtwp93m3",
+            "title": "Two",
+            "icon": "ui://qsezbqtwp93m2",
+            "name": null,
+            "selectedTitle": null,
+            "selectedIcon": null,
+            "level": 0
+          }
+        ]
+      },
+      "documentReloadReadback": "DataList"
+    },
+    {
+      "result": {
+        "id": "n12_ha1m",
+        "name": "AddList",
+        "objectType": "list",
+        "url": null,
+        "autoSize": null,
+        "fill": null,
+        "align": "left",
+        "verticalAlign": "top",
+        "shrinkOnly": null,
+        "width": 320,
+        "height": 220,
+        "layout": "flow_hz",
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "selectionMode": "single",
+        "repeatX": 0,
+        "repeatY": 0,
+        "autoResizeItem": false,
+        "clearOnPublish": false,
+        "overflow": "scroll",
+        "numChildren": 2,
+        "items": []
+      },
+      "documentReloadReadback": "AddList"
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "AssignedList",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          },
+          {
+            "title": "Two",
+            "url": "ui://qsezbqtwp93m3"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n8_aoql",
+          "name": "n8",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n8_aoql",
+          "name": "AssignedList",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 2,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            },
+            {
+              "url": "ui://qsezbqtwp93m3",
+              "title": "Two",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n8_aoql\" name=\"AssignedList\" xy=\"278,305\" size=\"320,200\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" />\n      <item title=\"Two\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_columnFalse",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": false,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n9_rj65",
+          "name": "n9",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n9_rj65",
+          "name": "L_columnFalse",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": false,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n9_rj65\" name=\"L_columnFalse\" xy=\"278,305\" size=\"320,200\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\" autoItemSize=\"false\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_columnTrue",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": true,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n10_rj65",
+          "name": "n10",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n10_rj65",
+          "name": "L_columnTrue",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n10_rj65\" name=\"L_columnTrue\" xy=\"278,305\" size=\"320,200\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_rowFalse",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": false,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n11_rj65",
+          "name": "n11",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n11_rj65",
+          "name": "L_rowFalse",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": false,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n11_rj65\" name=\"L_rowFalse\" xy=\"278,305\" size=\"320,200\" layout=\"row\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\" autoItemSize=\"false\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_rowTrue",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": true,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n12_rj65",
+          "name": "n12",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n12_rj65",
+          "name": "L_rowTrue",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n12_rj65\" name=\"L_rowTrue\" xy=\"278,305\" size=\"320,200\" layout=\"row\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_flow_hzFalse",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": false,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n13_rj65",
+          "name": "n13",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n13_rj65",
+          "name": "L_flow_hzFalse",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": false,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n13_rj65\" name=\"L_flow_hzFalse\" xy=\"278,305\" size=\"320,200\" layout=\"flow_hz\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_flow_hzTrue",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": true,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n14_rj65",
+          "name": "n14",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n14_rj65",
+          "name": "L_flow_hzTrue",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n14_rj65\" name=\"L_flow_hzTrue\" xy=\"278,305\" size=\"320,200\" layout=\"flow_hz\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\" autoItemSize=\"true\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_flow_vtFalse",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": false,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n15_rj65",
+          "name": "n15",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n15_rj65",
+          "name": "L_flow_vtFalse",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": false,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n15_rj65\" name=\"L_flow_vtFalse\" xy=\"278,305\" size=\"320,200\" layout=\"flow_vt\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_flow_vtTrue",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": true,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n16_rj65",
+          "name": "n16",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n16_rj65",
+          "name": "L_flow_vtTrue",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n16_rj65\" name=\"L_flow_vtTrue\" xy=\"278,305\" size=\"320,200\" layout=\"flow_vt\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\" autoItemSize=\"true\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_paginationFalse",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": false,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n17_rj65",
+          "name": "n17",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n17_rj65",
+          "name": "L_paginationFalse",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": false,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n17_rj65\" name=\"L_paginationFalse\" xy=\"278,305\" size=\"320,200\" layout=\"pagination\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\">\n      <item title=\"One\" />\n    </list>"
+      }
+    },
+    {
+      "params": {
+        "kind": "list",
+        "native": true,
+        "refreshItems": true,
+        "props": {
+          "name": "L_paginationTrue",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "autoResizeItem": true,
+          "width": 320,
+          "height": 200
+        },
+        "items": [
+          {
+            "title": "One"
+          }
+        ]
+      },
+      "result": {
+        "detached": {
+          "id": "n18_rj65",
+          "name": "n18",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 200,
+          "height": 300,
+          "layout": "column",
+          "defaultItem": null,
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 0,
+          "items": []
+        },
+        "after": {
+          "id": "n18_rj65",
+          "name": "L_paginationTrue",
+          "objectType": "list",
+          "url": null,
+          "autoSize": null,
+          "fill": null,
+          "align": "left",
+          "verticalAlign": "top",
+          "shrinkOnly": null,
+          "width": 320,
+          "height": 200,
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "repeatX": 0,
+          "repeatY": 0,
+          "autoResizeItem": true,
+          "clearOnPublish": false,
+          "overflow": "scroll",
+          "numChildren": 1,
+          "items": [
+            {
+              "url": null,
+              "title": "One",
+              "icon": null,
+              "name": null,
+              "selectedTitle": null,
+              "selectedIcon": null,
+              "level": 0
+            }
+          ]
+        },
+        "errors": [],
+        "serializedNode": "<list id=\"n18_rj65\" name=\"L_paginationTrue\" xy=\"278,305\" size=\"320,200\" layout=\"pagination\" overflow=\"scroll\" defaultItem=\"ui://qsezbqtwp93m3\" autoItemSize=\"true\">\n      <item title=\"One\" />\n    </list>"
+      }
+    }
+  ],
+  "bridgeVersion": "0.8.24 with temporary probe action (not included in production plugin)",
+  "findings": [
+    "Document.InsertObject accepts the primitive names loader and list and returns initialized document objects; bridge requests continue after creation.",
+    "The initial CreateChild+AddChild Loader probe wrote XML but Document.OnUpdate then threw NullReferenceException and the bridge stopped responding. That route was abandoned in the disposable copy.",
+    "List.AddItem creates preview children but leaves items empty and does not serialize item elements.",
+    "Appending ListItemData entries to the items collection serializes them; assigning the collection back to items also rebuilds visible preview children.",
+    "The omitted autoItemSize XML default is true for column/row layouts and false for flow_hz/flow_vt/pagination.",
+    "Readback steps labelled sameProcessReadback are snapshots, not proof of a fresh process. Production restart verification is recorded separately in p8-7-creation-live.json."
+  ]
+}

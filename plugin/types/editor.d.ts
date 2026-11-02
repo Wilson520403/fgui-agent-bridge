@@ -132,6 +132,24 @@ declare namespace CS {
             ReplaceReferences($p0: any): any;
             constructor(): any;
         }
+        // Minimal declarations from the editor's public 6.1.4 API.
+        class ListItemData extends System.Object {
+            url: string;
+            name: string;
+            title: string;
+            icon: string;
+            selectedTitle: string;
+            selectedIcon: string;
+            constructor();
+        }
+        class FList extends FairyEditor.FComponent {
+            static SINGLE_COLUMN: string;
+            static SINGLE_ROW: string;
+            static FLOW_HZ: string;
+            static FLOW_VT: string;
+            static PAGINATION: string;
+            items: any;
+        }
         class FComponent extends FairyEditor.FObject {
             customExtentionId: string;
             initName: string;

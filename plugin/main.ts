@@ -11,7 +11,7 @@ const App = FairyEditor.App;
 const previousRunInBackground = UnityEngine.Application.runInBackground;
 UnityEngine.Application.runInBackground = true;
 
-const BRIDGE_VERSION = "0.8.24";
+const BRIDGE_VERSION = "0.8.25";
 const PROTOCOL_VERSION = "1.0";
 const POLL_INTERVAL_FRAMES = 6;
 const STATUS_MIN_INTERVAL_MS = 1000;
@@ -221,7 +221,7 @@ function writeStatus(): void {
             "select_object",
             "set_property",
             "insert_object",
-            "insert_text", "create_group", "duplicate_object", "adjust_depth",
+            "insert_text", "insert_loader", "insert_list", "create_group", "duplicate_object", "adjust_depth",
             "remove_object",
             "save_document",
             "save_all",
@@ -4116,6 +4116,222 @@ function insertText(params: any): any {
                 applied
             };
     return result;
+}
+
+// 0.8.25: primitive URLs are accepted by Document.InsertObject("loader"/"list").
+// Do not use CreateChild + AddChild: the isolated 6.1.4 probe saved a Loader
+// that subsequently broke Document.OnUpdate. List.AddItem only adds preview
+// children; persisted initial entries require ListItemData and the items setter.
+const LOADER_CREATE_KEYS: { [key: string]: any } = {
+    url: { member: "url", attr: "url", kind: "string" },
+    align: { member: "align", attr: "align", kind: "enum", xmlDefault: "left" },
+    vAlign: { member: "verticalAlign", attr: "vAlign", kind: "enum", xmlDefault: "top" },
+    fill: { member: "fill", attr: "fill", kind: "enum", xmlDefault: "none" },
+    shrinkOnly: { member: "shrinkOnly", attr: "shrinkOnly", kind: "bool" },
+    autoSize: { member: "autoSize", attr: "autoSize", kind: "bool" }
+};
+const LIST_CREATE_KEYS: { [key: string]: any } = {
+    layout: { ...LIST_LAYOUT_KEYS.layout, xmlDefault: "column" },
+    selectionMode: { ...LIST_LAYOUT_KEYS.selectionMode, xmlDefault: "single" },
+    lineGap: LIST_LAYOUT_KEYS.lineGap,
+    columnGap: LIST_LAYOUT_KEYS.columnGap,
+    defaultItem: LIST_LAYOUT_KEYS.defaultItem,
+    autoItemSize: LIST_LAYOUT_KEYS.autoItemSize,
+    align: { ...LIST_LAYOUT_KEYS.align, xmlDefault: "left" },
+    vAlign: { ...LIST_LAYOUT_KEYS.vAlign, xmlDefault: "top" },
+    overflow: { ...LIST_LAYOUT_KEYS.overflow, xmlDefault: "visible" }
+};
+const LIST_ITEM_FIELDS = ["url", "title", "icon", "name", "selectedTitle", "selectedIcon"];
+
+function creationResource(value: any, key: string, types: string[], doc: any, optional: boolean): string {
+    if (value === undefined && optional) return "";
+    if (typeof value !== "string")
+        verificationError("invalid_argument", `${key} 必须是 ui:// URL 字符串`, { stage: "input", property: key });
+    if (value === "" && optional) return "";
+    if (value.indexOf("ui://") !== 0)
+        verificationError("invalid_argument", `${key} 必须引用工程内 ui:// 资源`, { stage: "input", property: key });
+    const item = resolveItem({ url: value });
+    const url = String(item.GetURL());
+    if (types.indexOf(String(item.type)) < 0 || url === String(doc.content.resourceURL))
+        verificationError("invalid_argument", `${key} 资源类型无效或引用了当前组件自身`, { stage: "input", property: key, resourceURL: url, allowedTypes: types });
+    return url;
+}
+
+function creationItems(items: any[], defaultItem: string): string {
+    return JSON.stringify(items.map(item => {
+        const out: any = {};
+        for (const key of LIST_ITEM_FIELDS) out[key] = String(item[key] || (key === "url" ? defaultItem : ""));
+        return out;
+    }));
+}
+
+function creationValues(obj: any, kind: string): any {
+    const keys = kind === "loader" ? LOADER_CREATE_KEYS : LIST_CREATE_KEYS;
+    const out = Object.assign({}, verifiedObjectValues(obj), typedLayoutValues(obj, keys));
+    if (kind === "list") {
+        const items: any[] = [];
+        const list = (obj as FairyEditor.FList).items;
+        for (let i = 0; i < list.Count; i++) items.push(list.get_Item(i));
+        out.items = creationItems(items, String(obj.defaultItem || ""));
+        out.itemCount = items.length;
+    }
+    return out;
+}
+
+function persistedCreationValues(doc: any, obj: any, kind: string): any {
+    const keys = kind === "loader" ? LOADER_CREATE_KEYS : LIST_CREATE_KEYS;
+    const found = findPersistedObjectNode(doc, obj);
+    const node = found.node;
+    const out = xmlNodeValues(found.item, node);
+    // These defaults are pinned by the live probe, so creation never skips a
+    // requested enum just because FairyGUI omitted its default XML attribute.
+    for (const key of Object.keys(keys)) {
+        const spec = keys[key];
+        const raw = node.GetAttribute(spec.attr);
+        const absent = raw === null || raw === undefined;
+        if (key === "autoItemSize" && absent) {
+            const layout = String(node.GetAttribute("layout") || "column");
+            out[key] = layout === "column" || layout === "row";
+        } else if (absent) out[key] = spec.xmlDefault !== undefined ? spec.xmlDefault : spec.kind === "bool" ? false : spec.kind === "number" ? 0 : "";
+        else out[key] = spec.kind === "bool" ? String(raw) === "true" : spec.kind === "number" ? Number(raw) : String(raw);
+    }
+    if (kind === "list") {
+        const items = childXmlNodes(node, "item").map(n => {
+            const item: any = {};
+            for (const key of LIST_ITEM_FIELDS) item[key] = n.GetAttribute(key);
+            return item;
+        });
+        out.items = creationItems(items, String(out.defaultItem || ""));
+        out.itemCount = items.length;
+    }
+    return { values: out, file: found.file };
+}
+
+function insertPrimitive(kind: string, params: any): any {
+    const doc = getActiveDocument();
+    const root = doc.content;
+    validateReloadOptions(params, { path: "root" });
+    if (doc.timelineMode || doc.openedGroup || String(root.objectType).toLowerCase() !== "component")
+        verificationError("invalid_argument", "请退出时间轴和组内编辑模式，并打开组件文档", { stage: "input" });
+    if (params.target && resolveObject(doc, params.target) !== root)
+        verificationError("invalid_argument", "只支持在当前文档根组件下创建 List/Loader", { stage: "input" });
+    const keys = kind === "loader" ? LOADER_CREATE_KEYS : LIST_CREATE_KEYS;
+    const allowed = ["x", "y", "width", "height", "name", "target", "branch", "save", "verify", "externalReload"].concat(Object.keys(keys), kind === "list" ? ["items"] : []);
+    // autoSize is fixed false for a Loader with explicit dimensions.
+    for (const key of Object.keys(params)) if (allowed.indexOf(key) < 0 || key === "autoSize")
+        verificationError("unsupported_property", `不支持的创建字段：${key}`, { stage: "input", property: key });
+    if (params.name !== undefined && (typeof params.name !== "string" || !params.name.trim()))
+        verificationError("invalid_argument", "name 必须是非空字符串", { stage: "input" });
+    const geometryInput: any = { x: 0, y: 0, width: kind === "list" ? 200 : 100, height: kind === "list" ? 200 : 100 };
+    for (const key of Object.keys(geometryInput)) if (params[key] !== undefined) {
+        if (typeof params[key] !== "number" || !Number.isFinite(params[key]) || Math.abs(params[key]) > 1000000)
+            verificationError("invalid_argument", `${key} 必须是绝对值不超过 1000000 的有限数字`, { stage: "input", property: key });
+        geometryInput[key] = params[key];
+    }
+    const geometry = quantizeGeometryFields(geometryInput, Object.keys(geometryInput));
+    if (geometry.values.width <= 0 || geometry.values.height <= 0)
+        verificationError("invalid_argument", "width/height 向零截断后必须大于 0", { stage: "input" });
+    const enumValue = (key: string, fallback: string, allowed: string[]): string => {
+        const value = params[key] === undefined ? fallback : params[key];
+        if (typeof value !== "string" || allowed.indexOf(value) < 0)
+            verificationError("invalid_argument", `${key} 枚举值无效`, { stage: "input", property: key, allowed });
+        return value;
+    };
+    const boolValue = (key: string, fallback: boolean): boolean => {
+        if (params[key] !== undefined && typeof params[key] !== "boolean")
+            verificationError("invalid_argument", `${key} 必须是布尔值`, { stage: "input", property: key });
+        return params[key] === undefined ? fallback : params[key];
+    };
+    const fields: any = {
+        align: enumValue("align", "left", ["left", "center", "right"]),
+        vAlign: enumValue("vAlign", "top", ["top", "middle", "bottom"])
+    };
+    let entries: any[] = [];
+    if (kind === "loader") {
+        fields.url = creationResource(params.url, "url", [FairyEditor.FPackageItemType.IMAGE, FairyEditor.FPackageItemType.MOVIECLIP], doc, true);
+        fields.fill = enumValue("fill", "none", ["none", "scale", "scaleMatchHeight", "scaleMatchWidth", "scaleFree", "scaleNoBorder"]);
+        fields.shrinkOnly = boolValue("shrinkOnly", false);
+        fields.autoSize = false;
+    } else {
+        const layout = enumValue("layout", "single_column", ["single_column", "single_row", "flow_horizontal", "flow_vertical", "pagination", "column", "row", "flow_hz", "flow_vt"]);
+        fields.layout = layout === "column" || layout === "row" ? layout : listLayoutConstant(layout);
+        fields.defaultItem = creationResource(params.defaultItem, "defaultItem", [FairyEditor.FPackageItemType.COMPONENT], doc, true);
+        fields.selectionMode = enumValue("selectionMode", "single", ["single", "none", "multiple", "multiple_singleclick"]);
+        fields.overflow = enumValue("overflow", "scroll", ["visible", "hidden", "scroll"]);
+        fields.autoItemSize = boolValue("autoItemSize", true);
+        for (const key of ["lineGap", "columnGap"]) {
+            const value = params[key] === undefined ? 0 : params[key];
+            if (typeof value !== "number" || !Number.isInteger(value) || Math.abs(value) > 10000)
+                verificationError("invalid_argument", `${key} 必须是 -10000 到 10000 之间的整数`, { stage: "input", property: key });
+            fields[key] = value;
+        }
+        if (params.items !== undefined && (!Array.isArray(params.items) || params.items.length > 1000))
+            verificationError("invalid_argument", "items 必须是最多 1000 项的数组", { stage: "input" });
+        entries = (params.items || []).map((entry: any, index: number) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry))
+                verificationError("invalid_argument", "每个 List 条目必须是对象", { stage: "input", index });
+            for (const key of Object.keys(entry)) {
+                if (LIST_ITEM_FIELDS.indexOf(key) < 0)
+                    verificationError("unsupported_property", `不支持的条目字段：${key}`, { stage: "input", index, property: key });
+                if (typeof entry[key] !== "string")
+                    verificationError("invalid_argument", "条目字段必须是字符串", { stage: "input", index, property: key });
+            }
+            const out = { ...entry };
+            out.url = creationResource(entry.url || fields.defaultItem, `items[${index}].url`, [FairyEditor.FPackageItemType.COMPONENT], doc, false);
+            for (const key of ["icon", "selectedIcon"]) if (entry[key] !== undefined)
+                out[key] = creationResource(entry[key], `items[${index}].${key}`, [FairyEditor.FPackageItemType.IMAGE], doc, true);
+            return out;
+        });
+    }
+    const oldSelection: string[] = [];
+    const selection = doc.GetSelection();
+    for (let i = 0; i < selection.Count; i++) oldSelection.push(String(selection.get_Item(i).id));
+    const modifiedBefore = doc.isModified;
+    let obj: any = null;
+    let after: any;
+    let expected: any;
+    try {
+        obj = doc.InsertObject(kind, new UnityEngine.Vector2(geometry.values.x, geometry.values.y));
+        if (!obj || String(obj.objectType).toLowerCase() !== kind || !obj.id)
+            throw new Error("Document.InsertObject 未返回预期节点");
+        // Direct member writes match the pinned native contracts. Geometry goes
+        // last, after resource/layout setters that can resize the object.
+        if (params.name !== undefined) obj.name = params.name;
+        for (const key of Object.keys(fields)) assignLayoutMember(obj, keys[key], fields[key]);
+        if (kind === "list" && entries.length) {
+            const list = obj as FairyEditor.FList;
+            const data = list.items;
+            for (const entry of entries) {
+                const item = new FairyEditor.ListItemData();
+                for (const key of Object.keys(entry)) item[key] = entry[key];
+                data.Add(item);
+            }
+            list.items = data;
+        }
+        for (const key of Object.keys(geometry.values)) obj[key] = geometry.values[key];
+        expected = { id: String(obj.id), name: String(obj.name || ""), type: kind, ...geometry.values, ...fields };
+        if (kind === "list") { expected.items = creationItems(entries, fields.defaultItem); expected.itemCount = entries.length; }
+        after = creationValues(obj, kind);
+        compareVerification(expected, after, "editor", obj);
+    } catch (error) {
+        let rolledBack = false;
+        try { if (obj) { doc.RemoveObject(obj); doc.SetModified(modifiedBefore); rolledBack = true; } } catch (_) { }
+        verificationError("editor_rejected", "创建节点失败", { stage: "editor", reason: String(error), rolledBack, mutationMayHaveOccurred: !rolledBack });
+    } finally {
+        doc.UnselectAll();
+        for (const id of oldSelection) { const old = findObjectById(root, id); if (old) doc.SelectObject(old, false, true); }
+        doc.RefreshInspectors();
+    }
+    const inserted = { id: String(obj.id), name: String(obj.name || ""), type: kind,
+        nameRequested: params.name === undefined ? null : params.name,
+        nameAdjusted: params.name !== undefined && String(obj.name) !== params.name };
+    doc.SetModified(true);
+    clearAgentHistory();
+    lastWritePath = WRITE_PATH_DOCUMENT;
+    const readers = { memory: (o: any) => creationValues(o, kind), persisted: (d: any, o: any) => persistedCreationValues(d, o, kind) };
+    const result = writeVerification(doc, obj, {}, after, { ...params, target: { id: inserted.id } }, expected, readers);
+    return withRounded({ ...result, inserted, undoable: false, creationPath: "Document.InsertObject", propertyWritePath: WRITE_PATH_MODEL,
+        note: result.note + " 结构创建不进入 Agent 撤销栈；未保存时可 discard。save 保存整个文档。" }, geometry.rounded);
 }
 
 function setTextStyle(params: any): any {
@@ -9029,6 +9245,8 @@ const DOCUMENT_WRITE_ACTIONS: { [action: string]: boolean } = {
     set_instance_override: true,
     insert_object: true,
     insert_text: true,
+    insert_loader: true,
+    insert_list: true,
     create_group: true,
     duplicate_object: true,
     adjust_depth: true,
@@ -9385,6 +9603,8 @@ function handleCommand(request: AgentRequest): any {
         set_instance_override: true,
         insert_object: true,
         insert_text: true,
+        insert_loader: true,
+        insert_list: true,
         create_group: true,
         duplicate_object: true,
         adjust_depth: true,
@@ -9758,6 +9978,12 @@ function handleCommand(request: AgentRequest): any {
         case "duplicate_object":
         case "adjust_depth":
             return documentPrimitive(action, params);
+
+        case "insert_loader":
+            return insertPrimitive("loader", params);
+
+        case "insert_list":
+            return insertPrimitive("list", params);
 
         case "insert_text":
             return insertText(params);

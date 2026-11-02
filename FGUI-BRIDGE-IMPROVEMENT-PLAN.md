@@ -6,13 +6,25 @@
 >
 > 目标：让 FairyGUI 的常规 UI 拼装、Lanhu 设计还原、资源替换、文字样式调整、动画配置和发布验证尽可能通过 Bridge 完成，减少对 Computer Use 原生界面操作的依赖。
 
+## 当前进度补充（2026-11-02，0.8.25）
+
+新增 `insert_loader` / `insert_list` 正式 Action、MCP 工具与 CLI 命令，支持当前根组件下
+创建 Loader / List、初始条目和三阶段持久化验证。原生路径为
+`Document.InsertObject("loader"/"list")`；List 使用 `ListItemData` 后回写 `items`。
+参数与资源先校验，默认不保存、不进 Agent 撤销栈；`save` 保存整个文档。
+Loader 仅接受空 URL 或图片/MovieClip，List 条目引用组件。
+README 已改为 GitHub 读者的安装、使用示例与兼容性入口，完整工具说明见 `docs/usage.md`。
+模拟宿主 **301/301**、Python **66/66**、macOS Editor **83/83**（含 27 个对象跨完整重启验证）。
+验收证据见 `tests/reports/p8-7-creation-live.json`，原生探针见
+`tests/reports/p8-7-creation-probe-live.json`。Windows、Unity 和发布产物未验收。
+
 ## 当前进度补充（2026-11-02，0.8.24）
 
 P8-7 组件原语首版已实现 `create_group`、`duplicate_object`、`adjust_depth`，插件/MCP/CLI
 同步提供入口；支持保存、XML 回读和关闭重开验证，不进入 Agent 撤销栈。
 FairyGUI Editor 6.1.4 macOS 隔离副本 **28/28** 通过（`tests/reports/p8-7-primitives-live.json`），
 模拟宿主 **290/290**、Python **63/63**。首版仅支持根组件下未锁定、未分组普通对象，
-完整组及组成员操作、直接创建 List/Loader 仍待做；Windows/Unity/发布产物未验收。
+该版未包含完整组及组成员操作、直接创建 List/Loader；后者由 0.8.25 补齐。Windows/Unity/发布产物未验收。
 下方早期阶段表与问题描述保留历史上下文，新增能力以此补充和对应版本章节为准。
 
 ## 当前完成情况（2026-09-20 核查）
@@ -980,14 +992,14 @@ FPackageItem { branch, isBranchRoot, GetBranch, GetTrunk, GetHighResolution, Get
 真机验收证据 `tests/reports/p8-7-audit-live.json`。
 
 **P8-7 剩余**：i18n（`import_strings` / `export_strings` / `list_langs`）、原生撤销栈评估、
-控制台可见性（`ConsoleView`）、`full_text_search`，以及完整组/组成员操作、直接创建 List/Loader 等组件原语。
+控制台可见性（`ConsoleView`）、`full_text_search`，以及完整组/组成员操作。0.8.25 已补齐直接创建 List/Loader。
 **0.8.24 已完成首版** `create_group` / `duplicate_object` / `adjust_depth`：根组件下未锁定、
 未分组普通对象的分组、复制和绝对层级调整，三阶段持久化验证，真机 28/28；证据见
 `tests/reports/p8-7-primitives-live.json`。
 
 > Phase 0 记录的夹具缺口（"Bridge 无创建 List/Group/Controller/Loader 节点的 Action"）
 > 0.8.24 的 `create_group` 已补齐普通对象分组；Controller 已可通过 `set_controller` 创建；
-> 直接创建 List/Loader 仍无正式 Action，不能据原生 API 存在就宣称完成。
+> 0.8.25 的 `insert_list` / `insert_loader` 补齐直接创建及初始条目；完整组操作仍待做。
 
 ### P8-0 ~ P8-7 的执行顺序
 
@@ -1476,7 +1488,7 @@ Bridge 改进应在独立仓库完成：
 | 5 | 图集与发布配置（按真实 `PackSettings` 给建议）**0.8.12 只读切片 + 0.8.13 写侧 + 0.8.14 判定侧均已真机复验；0.8.17 `clear_atlas_markers` 完成既有错误 `alone` 标记的带外纠正并真机验收（模拟宿主 224/224，证据 `tests/reports/p8-5-atlas-marker-clear-live.json`）** | P8-5 | 解锁 Phase 5；替换当前硬编码的尺寸猜测。**剩余**：无；`PublishHandler` 分步导出经 2026-10-20 活体探针证伪，不暴露 |
 | 6 | 关键帧 API 与 `verify_transition` | P8-3 | Phase 5 核心缺口，编辑器原生入口齐备。**0.8.15 只读 `verify_transition` 与 0.8.16 写侧 `add_keyframes`/`set_keyframe`/`duplicate_transition` 均已落地并真机验收（模拟宿主 212/212，证据 `tests/reports/p8-3-keyframes-live.json`）** |
 | 7 | ~~分支能力~~ **0.8.18 已完成** | P8-6 | 新增域，多端/多版本项目价值高。`list_branches` / `create_branch` / `switch_branch` 与分支寻址读写均已落地并真机验收（模拟宿主 230/230，证据 `tests/reports/p8-6-branches-live.json`）；剩余仅 `RenameBranch` / `RemoveBranch` / 分支发布 |
-| 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影。**0.8.19 已完成审计切片 `find_unused` / `find_duplicate`（免 Pro 授权，真机证据 `tests/reports/p8-7-audit-live.json`）**；**0.8.24 补齐组件原语首版 `create_group` / `duplicate_object` / `adjust_depth`（真机 28/28）**；i18n / 原生撤销栈 / 控制台可见性 / 全文搜索、完整组操作和 List/Loader 创建待做 |
+| 8 | 资源审计 / i18n / 原生撤销栈 / 控制台可见性 | P8-7 | 单点成本低，收益立竿见影。**0.8.19 已完成审计切片 `find_unused` / `find_duplicate`（免 Pro 授权，真机证据 `tests/reports/p8-7-audit-live.json`）**；**0.8.24 补齐组件原语首版 `create_group` / `duplicate_object` / `adjust_depth`（真机 28/28）**；i18n / 原生撤销栈 / 控制台可见性 / 全文搜索、完整组操作待做；**0.8.25 已补齐 List/Loader 创建** |
 | 9 | ~~`insert_text` + 文本样式补全（`bold`/`stroke`/`shadow`）~~ **0.8.20 已完成** | P9-0 / P9-1 | 活体探针钉死了三件规划里没写对的事：`CreateChild` 缺 `AddChild` 不落盘、描边宽度属性是 `strokeSize` 不是 `stroke`、投影偏移是 `shadowOffset="x,y"`。已实现 `insert_text` 与 `set_text_style` 扩展（模拟宿主 248/248，真机 6.1.4 验收 `strength=reload`，证据 `tests/reports/p9-0-insert-text-live.json`、`p9-1-text-style-live.json`） |
 | 10 | 实例子对象写回 / 组件实例换资源 / 包资源增删 | P9-2 / P9-3 / P9-4 | 决定"组件能不能被参数化"。不做，每个文案变体都要单独建一个组件类型；不做增删，任何试错都会在工程里留垃圾。**P9-2/P9-3 已于 0.8.21、P9-4 已于 0.8.22 落地并真机验收** |
 | 11 | 几何整数语义 + 导入缩放与图集前置判定 | P9-5 / P9-6 | **0.8.23 已落地并真机验收**（探针 2 份 + 功能验收矩阵 24 步，夹具真机回归 21/21）。没有它，4× 下采样浮点坐标会被编辑器静默截断、切图超限要等 `analyze_atlas_fit` 事后才发现 |

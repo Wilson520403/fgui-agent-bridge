@@ -4,12 +4,12 @@
 
 ## 版本与通道
 
-- Bridge 版本：`0.8.24`
+- Bridge 版本：`0.8.25`
 - FairyGUI 插件 ID：`com.fgui.agent-bridge`
 - 代码真源：独立公开仓库；业务工程只安装插件与 Skill 快照
 - 队列协议：`1.0`
 - FairyGUI Editor 基线：`6.1.4`
-- MCP 工具数：72，其中新增 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override、包资源管理（删除/改名/移动/复制）工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
+- MCP 工具数：74，含 List/Loader 直接创建，以及 List/Group 布局、Relation、gearDisplay、Controller、资源引用图、全工程引用替换、图集约束分析、包级发布设置写入、带外图集标记纠正、Transition 只读校验与关键帧写入、分支列举/创建/切换，以及未使用/重复资源审计、文本对象创建、实例级扩展 override、包资源管理（删除/改名/移动/复制）工具；`fgui_status` 和 `fgui_use_project` 为 Python 本地能力
 - 传输：MCP stdio；底层为目标工程 `.agent/` 下的本地 JSON 文件队列
 - 运行时目录：`.agent/requests`、`.agent/processing`、`.agent/responses`、`.agent/status.json`、`.agent/bridge.log`
 - `.agent/` 是运行时数据，不纳入 Git
@@ -43,6 +43,8 @@
 | `fgui_find_duplicate` | `packages?`、`types?`、`include_branches?`、`max_groups?`、`max_items_per_group?` | 只读资源审计：按文件内容 MD5 + 字节数分组，返回每组条目、浪费字节数；`max_groups` 默认 100、上限 1000，`max_items_per_group` 默认 50、上限 500 |
 | `fgui_get_text_style` / `fgui_set_text_style` | target、style、save?、external_reload? | 读取或设置文本对象样式并回读；0.8.20 起 style 支持 `bold`/`italic`/`underline`（布尔）、`strokeSize`（数值）、`strokeColor`、`shadowX`/`shadowY`（投影偏移）、`shadowColor` |
 | `fgui_verify_document` | max_depth、target?、expected?、external_reload? | 重新读取活动文档对象树和 Editor 状态；expected 含 children 时执行递归对象树比对 |
+| `fgui_insert_loader` | `url?`、`x/y/width/height?`、`name?`、`fill/align/v_align/shrink_only?`、`save/verify/external_reload?` | 0.8.25：创建根组件下的 Loader，空 URL 或工程内图片/MovieClip；固定 autoSize=false |
+| `fgui_insert_list` | `x/y/width/height?`、`name?`、`default_item?`、`items?`、`layout/line_gap/column_gap/selection_mode/auto_item_size/align/v_align/overflow?`、`save/verify/external_reload?` | 0.8.25：创建 List，默认条目和条目 URL 引用组件；含初始条目持久化校验 |
 | `fgui_set_list_layout` | target、`fields`（布局字段集）、save?、verify?、external_reload? | 修改 List 布局：`layout`/`selectionMode`/`lineGap`/`columnGap`/`defaultItem`/`autoItemSize`/`align`/`vAlign`/`selectionController`/`foldInvisibleItems`/`clearOnPublish`/`scrollItemToViewOnClick`/`overflow`/`margin` |
 | `fgui_set_group_layout` | target、`fields`、save?、verify?、external_reload? | 修改 Group 布局：`advanced`/`layout`/`lineGap`/`columnGap`/`excludeInvisibles`/`mainGridMinSize`/`mainGridIndex`/`autoSizeDisabled`/`collapsed` |
 | `fgui_set_relation` | target、`relations` 数组、save?、verify?、external_reload? | 整体替换对象 Relation 绑定（sidePair 或 pairs 两种写法） |
@@ -116,6 +118,7 @@
 - 资源：`create-component`、`create-button`、`import-image`、`import-font`、`import-sound`、`create-movieclip`、`get-movieclip`、`update-movieclip`、`remove-movieclip`；均支持 `--save` / `--no-verify`，image/font/sound/movieclip 另支持 `--external-reload`（asset 重载）
 - Transition：`transitions`、`get-transition`、`verify-transition`（可选 `--no-bounds`）、`upsert-transition`、`remove-transition`、`add-transition-item`、`update-transition-item`、`remove-transition-item`、`add-keyframes`、`set-keyframe`（`--item-index` 或 `--target-id`+`--type`+`--frame`）、`duplicate-transition`（`--new-name`）；写命令支持 `--save` / `--no-verify` / `--external-reload`（文档关闭重开）
 - P0 验证：`replace-object-resource`、`get-text-style`、`set-text-style`、`verify-document`
+- List/Loader 创建（0.8.25）：`insert-loader`、`insert-list`；支持位置/尺寸/布局、初始条目、`--save` / `--no-verify` / `--external-reload`。
 - 组件原语（0.8.24）：`create-group`、`duplicate-object`、`adjust-depth`；支持 `--save` / `--no-verify` / `--external-reload`，复制的新名称使用 `--new-name`（`--name` 用于定位源对象）。
 - 布局与控制器（0.8.8）：`set-list-layout`、`set-group-layout`、`set-relation`、`set-gear-display`、`controllers`、`set-controller`；写命令支持 `--save` / `--no-verify` / `--external-reload`
 - 预览：`preview-transition`、`preview-movieclip`
@@ -1149,3 +1152,40 @@ FairyGUI Editor 6.1.4 macOS 隔离 sample 副本验收 **28/28**，证据
 模拟宿主 **290/290**，Python **63/63**，TypeScript 编译通过。
 
 Windows Editor、Unity 运行时与发布产物尚未验证；完整组复制、组成员操作、直接创建 List/Loader 不在本切片范围。
+
+
+## 0.8.25：创建 List / Loader
+
+新增 `fgui_insert_loader` / `fgui_insert_list`，CLI 为 `insert-loader` / `insert-list`，
+MCP 工具总数增至 74，旧插件缺失能力时提示最低版本 0.8.25。
+两者调用 `Document.InsertObject("loader"/"list")`，限当前文档根组件，退出时间轴与组内编辑后执行。
+
+- Loader：空 URL 或工程内图片/MovieClip；位置、尺寸、六种 fill、align/v_align/shrink_only。
+  固定 autoSize=false，按给定尺寸布局；外部 URL 与组件资源拒绝。
+- List：五种布局、整数行列间距、选择模式、自动条目尺寸、对齐与 overflow。
+  `default_item` 引用组件；最多 1000 个初始条目，支持
+  `url/title/icon/name/selectedTitle/selectedIcon`，图标引用图片。
+  条目省略 URL 时使用默认组件，没有默认组件时每项必须给 URL；拒绝直接自引用。
+- 参数、资源、枚举和验证选项在创建前检查，几何向零截断并回报 rounded，截断后尺寸须大于 0。
+  默认不保存、不进入 Agent 撤销栈；未保存可 discard，save 保存整个当前文档。
+- 保存验证覆盖几何、资源、布局及完整初始条目字段；显式解析 XML 默认值，不跳过默认枚举。
+  原生应用失败尝试移除新节点，回报 rolledBack；保存/验证失败不自动回滚。
+  返回 creationPath=Document.InsertObject、propertyWritePath=object-model。
+- 探针发现 `List.AddItem` 只生成预览子节点，不保存初始条目；实现构造 ListItemData
+  后回写 items，预览与序列化才同时更新。XML 省略 autoItemSize 时，column/row 默认为 true，
+  flow_hz/flow_vt/pagination 默认为 false，校验按布局解释。
+
+### 验证状态
+
+模拟宿主 **301/301**、Python **66/66**、TypeScript 编译通过。
+FairyGUI Editor 6.1.4 macOS 隔离工程 **83/83** 检查通过，证据
+`tests/reports/p8-7-creation-live.json`，原生探针见 `p8-7-creation-probe-live.json`：
+
+- 六种 Loader fill、空/图片/MovieClip URL、五种 List 布局及 autoItemSize 组合、初始条目覆盖、
+  默认组件与逐条 URL、MCP/CLI、保存/XML/文档重开均验证。
+- 23 条非法输入拒绝后，对象树、磁盘哈希、选择数量与修改状态保持一致。
+  未保存创建可 discard；verify=false 不宣称持久化；选择数量保留。
+- 完整 Editor 进程重启后，27 个已保存对象的结构、几何、布局与条目序列化仍保持；
+  List 可见预览条目数量一致。验证用的原生副本已 discard，磁盘未受影响。
+
+Windows、Unity 运行时与发布产物未验证；嵌套创建和条目编辑不在本版范围。

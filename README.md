@@ -1,71 +1,58 @@
 # FairyGUI Agent Bridge
 
-用自然语言，让 AI 直接操作 FairyGUI Editor。
-
-FairyGUI Agent Bridge 在 FairyGUI Editor 和 AI 编程助手之间架了一座桥。通过 MCP 或 CLI，Cursor、Claude Code、Codex、VS Code 中的 Agent 可以读取工程结构、创建和修改界面、制作动效、导入资源并发布产物。你描述需求，它负责把改动落到编辑器里。
+通过 MCP 或 CLI，让 AI 编程助手读取和编辑正在运行的 FairyGUI 工程。
 
 [![CI](https://github.com/Wilson520403/fgui-agent-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Wilson520403/fgui-agent-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`v0.8.24` · 队列协议 `1.0` · 基于 FairyGUI Editor `6.1.4` 开发与验证
+Bridge 提供组件创建、界面布局、资源管理、动效编辑和发布工具。支持 MCP stdio 的客户端可以调用这些工具；无需 AI 客户端时，也可以直接使用命令行。
 
-> 本仓库只包含 Bridge 本身。FairyGUI 工程里只安装一个轻量插件，MCP/CLI 始终从本仓库运行。如果使用支持 Skill 的 Agent，还可以额外安装 Skill，让 AI 更熟悉 FairyGUI 的操作约定。
+**当前版本：0.8.25** · **74 个 MCP 工具** · **主要验证环境：FairyGUI Editor 6.1.4 / macOS**
 
----
+[快速开始](#快速开始) · [使用示例](#使用示例) · [工具与行为参考](docs/usage.md) · [兼容性](#兼容性与范围) · [参与开发](#参与开发)
 
-## 它能做什么
+## 可以用它做什么
 
-- **拼界面**：新建组件和按钮，插入已有资源，调整位置、尺寸、样式、布局与控制器。
-- **导入资源**：从本地导入图片、字体、声音，或用图片序列生成 MovieClip 动画。
-- **做动效**：读取、创建和修改 Transition，支持全部原生轨道，可逐关键帧调整，也能在编辑器里直接预览。
-- **整理资源关系**：替换图片引用，查询「谁引用了它」和「它依赖了谁」。
-- **分支协作**：列出、创建和切换工程分支，让试验性的改动落在独立目录里，不影响主干。
-- **实例级覆盖**：同一个组件在不同实例上显示不同文案与样式（按钮标题、字号、颜色）。
-- **验证改动**：保存后比对文档与磁盘 XML，确认内容真的写进去了。
-- **发布**：按活动包、指定包或全部包发布，并在发布前按真实图集约束处理大图。
+| 工作 | 支持的操作 |
+| --- | --- |
+| 搭建界面 | 创建组件、按钮、文本、List 和 Loader；插入资源实例；分组、复制和调整层级 |
+| 调整布局 | 修改位置、尺寸、文字样式、List/Group 布局、Relation、Controller 和 gearDisplay |
+| 管理资源 | 导入图片、字体、声音；缩放大图；改名、移动、复制或删除包内资源 |
+| 处理引用 | 查询引用与依赖、替换对象资源或全工程引用、查找未使用及重复资源 |
+| 制作动效 | 创建和修改 Transition、编辑关键帧、生成 MovieClip、控制动画预览 |
+| 验证与发布 | 保存后读取 XML、关闭重开验证；分析图集约束，发布活动包、指定包或全部包 |
 
----
+例如，你可以让 Agent「先读取当前组件，在右上角添加一个图片 Loader，再用已有按钮组件创建三项菜单」。Agent 通过工具执行编辑，你可以在 FairyGUI Editor 中检查结果。
 
-## 工作原理
+## 快速开始
 
-```mermaid
-graph LR
-    Agent["AI Agent / IDE<br>(Cursor / Claude / Codex / VSCode)"]
-    -->|MCP stdio| Bridge["FairyGUI Agent Bridge<br>(Python CLI / MCP Server)"]
-    Bridge -->|读写 .agent/ 队列| Plugin["Editor 插件<br>(plugins/agent-bridge)"]
-    Plugin -->|FairyGUI API| Editor["FairyGUI Editor<br>(运行中的 UI 工程)"]
-```
+### 环境要求
 
-Agent 与 Bridge 之间通过 MCP stdio 或 CLI 通信；Bridge 把请求写入目标工程的 `.agent/` 目录，Editor 插件轮询队列并调用 FairyGUI 原生 API 执行。所有改动都发生在真实的 Editor 会话里，你在编辑器界面中能立即看到结果。
+- Python **3.10+** 和 [uv](https://docs.astral.sh/uv/)。
+- 已安装 FairyGUI Editor，并有可打开的 `.fairy` 工程。
+- 使用 MCP 时，客户端需要支持 **stdio**，并能访问这台电脑上的 Bridge 和 FairyGUI 工程目录。
 
----
+本仓库包含 Python MCP/CLI 服务和 Editor 插件。插件安装在每个 FairyGUI 工程中，Python 服务从本仓库运行。
 
-## 环境要求
+### 让 AI 帮你安装
 
-- Python `3.10+`
-- [uv](https://docs.astral.sh/uv/) 包管理器
-- FairyGUI Editor（推荐 `6.1.4`）
-
----
-
-## 安装
-
-### 方式一：让 AI 帮你安装（推荐）
-
-把下面的提示词发给你常用的 AI 编程助手（Cursor、Claude Code、Codex 等）：
+将以下提示词交给能够执行本地终端命令的编程助手：
 
 ```text
-请帮我在这台电脑上安装 FairyGUI Agent Bridge，并完成连接验证。
-你可以执行终端命令和编辑本地文件，请直接动手安装，遇到需要我确认的地方再停下来问我。
-
+请安装 FairyGUI Agent Bridge，并验证连接。
 源仓库：https://github.com/Wilson520403/fgui-agent-bridge.git
-目标 FairyGUI 工程：优先从当前工作区自动查找 .fairy 文件；找不到或找到多个时先问我。
-目标代码仓库：当前工作区。
+
+先检查 Python、uv 和 FairyGUI Editor。克隆仓库并运行 uv sync --frozen，
+再用 scripts/sync_to_project.py 将插件安装到目标 FairyGUI 工程。
+目标工程：从当前工作区查找 .fairy 文件；存在多个或找不到时，请让我选择。
+若客户端支持 MCP，请配置本仓库提供的 fgui-agent-mcp stdio 服务。
+可选 Skill 安装到当前代码仓库的 .agents/skills/ 下。
+完成后依次验证 status、ping、project、packages，报告实际连接结果。
 ```
 
-### 方式二：手动安装
+### 手动安装
 
-#### 1. 克隆仓库并准备环境
+**1. 下载并安装依赖**
 
 ```bash
 git clone https://github.com/Wilson520403/fgui-agent-bridge.git
@@ -73,15 +60,15 @@ cd fgui-agent-bridge
 uv sync --frozen
 ```
 
-#### 2. 安装 FairyGUI Editor 插件
+**2. 安装工程插件**
 
-运行同步脚本，在弹出的窗口中选择你的 FairyGUI 工程目录：
+运行目录选择器，选择包含 `.fairy` 文件的工程目录：
 
 ```bash
 uv run python scripts/sync_to_project.py --choose-project --apply
 ```
 
-也可以直接用命令行指定工程路径：
+也可以指定路径，适合脚本或没有图形界面的终端：
 
 ```bash
 uv run python scripts/sync_to_project.py \
@@ -89,13 +76,26 @@ uv run python scripts/sync_to_project.py \
   --apply
 ```
 
-插件会安装到目标工程的 `plugins/agent-bridge/`。安装完成后重新打开 FairyGUI 工程，插件才会加载。
+插件安装到目标工程的 `plugins/agent-bridge/`。**重新打开 FairyGUI 工程**以加载插件，并将工程内生成的 `.agent/` 加入该工程的 `.gitignore`。
 
-工程内会自动生成 `.agent/` 运行时目录（请求队列与日志），建议把它加入 `.gitignore`。
+同步脚本默认只预览变更，传 `--apply` 才写入。它不会删除目标目录里的其他文件。
 
-#### 3. 配置 MCP Server
+**3. 验证连接**
 
-根据你使用的 AI 客户端添加 MCP 配置。通用格式如下（示例文件见 [.mcp.example.json](.mcp.example.json)）：
+保持 FairyGUI Editor 运行并打开目标工程。在 Bridge 仓库目录执行以下命令，将路径替换为你的工程路径：
+
+```bash
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT status
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT ping
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT project
+uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT packages
+```
+
+`status` 读取已有心跳；`ping` 等待编辑器实际响应。检查版本是否匹配，并确认返回的工程路径和包列表符合预期。
+
+**4. 连接 MCP 客户端（可选）**
+
+在客户端中添加一个 stdio MCP 服务。下面是常见的 JSON 配置格式，具体配置位置由客户端决定；可复制 [.mcp.example.json](.mcp.example.json)，将两个绝对路径替换为本机路径：
 
 ```json
 {
@@ -116,32 +116,11 @@ uv run python scripts/sync_to_project.py \
 }
 ```
 
-常见客户端的配置入口：
-
-- **Cursor**：`~/.cursor/mcp.json` 或项目根目录的 `.cursor/mcp.json`。
-- **Claude Desktop**：`claude_desktop_config.json`（macOS: `~/Library/Application Support/Claude/`，Windows: `%APPDATA%\Claude\`）。
-- **Codex CLI**：
-  ```bash
-  codex mcp add fgui \
-    --env FGUI_PROJECT_PATH=/ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
-    -- uv run --project /ABSOLUTE/PATH/TO/fgui-agent-bridge fgui-agent-mcp
-  ```
-- **VS Code (Cline / Roo Code)**：在扩展的 MCP Settings 中添加名为 `fgui` 的 stdio 服务。
-
-#### 4. 验证连接
-
-启动 FairyGUI Editor 并打开目标工程，然后执行：
-
-```bash
-uv run --project /ABSOLUTE/PATH/TO/fgui-agent-bridge \
-  fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT ping
-```
-
-返回 `{"status": "ok", ...}` 就说明连接成功了。
+第一个路径是 **Bridge 仓库**，第二个是 **FairyGUI 工程**。如果 GUI 客户端找不到 `uv`，请把 `command` 改为 `uv` 可执行文件的绝对路径。重新加载 MCP 服务后，先调用 `fgui_status` 和 `fgui_ping` 验证连接。
 
 ### 可选：安装 Agent Skill
 
-Skill 记录了 FairyGUI 的属性规范、动画约定和各工具的用法，能让 AI 少走弯路。可以用同步脚本把它安装到你的业务代码仓库：
+[fgui-agent-bridge Skill](.agents/skills/fgui-agent-bridge/SKILL.md) 提供操作流程、属性约定和验证边界。对于支持仓库 Skill 的 Agent，可将它同步到业务代码仓库：
 
 ```bash
 uv run python scripts/sync_to_project.py \
@@ -150,271 +129,122 @@ uv run python scripts/sync_to_project.py \
   --apply
 ```
 
-也可以手动把 `.agents/skills/fgui-agent-bridge/` 复制到目标仓库的 `.agents/skills/` 下。
+Skill 是可选的；MCP 和 CLI 都可以独立使用。
 
----
+## 使用示例
 
-## 试试这些指令
+在 MCP 客户端中，可以直接描述任务：
 
-安装完成后，在支持 MCP / Skill 的 AI 对话框里直接描述需求即可：
+```text
+列出工程中的包，打开我指定的组件，读取对象树后再调整布局。
+在当前组件创建一个 180×90 的 Loader，使用包内图片，居中等比缩放。
+用已有按钮组件创建一个纵向 List，初始条目为“开始”“设置”“退出”。
+修改完成后先让我检查，再按我的要求保存或发布。
+```
 
-- `帮我制作一个登录界面，包含账号输入框、密码输入框和登录按钮`
-- `根据蓝湖 MCP 导出的切图帮我拼出这个背包界面`
-- `帮我给 MainMenu 界面的 StartBtn 添加一个弹出的缩放动画效果`
+以下 CLI 示例在 Bridge 仓库目录执行。将工程路径和 `ui://` URL 替换为实际值；资源 URL 可通过 `items 包名` 查询。创建对象前，先在 Editor 中打开目标组件。
 
-安装了 Skill 的话，也可以用 `/fgui-agent-bridge 帮我制作一个登录界面` 显式触发。
+```bash
+# 创建图片 Loader，并验证保存与关闭重开后的结果
+uv run fgui-agent --project /PATH/TO/PROJECT insert-loader \
+  --name cover --url ui://PACKAGE_ID_IMAGE_ID \
+  --x 40 --y 40 --width 180 --height 90 \
+  --fill scale --align center --v-align middle \
+  --save --external-reload
 
----
+# 用已有组件作为 List 条目模板
+uv run fgui-agent --project /PATH/TO/PROJECT insert-list \
+  --name menu --x 40 --y 160 --width 240 --height 300 \
+  --default-item ui://PACKAGE_ID_BUTTON_ID \
+  --layout single_column --line-gap 12 \
+  --items '[{"title":"开始"},{"title":"设置"},{"title":"退出"}]' \
+  --save --external-reload
+
+# 读取对象树和发布设置
+uv run fgui-agent --project /PATH/TO/PROJECT tree
+uv run fgui-agent --project /PATH/TO/PROJECT publish-settings
+```
+
+`insert-loader` 和 `insert-list` 创建当前文档根组件下的对象；默认不保存。Loader 接受空 URL 或工程内图片/MovieClip，List 条目引用组件。完整参数见 `uv run fgui-agent insert-loader --help` 和 `uv run fgui-agent insert-list --help`。
+
+更多工具、资源管理、动效和发布用法见 [使用参考](docs/usage.md)。
+
+## 保存与验证
+
+文档编辑通常默认不保存。支持验证的写操作通过以下选项控制行为：
+
+| 选项 | 行为 |
+| --- | --- |
+| `save=true` / `--save` | 保存整个当前文档，包括已有的未保存修改 |
+| `verify=true`（默认） | 回读编辑器状态；保存后进一步比对磁盘 XML |
+| `external_reload=true` / `--external-reload` | 保存后关闭重开文档并再次比对，需要同时启用保存和验证 |
+
+响应的 `strength` 表示实际验证范围：`none` 未证明持久化、`disk` 已比对磁盘、`reload` 已完成重载比对。不同工具的重载方式和验证字段有差异，详见 [验证说明](docs/usage.md#写入验证与撤销)。
+
+属性与部分动效修改支持 Agent 撤销；List/Loader 等结构创建不进入 Agent 撤销栈，未保存时可用 `discard` 放弃当前文档全部未保存修改。资源导入、包资源管理、分支等操作可能立即写盘，具体行为见各工具说明。
+
+## 工作原理
+
+```mermaid
+graph LR
+    Client["MCP 客户端 / CLI"] --> Bridge["Python Bridge"]
+    Bridge -->|本地 JSON 队列| Plugin["FairyGUI 工程插件"]
+    Plugin -->|Editor API| Editor["FairyGUI Editor"]
+```
+
+请求和响应通过工程内的 `.agent/` 目录交换。编辑器插件调用原生 API，Bridge 按请求 ID 等待实际结果。运行时队列和日志无需提交到 Git。
 
 ## 更新
 
-一条命令即可拉取最新代码、同步 Python 环境，并把新版插件与 Skill 刷新到目标工程：
-
 ```bash
 uv run python scripts/sync_to_project.py \
-  --pull \
-  --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT \
-  --skill-root /ABSOLUTE/PATH/TO/YOUR-CODE-REPOSITORY \
-  --apply
-
-# 或通过 CLI 的 update 子命令
-uv run fgui-agent --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT update --pull --apply
+  --pull --project /ABSOLUTE/PATH/TO/FAIRYGUI-PROJECT --apply
 ```
 
-更新插件文件后需要重新打开 FairyGUI 工程。只有 Bridge 仓库路径或启动命令发生变化时，才需要更新 MCP 配置。
+如需同时更新 Skill，追加 `--skill-root /PATH/TO/YOUR-CODE-REPOSITORY`。更新插件后重新打开工程；Bridge 仓库位置和启动命令未变时，可继续使用原 MCP 配置。
 
-`fgui_status` 会比对 Bridge 与编辑器中插件的版本，不一致时返回 `updateWarning`。
+## 常见问题
 
----
+| 问题 | 排查方式 |
+| --- | --- |
+| `ping` 超时 | 确认 Editor 已打开目标工程、插件已加载；查看工程内 `.agent/bridge.log` |
+| 版本不匹配 | 更新 Bridge 并重新同步插件，然后重新打开工程 |
+| MCP 中没有工具 | 检查两个绝对路径、`uv` 是否可启动，以及客户端是否重新加载服务 |
+| 导入找不到文件 | 使用本地绝对路径，并确认文件存在 |
+| 写入超时后不确定是否执行 | 先查状态和当前文档，确认结果后再决定是否重试，避免重复创建 |
+| 图集分析返回 `unknown` | 图集约束不足，需在编辑器中确认或补全配置 |
 
-## 常用 CLI
+提交 Issue 时，请附上 Bridge 版本、Editor 版本、操作系统、复现步骤和相关错误；分享日志前请移除私人路径或其他敏感内容。
 
-在本仓库根目录执行；也可以在任何位置通过 `--project PATH` 指定工程：
+## 兼容性与范围
 
-```bash
-# 状态与连接检查
-uv run fgui-agent status
-uv run fgui-agent ping
+- 主要开发和实测环境为 **FairyGUI Editor 6.1.4 / macOS**。Windows 和其他 Editor 版本尚未完整实测，欢迎反馈兼容问题。
+- 工具操作需要 Editor 运行并打开工程，不提供无界面的 FairyGUI 编辑服务。
+- 动效覆盖原生 Transition / MovieClip；Spine、DragonBones、Loader3D 和 SWF 不在支持范围。
+- 分组、复制、层级调整目前限于根组件下未锁定、未分组普通对象；完整组复制和组成员编辑尚未支持。
+- Editor 保存验证与 Unity 运行效果是两项独立检查；本仓库的编辑器验收报告不代表 Unity 或发布产物已验收。
+- Lanhu manifest 自动映射、Unity 自动联调和视觉差分仍在规划中。
 
-# 查看工程与资源结构
-uv run fgui-agent packages
-uv run fgui-agent tree
+## 参与开发
 
-# 分支
-uv run fgui-agent branches
-uv run fgui-agent create-branch feature-login --switch
-uv run fgui-agent items Package1 --branch feature-login
-uv run fgui-agent switch-branch ""   # 空名称表示主干
+欢迎通过 [Issues](https://github.com/Wilson520403/fgui-agent-bridge/issues) 报告问题或提交 Pull Request。新增接口请同步插件、MCP、CLI、版本和文档，并用隔离工程验证写操作。
 
-# 查找冗余资源
-uv run fgui-agent find-unused
-uv run fgui-agent find-unused --skip-exported --type image
-uv run fgui-agent find-duplicate
-
-# 保存与发布
-uv run fgui-agent save
-uv run fgui-agent insert-text --text "Hello" --x 40 --y 520 --name title \
-  --style '{"fontSize":28,"color":"#FFCC00","bold":true,"strokeSize":2,"strokeColor":"#FF0000","shadowX":1,"shadowY":2}' --save
-
-# 同一个组件的不同实例显示不同文案与样式（扩展级 override）
-uv run fgui-agent set-instance-override '{"title":"轻松","titleFontSize":28,"titleColor":"#333333"}' \
-  --path lblOverride --save --external-reload
-uv run fgui-agent publish --scope active
-```
-
-更多命令与参数见 `uv run fgui-agent --help`。`call` 仅用于调试原始 Action，日常操作请使用正式子命令。
-
----
-
-## MCP 工具一览
-
-共 72 个工具，按用途分组：
-
-| 类别 | 工具名称 | 功能描述 |
-| :--- | :--- | :--- |
-| **连接与定位** | `fgui_status`、`fgui_ping`、`fgui_use_project`、`fgui_get_project`、`fgui_list_packages`、`fgui_list_items` | 检查连接状态、切换工程、查看包列表与包内资源（`fgui_list_items` 可指定 `branch`） |
-| **分支** | `fgui_list_branches`、`fgui_create_branch`、`fgui_switch_branch` | 列出、创建和切换工程分支，切换后读写都会落在对应分支 |
-| **文档与对象** | `fgui_open_document`、`fgui_get_active_document`、`fgui_get_tree`、`fgui_select_object`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_property`、`fgui_set_instance_override`、`fgui_remove_object` | 打开组件、查看对象树、选中元件、修改属性及增删显示对象；`fgui_insert_text` 创建文本对象（0.8.20+）；`fgui_set_instance_override` 写实例的扩展级 override（0.8.21+） |
-| **分组、复制与层级** | `fgui_create_group`、`fgui_duplicate_object`、`fgui_adjust_depth` | 将对象组成组、复制显示对象、调整绝对层级（0.8.24+） |
-| **资源创建/导入** | `fgui_create_component`、`fgui_create_button`、`fgui_import_image`、`fgui_import_font`、`fgui_import_sound` | 新建组件/按钮，从本地绝对路径导入图片、字体与声音；`fgui_import_image` 支持 `max_size` 按长边等比缩放后入库（0.8.23+） |
-| **包资源管理** | `fgui_delete_package_item`、`fgui_rename_package_item`、`fgui_move_package_item`、`fgui_duplicate_package_item` | 删除/改名/移动/复制包内资源（0.8.22+），删除前会检查引用 |
-| **MovieClip 序列帧** | `fgui_create_movieclip`、`fgui_get_movieclip`、`fgui_update_movieclip`、`fgui_remove_movieclip` | 从本地图片序列创建或更新序列帧动画（帧直接嵌入 `.jta`） |
-| **Transition 动效** | `fgui_list_transitions`、`fgui_get_transition`、`fgui_verify_transition`、`fgui_upsert_transition`、`fgui_remove_transition`、`fgui_add_transition_item`、`fgui_update_transition_item`、`fgui_remove_transition_item`、`fgui_add_keyframes`、`fgui_set_keyframe`、`fgui_duplicate_transition` | 读取与校验动效，声明式增改整段动效，原子化修改条目或关键帧，复制整条 Transition |
-| **动画预览** | `fgui_preview_animation` | 在编辑器中实时播放、暂停、停止、跳帧预览 Transition 或 MovieClip |
-| **保存与事务** | `fgui_get_history`、`fgui_undo`、`fgui_redo`、`fgui_save_document`、`fgui_save_all`、`fgui_discard_document` | 撤销/重做、保存文档或放弃未保存修改 |
-| **验证与资源引用** | `fgui_verify_document`、`fgui_replace_object_resource`（0.8.21+ 也可换组件实例的源组件）、`fgui_replace_references`、`fgui_query_references`、`fgui_query_dependencies`、`fgui_get_text_style`、`fgui_set_text_style` | 比对预期属性或整个对象树、替换资源引用、查询引用图、读写文本样式（0.8.20+ 支持 `bold`/`italic`/`underline`/`strokeSize`/`strokeColor`/`shadowX`/`shadowY`/`shadowColor`） |
-| **冗余资源** | `fgui_find_unused`、`fgui_find_duplicate` | 找出没有被引用的资源，以及内容完全重复的文件（只读） |
-| **布局与控制器** | `fgui_set_list_layout`、`fgui_set_group_layout`、`fgui_set_relation`、`fgui_set_gear_display`、`fgui_list_controllers`、`fgui_set_controller` | 修改 List/Group 布局、替换 Relation 绑定、设置 gearDisplay 联动、增删改 Controller |
-| **图集与发布** | `fgui_get_publish_settings`、`fgui_set_publish_settings`、`fgui_analyze_atlas_fit`、`fgui_clear_atlas_markers`、`fgui_publish` | 查询或修改发布设置、判断图片能否放进图集、修正图集标记、执行资源发布 |
-
----
-
-## 使用说明与注意事项
-
-### 写入、验证与撤销
-
-大多数写操作支持 `save`、`verify` 和 `external_reload` 三个选项（新建组件、删除组件等少数操作不支持 `external_reload`）：
-
-- `save`：执行后立即保存文档。
-- `verify`：重新读取对象树，并按需比对磁盘 XML。
-- `external_reload`：重新加载文档或资源后再比对，是最强的持久化验证（需要同时设置 `save=true`）。
-
-响应里的 `persisted` 和 `strength`（`reload` / `disk` / `none`）会告诉你验证到了哪一层。
-
-属性修改和 Transition 编辑会进入 Agent 撤销栈，可以用 `fgui_undo` / `fgui_redo` 回退。结构创建、删除和资源导入不属于可逆操作；`discard` 只放弃当前文档未保存的修改，不能替代 `undo` 或 `save`。
-
-### 分组、复制与层级（0.8.24+）
-
-- `fgui_create_group(targets, name?)`：至少两个目标，每项用 `id`、`path` 或唯一 `name` 定位。成员按原显示列表顺序移到末尾，新组追加在成员之后。
-- `fgui_duplicate_object(target, name?, dx=0, dy=0)`：复制显示对象，生成新 ID 并追加到末尾。保留节点序列化内容（文字样式、资源引用、Relation、Gear、实例扩展覆盖和 List 条目）；`dx/dy` 相对源坐标偏移，默认原位，最终坐标向零截断并回报 `rounded`。组件内的 Transition 属文档级内容，不随单个对象复制。
-- `fgui_adjust_depth(target, index)`：移到零基绝对层级，`0` 为最底层。返回 `orderBefore` / `orderAfter`，索引不能越界或落入已有分组块。
-- 三者首版均只接受**根组件下未锁定、未分组的普通对象**。组、组成员、根节点和嵌套组件内部对象会被拒绝；操作前须退出时间轴和组内编辑模式。
-- 默认仅修改内存，支持 `save` / `verify` / `external_reload`。`save` 保存整个当前文档；验证覆盖显示顺序、名称、组成员归属，复制还比对完整节点序列化内容。`external_reload` 需 `save=true`，关闭重开后再次比对。
-- 不进 Agent 撤销栈（`undoable:false`）；失败不自动回滚，未保存时可用 `discard` 放弃当前文档全部未保存修改。操作恢复原选择集和可读取的编辑器剪贴板槽位；关闭重开会重建文档选择状态。
+- [plugin/main.ts](plugin/main.ts)：Editor 插件源码；编译生成的 `main.js` 随仓库提交。
+- [src/fairygui_agent](src/fairygui_agent)：Python MCP 与 CLI。
+- [tests](tests)：离线回归及 [Editor 验收报告](tests/reports)。
+- [scripts/sync_to_project.py](scripts/sync_to_project.py)：插件和可选 Skill 的同步入口。
+- [改进规划](FGUI-BRIDGE-IMPROVEMENT-PLAN.md) · [Editor API 研究记录](docs/fgui-editor-api-capability-map.md)。
 
 ```bash
-uv run fgui-agent --project /PATH/TO/PROJECT create-group '[{"id":"n1"},{"id":"n2"}]' --name Header --save --external-reload
-uv run fgui-agent --project /PATH/TO/PROJECT duplicate-object --id n3 --new-name Copy --dx 20 --save --external-reload
-uv run fgui-agent --project /PATH/TO/PROJECT adjust-depth --id n3 0 --save --external-reload
-```
-
-### 包资源管理（0.8.22+）
-
-`fgui_delete_package_item`、`fgui_rename_package_item`、`fgui_move_package_item`、`fgui_duplicate_package_item`
-把「关掉编辑器、手改 `package.xml`、删 XML 文件」这类带外操作收进 Bridge。
-
-- **立即落盘**：调用返回后 `package.xml` 与磁盘文件已是新状态；**不进 Agent 撤销栈**，失败不自动回滚。
-- **删除前会检查引用**：仍被引用的资源会被挡住；确认要删传 `allow_dangling_references=True`，响应里的 `danglingReferences` 列出所有会变悬空的位置，含尚未落盘的引用。
-- **改名/移动不更新引用方的 `fileName` 属性**：资源 id 不变、运行时不受影响；响应里的 `staleFileNameSlots` 列出待补齐的位置，让相关文档在编辑器里重新保存一次即可。
-- **目标目录不存在时自动创建**：`create_folders=True`（默认），响应里的 `folderCreated` 回报是否新建。
-- **改名/移动允许文档开着**；**删除要求目标文档先关闭**（文档开着时默认拒绝，`close_open_documents=True` 可让 Bridge 代为关闭，未保存改动一律拒绝）。
-
-### 坐标与尺寸的整数语义（0.8.23+）
-
-- FairyGUI 只存整数：`x`/`y`/`width`/`height` 落盘时**向零截断**（`50.5`→`50`、`-10.5`→`-10`），组件根尺寸更早一步就被截断。
-- Bridge 写入前做同一套截断，响应里的 `rounded` 列出每一处精度损失（`[{property, from, to}]`），没有损失时不会出现该字段。
-- `scale`、`rotation`、`pivot`、`alpha` 是真浮点，保留小数。
-- 几何写入入口：`fgui_set_property`、`fgui_insert_object`、`fgui_insert_text`、`fgui_set_text_style`、`fgui_create_component`、`fgui_create_button`，以及 `fgui_duplicate_object` 的最终坐标。
-
-### 编辑器侧的两个老坑
-
-- **`scale` 只保留 3 位小数**：编辑器把缩放写成 `scale="0.333"`，写 `scaleX=0.3333` 会「写成功但过不了落盘比对」（报「验证失败：xml」）。
-- **工程里没有字体资源时别新增文本节点**：编辑器会抛 `NullReferenceException` 停摆主循环，桥接随即失联（请求一直没人认领），空文本也一样。
-
-### 导入大图前先缩放（0.8.23+）
-
-- `fgui_import_image` 的可选 `max_size`（长边上限，像素；CLI 是 `--max-size`）：源图长边超过它就先等比缩放再入库，alpha 通道保留，响应里的 `scaled` 回报缩放前后尺寸与比例。
-- 响应里的 `atlasPrecheck` 是**入库前**的图集前置判定，分 `original`（原图尺寸）与 `effective`（入库尺寸）两段，`fit` 取 `fits` / `exceeds` / `unknown`；`unknown` 表示约束不足，需要人工确认。
-- 缩放发生在入库之前：图集归属按入库后的像素尺寸判定，缩放后装得下的图不会再被标成单独图集。
-
-### 同一个组件、不同实例（扩展级 override）
-
-- `fgui_set_instance_override` 让同一个组件在不同实例上显示不同的文案与样式：Button 扩展可写 `title`（`text` 是别名）、`icon`、`selectedTitle`、`selectedIcon`、`titleColor`、`titleFontSize`；Label 扩展可写 `title`、`icon`、`titleColor`、`titleFontSize`。落盘形态是实例节点里的扩展子节点 `<Button title="..."/>`。
-- **只有扩展级这一层可用**。改实例内部的普通子对象（普通 `<text>`、`<image>`）在 FairyGUI Editor 6.1.4 上做不到：编辑器不产出这种节点，运行时也不消费，Bridge 会在写入前直接拒绝。这类需求请用 `fgui_insert_text` 直接建对象，或把样式固化成组件类型。
-- 颜色只接受 `#RRGGBB` 六位（编辑器落盘会丢掉 alpha，带 alpha 的输入会被拒绝）；`titleColor` / `titleFontSize` 是「开关 + 参数」结构，Bridge 会自动打开对应开关。
-- 源组件没有扩展（例如普通组件实例）时会被拒绝，不会静默无效。
-
-### 换掉一个组件实例
-
-- `fgui_replace_object_resource` 除了 Image/Loader，**0.8.21 起也支持把组件实例换成另一个组件**——此前「把白色文本组件换成深灰文本组件」只能删掉重插，还要手算插入位置。
-- 实例的 `id`、`name`、位置、relation 绑定和**显式写死的尺寸**都会保留；实例上的扩展覆盖（`<Button title="..."/>`）也会跟着留下来。换成没有扩展的源组件时，编辑器会自己丢弃用不上的覆盖。
-- 实例**没有**显式写死尺寸时，尺寸会跟随新源组件——这是 FairyGUI 本来的语义。响应里的 `layout` 会报出替换前后的位置与尺寸，尺寸变了能立刻看出来。
-- 根组件是组件定义本身，不是实例，不能被替换。
-
-### 查找冗余资源
-
-- `fgui_find_unused` 会沿着引用关系，找出工程里没有被任何地方引用的资源，返回包名、路径、大小，图片还带尺寸。导出资源默认也会列出来并标记 `exported=true`，因为运行时可能按 URL 直接加载它们；确认不需要后，可以用 `skip_exported=true` 把它们排除。
-- `fgui_find_duplicate` 按文件内容分组，找出完全相同的图片、字体、音效和组件 XML，并按浪费的空间从大到小排序，方便优先清理大头。同名但内容不同不算重复。
-- 两个工具都是只读的，不会改动或保存工程。可以用 `packages` / `types` 缩小范围，传 `include_branches=false` 只看主干。编辑器自带的同类功能需要 Pro 授权，Bridge 的实现不依赖它，装好就能用。
-
-### 改资源引用之前
-
-- `fgui_query_references` 查「谁引用了这个资源」，`fgui_query_dependencies` 查「这个资源依赖了谁」。两者都是只读的，不会修改文档。
-- 单个对象换图用 `fgui_replace_object_resource`，支持 Image 和 Loader，可撤销、可验证。Button 的状态图替换不在支持范围内。
-- 全工程批量换图用 `fgui_replace_references`。它**默认只预览**，确认 `totalCount` 和明细后再传 `execute=True`。执行后立即落盘、不进入 Agent 撤销栈，调用前请确认这是你想要的。替换完成后建议按引用图再查一次，确认源资源的残留引用为 0。
-
-### 分支
-
-- 用 `fgui_list_branches` 查看现有分支，`fgui_create_branch` 新建，`fgui_switch_branch` 切换（传空名称回到主干）。创建和切换都会立即写入磁盘、不能撤销；默认不处理已打开的文档，需要时传 `save_open_documents=true`。
-- 读写工具省略 `branch` 时跟随当前活跃分支，传 `branch=""` 明确表示主干。支持 `branch` 的读取工具可以直接指向任意分支，写入则要求目标分支正处于活跃状态，避免改动落到错误的地方。分支资源放在 `assets_<branch>/<包名>/` 下，不会混进主干的 `package.xml`。
-- 在 FairyGUI 6.1.4 上，保存仍然跟着文档本身：分支文档需要对应分支活跃时才能保存，主干文档在分支活跃时也会拒绝保存。切换前先保存并关闭文档，可以少走弯路。`fgui_replace_references` 和 `fgui_clear_atlas_markers` 只支持主干，分支活跃时会被拒绝。
-- 重启编辑器后会回到主干，但分支内容都还在磁盘上，用 `fgui_switch_branch` 切回去就能继续。
-
-### 动效
-
-- Transition 覆盖全部 FairyGUI 原生轨道，时间单位是帧。`fgui_upsert_transition` 适合声明式地创建或整段替换动效；`fgui_add_keyframes`、`fgui_set_keyframe` 适合局部调整关键帧。
-- `fgui_verify_transition` 是只读检查：它会验证目标对象、轨道兼容性、关键帧取值范围、嵌套 Transition / Sound 引用、Tween 端点和画面范围。`errors` 表示确定有问题，`warnings` 则可能是设计意图（例如滑入/滑出动画里坐标超出画布）。校验不会修改文档，也不会把文档标记为已修改。
-- 关键帧的 `tween=true` 只能续接已经处于 Tween 关系中的帧。要在两个普通关键帧之间建立 Tween，或者延长已有 Tween，请用 `fgui_upsert_transition` 重建。
-- `fgui_preview_animation` 只影响编辑器里的预览状态，不会保存为资源属性。
-- MovieClip 的帧会直接嵌入 `.jta`，不会在包内生成散图资源。删除 MovieClip 需要显式传 `force=true`，并且会先检查引用；全新创建和删除无法撤销。
-
-### 图集与发布
-
-- `fgui_analyze_atlas_fit` 按图集打包器的真实约束（包级 `PackSettings` 或全局 `AtlasSetting`）判断每张图能否放进图集，不再依赖猜测。`fit=unknown` 表示约束信息不足，不代表通过。`summary.assignedAloneButFits` 可以帮你发现磁盘上被标成 `alone`、但实际装得下的图片。
-- `fgui_import_image` 和 `fgui_publish` 使用与 `fgui_analyze_atlas_fit` 相同的判定逻辑，所以「分析说装得下、导入却标了 alone」不会发生。执行结果会放在 `atlasAssignment` 里，说明这次是写入了标记、已有标记无需重复写入，还是因为约束不足没有下结论。
-- 包内已有图片的 `atlas` 标记没法通过编辑器 API 改掉。分析报出 `alone-not-needed` 时，可以用 `fgui_clear_atlas_markers` 修正：它默认只预览，确认后再执行。这个工具会直接写 `package.xml`，执行前自动备份，写入后重新加载包检查结果；该操作不可撤销，执行前请先关闭这些包里的文档（或允许 Bridge 代为关闭已保存的文档）。
-- `fgui_set_publish_settings` 修改包级发布与图集设置。它只写你显式提供的字段，`atlasList` 是全量替换语义；`atlasList` 不能传空数组（FairyGUI 6.1.4 会报错并影响该包后续保存）；`padding`、`square` 等部分 `packSettings` 字段无法跨编辑器重启保留，这类设置建议直接在编辑器界面里改。
-- 发布期间 Bridge 会封锁大部分写操作。发布前先调 `fgui_get_publish_settings` 确认输出目录与图集配置，发布后检查返回的文件变更清单。
-
-### 连接与运行时
-
-- 使用时 FairyGUI Editor 必须保持运行并打开目标工程。
-- `.agent/` 是工程内的运行时队列与日志，不属于安装文件，不要提交到 Git。
-- 插件会忽略超过 60 秒未被认领的请求，并在启动时清理残留队列。客户端超时并不代表操作没有执行，重试前请先用 `fgui_status` 或 `fgui_get_active_document` 确认当前状态，避免重复写入。
-- 图片、字体、声音和 MovieClip 的导入路径必须是绝对路径。导入和替换都是磁盘写入，不受 `discard` 影响。
-
----
-
-## 常见问题与排错
-
-| 异常现象 | 可能原因 | 解决办法 |
-| :--- | :--- | :--- |
-| `ping` 超时或提示未连接 | FairyGUI Editor 未启动；目标工程未打开；插件未安装或未生效 | 打开 Editor 并加载工程；确认 `plugins/agent-bridge/main.js` 存在；重新打开工程加载插件；查看 `.agent/bridge.log` |
-| MCP 客户端找不到工具 | MCP 配置里的绝对路径错误；客户端未重新加载 | 检查配置中的仓库路径和工程路径；新建对话或重启 IDE |
-| 导入资源失败 | 传了相对路径，或文件不存在 | 使用本地绝对路径重新导入 |
-| 发布卡住或超时 | 发布正在进行；同时调用了其他写操作 | 发布期间不要并发写入，等待完成后查看发布日志 |
-| 图集分析结果为 `unknown` | 包级或全局约束缺少页尺寸等信息 | 补全 `PackSettings` / `AtlasSetting` 后重新分析，或到编辑器设置中确认图集配置 |
-
----
-
-## 兼容性与已知限制
-
-- **FairyGUI 版本**：以 `6.1.4` 为主要开发和验证版本，其他 6.x 版本尚未做完整验证。
-- **动画类型**：专注 FairyGUI 原生 Transition 与 MovieClip，不支持 Spine、DragonBones、Loader3D、SWF 等第三方动画格式。
-- **资源管理**：暂不提供通用的包内资源重命名与跨包移动；MovieClip 删除需要显式确认并做引用检查。
-- **平台**：macOS 已完成端到端验证；Windows 也可以使用，但尚未做完整的实机验证，遇到路径或兼容问题欢迎提 Issue。
-
----
-
-## 开发与维护
-
-- 插件 TypeScript 源码：`plugin/main.ts`
-- 插件运行时文件：`plugin/main.js`
-- Python MCP & CLI：`src/fairygui_agent/`
-- Agent Skill：`.agents/skills/fgui-agent-bridge/`
-- 同步脚本：`scripts/sync_to_project.py`
-
-修改 `plugin/main.ts` 后必须重新编译并提交 `plugin/main.js`。版本升级时，请同步更新 `plugin/package.json`、`pyproject.toml`、`src/fairygui_agent/__init__.py`、`plugin/main.ts` 和 `plugin/main.js`。
-
-推荐在提交前运行：
-
-```bash
-uv lock
 uv sync --frozen
 uv run python -m compileall -q src scripts
-uv run python -m unittest discover -s tests -v
 npx -y -p typescript@5.4.5 tsc -p plugin/tsconfig.json --pretty false
+uv run python -m unittest discover -s tests -v
 git diff --check
 ```
 
----
-
-## 相关生态
-
-- [蓝湖 MCP (lanhu-mcp)](https://github.com/dsphper/lanhu-mcp)：配合本工具，可以让 AI 编程 Agent 自动从蓝湖设计稿下载切图、导出标注，并直接在 FairyGUI 中拼装 UI 并发布。
-
----
+离线测试覆盖协议和模拟宿主行为，真实 Editor 验收需要另行运行。请勿提交 `.agent/`、本地环境、缓存或个人配置。
 
 ## 许可证
 
-[MIT License](LICENSE)
+[MIT](LICENSE)

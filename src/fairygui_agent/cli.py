@@ -468,6 +468,32 @@ def build_parser() -> argparse.ArgumentParser:
     remove_parser.add_argument("--no-verify", action="store_true")
     remove_parser.add_argument("--external-reload", action="store_true", help="保存后关闭并重新打开文档再比对，确认目标在重载后仍不存在（需 --save）")
 
+    for kind in ("loader", "list"):
+        create = subparsers.add_parser(f"insert-{kind}", help=f"在当前文档根组件下创建 {kind.title()}（0.8.25+）")
+        create.add_argument("--name")
+        create.add_argument("--x", type=float, default=0)
+        create.add_argument("--y", type=float, default=0)
+        create.add_argument("--width", type=float, default=200 if kind == "list" else 100)
+        create.add_argument("--height", type=float, default=200 if kind == "list" else 100)
+        create.add_argument("--align", choices=("left", "center", "right"), default="left")
+        create.add_argument("--v-align", choices=("top", "middle", "bottom"), default="top")
+        create.add_argument("--save", action="store_true")
+        create.add_argument("--no-verify", action="store_true")
+        create.add_argument("--external-reload", action="store_true", help="保存后关闭重开验证（需 --save）")
+        if kind == "loader":
+            create.add_argument("--url", default="", help="工程内图片/MovieClip ui:// URL；省略创建空 Loader")
+            create.add_argument("--fill", choices=("none", "scale", "scaleMatchHeight", "scaleMatchWidth", "scaleFree", "scaleNoBorder"), default="none")
+            create.add_argument("--shrink-only", action="store_true")
+        else:
+            create.add_argument("--default-item", default="", help="默认条目组件 ui:// URL")
+            create.add_argument("--items", default="[]", help='初始条目 JSON 数组，例如 [{"title":"Play"}]；url 可覆盖默认组件')
+            create.add_argument("--layout", choices=("single_column", "single_row", "flow_horizontal", "flow_vertical", "pagination"), default="single_column")
+            create.add_argument("--line-gap", type=int, default=0)
+            create.add_argument("--column-gap", type=int, default=0)
+            create.add_argument("--selection-mode", choices=("single", "none", "multiple", "multiple_singleclick"), default="single")
+            create.add_argument("--no-auto-item-size", action="store_true")
+            create.add_argument("--overflow", choices=("visible", "hidden", "scroll"), default="scroll")
+
     list_layout_parser = subparsers.add_parser("set-list-layout", help="修改 List 布局属性（layout/gap/defaultItem/align/overflow 等）")
     _add_target_arguments(list_layout_parser)
     list_layout_parser.add_argument("fields", help="布局字段 JSON 对象，如 {\"layout\":\"flow_vertical\",\"lineGap\":8}")
@@ -986,6 +1012,20 @@ def main() -> int:
             style = load_json_value(args.style)
             if style:
                 params["style"] = style
+        elif args.command in ("insert-loader", "insert-list"):
+            action = args.command.replace("-", "_")
+            params = {"x": args.x, "y": args.y, "width": args.width, "height": args.height,
+                      "align": args.align, "vAlign": args.v_align, "save": args.save,
+                      "verify": not args.no_verify, "externalReload": args.external_reload}
+            if args.name is not None:
+                params["name"] = args.name
+            if args.command == "insert-loader":
+                params.update(url=args.url, fill=args.fill, shrinkOnly=args.shrink_only)
+            else:
+                params.update(defaultItem=args.default_item, items=load_json_value(args.items),
+                              layout=args.layout, lineGap=args.line_gap, columnGap=args.column_gap,
+                              selectionMode=args.selection_mode, autoItemSize=not args.no_auto_item_size,
+                              overflow=args.overflow)
         elif args.command in ("create-group", "duplicate-object", "adjust-depth"):
             action = args.command.replace("-", "_")
             params = {"save": args.save, "verify": not args.no_verify, "externalReload": args.external_reload}

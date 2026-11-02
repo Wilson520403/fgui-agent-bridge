@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Any, Literal
+from typing_extensions import TypedDict
 
 from mcp.server.fastmcp import FastMCP
 
@@ -1326,6 +1327,86 @@ def fgui_insert_text(
     if style:
         params["style"] = style
     return _client.call("insert_text", params)
+
+
+class ListItemSpec(TypedDict, total=False):
+    url: str
+    title: str
+    icon: str
+    name: str
+    selectedTitle: str
+    selectedIcon: str
+
+
+@mcp.tool()
+def fgui_insert_loader(
+    url: str = "",
+    x: float = 0,
+    y: float = 0,
+    width: float = 100,
+    height: float = 100,
+    name: str | None = None,
+    fill: Literal["none", "scale", "scaleMatchHeight", "scaleMatchWidth", "scaleFree", "scaleNoBorder"] = "none",
+    align: Literal["left", "center", "right"] = "left",
+    v_align: Literal["top", "middle", "bottom"] = "top",
+    shrink_only: bool = False,
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """在当前文档根组件下创建 Loader（0.8.25+）。
+
+    url 可空，或引用工程内图片/MovieClip；不接受外部 URL。
+    固定 autoSize=false，x/y/width/height 向零截断并回报 rounded。
+    默认不保存；不进 Agent 撤销栈，未保存可 discard。save 保存整个文档。
+    external_reload 要求 save=true 且 verify=true。
+    """
+    params: dict[str, Any] = {"url": url, "x": x, "y": y, "width": width, "height": height,
+                              "fill": fill, "align": align, "vAlign": v_align, "shrinkOnly": shrink_only,
+                              "save": save, "verify": verify, "externalReload": external_reload}
+    if name is not None:
+        params["name"] = name
+    return _client.call("insert_loader", params)
+
+
+@mcp.tool()
+def fgui_insert_list(
+    x: float = 0,
+    y: float = 0,
+    width: float = 200,
+    height: float = 200,
+    name: str | None = None,
+    default_item: str = "",
+    items: list[ListItemSpec] | None = None,
+    layout: Literal["single_column", "single_row", "flow_horizontal", "flow_vertical", "pagination"] = "single_column",
+    line_gap: int = 0,
+    column_gap: int = 0,
+    selection_mode: Literal["single", "none", "multiple", "multiple_singleclick"] = "single",
+    auto_item_size: bool = True,
+    align: Literal["left", "center", "right"] = "left",
+    v_align: Literal["top", "middle", "bottom"] = "top",
+    overflow: Literal["visible", "hidden", "scroll"] = "scroll",
+    save: bool = False,
+    verify: bool = True,
+    external_reload: bool = False,
+) -> dict[str, Any]:
+    """在当前文档根组件下创建 List，支持布局、默认条目组件和初始条目（0.8.25+）。
+
+    default_item 与条目 url 必须引用组件；每项省略 url 时使用 default_item。
+    items 最多 1000 项，可写 url/title/icon/name/selectedTitle/selectedIcon，图标须引用图片。
+    x/y/width/height 向零截断，尺寸须大于 0；间距须为整数。
+    支持保存、XML 条目回读与关闭重开验证。不进 Agent 撤销栈，未保存可 discard。
+    save 保存整个文档；external_reload 要求 save=true 且 verify=true。
+    """
+    params: dict[str, Any] = {"x": x, "y": y, "width": width, "height": height,
+                              "defaultItem": default_item, "items": items if items is not None else [],
+                              "layout": layout, "lineGap": line_gap, "columnGap": column_gap,
+                              "selectionMode": selection_mode, "autoItemSize": auto_item_size,
+                              "align": align, "vAlign": v_align, "overflow": overflow,
+                              "save": save, "verify": verify, "externalReload": external_reload}
+    if name is not None:
+        params["name"] = name
+    return _client.call("insert_list", params)
 
 
 @mcp.tool()

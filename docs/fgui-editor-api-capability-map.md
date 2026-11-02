@@ -687,3 +687,24 @@ npx -y rea-agents@6.4.0 analyze ~/Downloads/FairyGUI-Editor.app --format json
 ```
 
 升级 FairyGUI Editor 后必须重新提取并 diff —— 本清单对应 **6.1.4**。
+
+
+## 0.8.25：List / Loader 创建的运行时契约（2026-11-02）
+
+真实声明：`Document.InsertObject(url, pos?, insertIndex?)`、`FList.items`（可读写）、
+`ListItemData`（url/name/title/icon/selectedTitle/selectedIcon）。
+探针与验收分别见 `tests/reports/p8-7-creation-probe-live.json` 和
+`tests/reports/p8-7-creation-live.json`。
+
+| 问题 | 6.1.4 macOS 实测结论 |
+| --- | --- |
+| 裸节点的文档创建入口 | `Document.InsertObject("loader"/"list", Vector2)` 返回初始化完整的节点，生成 ID，加入文档并持续响应后续请求 |
+| 直接对象创建路线 | 本次 `CreateChild+AddChild` Loader 探针能写 XML，但随后 Document.OnUpdate 抛 NullReferenceException；未继续采用该路线 |
+| List 初始条目 | `AddItem` 只生成预览子节点，items 为空，XML 无 item；`ListItemData` 加入 items 集合后能序列化，且重新赋给 items setter 才重建预览 |
+| 缺省值 | Loader fill=none、align=left、vAlign=top、autoSize/shrinkOnly=false；List layout=column、selectionMode=single，创建时 overflow=scroll |
+| autoItemSize 缺省 | XML 省略时 column/row 是 true，flow_hz/flow_vt/pagination 是 false；不能统一按缺失=false 验证 |
+| 初始条目 URL | 与 defaultItem 相同的 URL 会被编辑器从 item 属性中省略；验证按有效 URL（item.url 或 defaultItem）比对 |
+| 持久化 | 保存+XML+文档重开通过；完整 Editor 进程重启后 27 个创建节点的原生序列化仍与磁盘一致，List 预览条目数量一致 |
+
+结构创建不进入 Agent 撤销栈；默认不保存，discard 可放弃。参数及资源先校验，
+原生属性应用异常尝试移除新节点；保存/验证失败不自动回滚。Windows/Unity/发布产物仍未验收。

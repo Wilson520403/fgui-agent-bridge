@@ -428,6 +428,23 @@ function attachLayoutMembers(o){
  o.GetGear=(i,create)=>{if(!o._gears[i]&&create)o._gears[i]={controller:null,pages:[]};return o._gears[i]||null;};
  o.CheckGearDisplay=()=>{};
 }
+
+// 0.8.25 contracts observed in p8-7-creation-probe-live.json.
+function attachCreationList(o, initial=[]){
+ let data=makeCSharpList(initial), children=[];
+ Object.defineProperty(o,'items',{configurable:true,get(){return data;},set(next){data=next;children=data._items.map((item,i)=>({id:'item'+i,name:item.name||'',objectType:'component'}));}});
+ Object.defineProperty(o,'numChildren',{configurable:true,get(){return children.length;}});
+ o.GetChildAt=i=>children[i];o.items=data;
+}
+function makeCreationObject(kind,pos){
+ const o={id:'n_ins'+(objects.length+1),name:'n'+objects.length,objectType:kind,x:pos.x,y:pos.y,width:50,height:50,
+  scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',
+  align:'left',verticalAlign:'top',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
+ if(kind==='loader')Object.assign(o,{url:'',fill:'none',autoSize:false,shrinkOnly:false});
+ else {Object.assign(o,{layout:'column',selectionMode:'single',lineGap:0,columnGap:0,defaultItem:'',autoResizeItem:true,overflow:'scroll'});attachCreationList(o);}
+ attachLayoutMembers(o);return o;
+}
+
 function setup() {
  files={'fixture.xml':fixture};imageSizes={};saveMode='normal';replaceMode='normal';replaceCount=0;
  createdCount=0;created=[];
@@ -511,7 +528,7 @@ function setup() {
   // 内存对象不重建就等于假装 reload 什么都没发生。
   GetPackage:id=>{if(String(id)!==pkg.id)return null;if(pkg.disposed){pkg.disposed=false;const r=reopenPackageFromDisk();pkg=r;return r;}return pkg;},
   GetPackageByName:name=>name===pkg.name?pkg:null,GetItem:(pid,id)=>packageItems.find(i=>i.id===id)||branchItems.find(i=>i.id===id)||null,GetSettings:name=>name==='Publish'?globalSettings:null,SetChanged(){},Save(){}},docView};
- ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},BuilderUtil:{GetMD5HashFromFile:p=>{const key=String(p);if(!(key in files))throw Error('file not readable: '+key);return crypto.createHash('md5').update(Buffer.from(String(files[key]),'utf8')).digest('hex');}},AssetSizeUtil:{GetSize:p=>{const key=String(p);const item=[...packageItems,...branchItems].find(i=>i&&i.file===key);if(!(key in files)||!item)throw Error('image not readable: '+key);return {width:Number(item.width)||0,height:Number(item.height)||0,type:'png',bitDepth:8,colorType:6};}},AtlasSettings:function(){return makeAtlasSettings('');},PackSettings:function(){return makePackSettings();},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{Text:{UTF8Encoding:function(bom){this.bom=!!bom;}},IO:{File:{Exists:p=>p in files,ReadAllText:p=>String(files[p]||'').replace(/^\uFEFF/,''),ReadAllBytes:p=>{const b=Buffer.from(String(files[p]||''),'utf8');return {Length:b.length,get_Item:i=>b[i]};},WriteAllText:(p,t)=>{files[p]=String(t);}},Directory:{Exists:p=>branchDirectories.has(String(p)),GetDirectories:p=>{const prefix=String(p).replace(/\/$/,'')+'/';const found=[...branchDirectories].filter(d=>d.startsWith(prefix)&&d.slice(prefix.length).indexOf('/')<0);return {Length:found.length,get_Item:i=>found[i],GetValue:i=>found[i]};},GetFiles:()=>({Length:0,get_Item:()=>null,GetValue:()=>null}),CreateDirectory:p=>{branchDirectories.add(String(p).replace(/\/$/,''));return {};}},Path:{Combine:(...parts)=>parts.join('/'),GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:function(p){const key=String(p);Object.defineProperty(this,'Length',{get(){if(!(key in files))throw Error('file not found: '+key);return Buffer.byteLength(String(files[key]),'utf8');}});},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
+ ctx=vm.createContext({exports:{},CS:{FairyEditor:{App:app,FPackageItemType:{IMAGE:'image',FONT:'font',SOUND:'sound',MOVIECLIP:'movieclip',FOLDER:'folder',COMPONENT:'component',GetFileType:p=>p.endsWith('.wav')||p.endsWith('.mp3')?'sound':p.endsWith('.ttf')||p.endsWith('.fnt')?'font':'image'},FTransition:{GetAllowType:()=>true},DependencyQuery:function(){return makeDependencyQuery();},BuilderUtil:{GetMD5HashFromFile:p=>{const key=String(p);if(!(key in files))throw Error('file not readable: '+key);return crypto.createHash('md5').update(Buffer.from(String(files[key]),'utf8')).digest('hex');}},AssetSizeUtil:{GetSize:p=>{const key=String(p);const item=[...packageItems,...branchItems].find(i=>i&&i.file===key);if(!(key in files)||!item)throw Error('image not readable: '+key);return {width:Number(item.width)||0,height:Number(item.height)||0,type:'png',bitDepth:8,colorType:6};}},AtlasSettings:function(){return makeAtlasSettings('');},PackSettings:function(){return makePackSettings();},ListItemData:function(){},FList:{SINGLE_COLUMN:'column',SINGLE_ROW:'row',FLOW_HZ:'flow_hz',FLOW_VT:'flow_vt',PAGINATION:'pagination'},FGroup:{HORIZONTAL:'hz',VERTICAL:'vt'},FController:function(){const c=makeController('',[]);return c;}},UnityEngine:{Application:{runInBackground:false},Color,Vector2:function(x,y){this.x=x;this.y=y;}},System:{Text:{UTF8Encoding:function(bom){this.bom=!!bom;}},IO:{File:{Exists:p=>p in files,ReadAllText:p=>String(files[p]||'').replace(/^\uFEFF/,''),ReadAllBytes:p=>{const b=Buffer.from(String(files[p]||''),'utf8');return {Length:b.length,get_Item:i=>b[i]};},WriteAllText:(p,t)=>{files[p]=String(t);}},Directory:{Exists:p=>branchDirectories.has(String(p)),GetDirectories:p=>{const prefix=String(p).replace(/\/$/,'')+'/';const found=[...branchDirectories].filter(d=>d.startsWith(prefix)&&d.slice(prefix.length).indexOf('/')<0);return {Length:found.length,get_Item:i=>found[i],GetValue:i=>found[i]};},GetFiles:()=>({Length:0,get_Item:()=>null,GetValue:()=>null}),CreateDirectory:p=>{branchDirectories.add(String(p).replace(/\/$/,''));return {};}},Path:{Combine:(...parts)=>parts.join('/'),GetFullPath:p=>p,IsPathRooted:p=>p.startsWith('/')||/^[A-Za-z]:/.test(p),GetFileName:p=>p.split('/').pop(),GetFileNameWithoutExtension:p=>p.split('/').pop().replace(/\.[^.]+$/,''),GetExtension:p=>{const i=p.lastIndexOf('.');return i<0?'':p.slice(i);}},FileInfo:function(p){const key=String(p);Object.defineProperty(this,'Length',{get(){if(!(key in files))throw Error('file not found: '+key);return Buffer.byteLength(String(files[key]),'utf8');}});},SearchOption:{}}},FairyGUI:{Utils:{XML}}},require:name=>name==='puerts'?{$promise:v=>Promise.resolve(v),$typeof:()=>({})}:{},console});
  const code=fs.readFileSync(path.join(root,'plugin/main.js'),'utf8').split('App.add_onUpdate(onUpdate);')[0];
  vm.runInContext(code,ctx);
  // P9-6：插件内缩放走编辑器自带的 FairyEditor.VImage；源图尺寸走 AssetSizeUtil。
@@ -612,7 +629,7 @@ function makeDoc(){
   SetModified(v){this.isModified=v;},RefreshInspectors(){},RefreshTransition(){},SetSelection(o){this.selected=o;this._selection=[o];},SelectObject(o){if(!this._selection.includes(o))this._selection.push(o);},
   UpdateTransitions(xml){transitions.length=0;for(let i=0;i<xml.elements.Count;i++){const c=xml.elements.get_Item(i);if(c.name==='transition')transitions.push(rebuildTransitionFromXml(c));}},
   ReplaceSelection(url){replaceCount++;if(replaceMode==='ignore')return;const i=objects.indexOf(this.selected);objects[i]={...this.selected,resourceURL:url};},
-  InsertObject(url,pos,idx){const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
+  InsertObject(url,pos,idx){if(url==='loader'||url==='list'){const o=makeCreationObject(url,pos);objects.push(o);this._selection=[o];this.isModified=true;return o;}const res=resources[url];const o={id:'n_ins'+(objects.length+1),name:'',objectType:(res&&res.type)||'image',resourceURL:url,x:pos.x,y:pos.y,scaleX:1,scaleY:1,rotation:0,alpha:1,visible:true,touchable:true,grayed:false,text:'',icon:'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};if(idx>=0&&idx<=objects.length)objects.splice(idx,0,o);else objects.push(o);return o;},
   RemoveObject(o){const i=objects.indexOf(o);if(i>=0)objects.splice(i,1);},
   Save(){if(saveMode==='throw')throw Error('disk full');if(saveMode==='dirty')return;if(saveMode!=='stale')files['fixture.xml']=serialize();this.isModified=false;}};
  let modified=false;
@@ -648,13 +665,13 @@ function reloadFromDisk(){
   const o={id:a.id,name:a.name,groupId:a.group||'',x:xy[0],y:xy[1],width:size[0],height:size[1],scaleX:scale[0],scaleY:scale[1]??scale[0],rotation:Number(a.rotation||0),alpha:Number(a.alpha||1),visible:a.visible!=='false',touchable:a.touchable!=='false',grayed:a.grayed==='true',text:a.text??a.title??'',icon:a.icon||'',GetProperty(p){return this[p];},SetProperty(p,v){this[p]=v;}};
   if(n.name==='image'){o.objectType='image';o.resourceURL='ui://fixture0'+a.src;}
   if(n.name==='component'){o.objectType='component';o.resourceURL='ui://fixture0'+a.src;if(a.src==='panel'){o.numChildren=1;o.GetChildAt=()=>makeInner();}else o.numChildren=0;attachInstanceExtension(o,n);}
-  if(n.name==='loader'){o.objectType='loader';o.url=a.url;}
+  if(n.name==='loader'){Object.assign(o,{objectType:'loader',url:a.url||'',fill:a.fill||'none',autoSize:a.autoSize==='true',shrinkOnly:a.shrinkOnly==='true',align:a.align||'left',verticalAlign:a.vAlign||'top'});}
   if(n.name==='text'){const off=(a.shadowOffset||'0,0').split(',').map(Number);
    Object.assign(o,{objectType:'text',font:a.font||'',fontSize:Number(a.fontSize||0),color:hexToColor(a.color),align:a.align||'left',verticalAlign:a.vAlign||'top',leading:Number(a.leading||0),letterSpacing:Number(a.letterSpacing||0),autoSize:a.autoSize||'none',
     bold:a.bold==='true',italic:a.italic==='true',underline:a.underline==='true',
     stroke:a.strokeSize!==undefined&&Number(a.strokeSize)>0,strokeSize:a.strokeSize!==undefined?Number(a.strokeSize):1,strokeColor:hexToColor(a.strokeColor||'#000000'),
     shadow:!!a.shadowOffset&&a.shadowOffset!=='0,0',shadowX:off[0]||0,shadowY:off[1]||0,shadowColor:hexToColor(a.shadowColor||'#000000')});}
-  if(n.name==='list'){Object.assign(o,{objectType:'list',layout:a.layout||'column',selectionMode:a.selectionMode||'single',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),defaultItem:a.defaultItem||'',autoResizeItem:a.autoItemSize==='true',align:a.align||'none',verticalAlign:a.vAlign||'none',selectionController:a.selectionController||'',foldInvisibleItems:a.foldInvisibleItems==='true',clearOnPublish:a.autoClearItems==='true',scrollItemToViewOnClick:a.scrollItemToViewOnClick==='true',overflow:a.overflow||'visible',marginStr:a.margin||'0,0,0,0',numChildren:0,GetChildAt:()=>null});}
+  if(n.name==='list'){Object.assign(o,{objectType:'list',layout:a.layout||'column',selectionMode:a.selectionMode||'single',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),defaultItem:a.defaultItem||'',autoResizeItem:a.autoItemSize===undefined?['column','row'].includes(a.layout||'column'):a.autoItemSize==='true',align:a.align||'none',verticalAlign:a.vAlign||'none',selectionController:a.selectionController||'',foldInvisibleItems:a.foldInvisibleItems==='true',clearOnPublish:a.autoClearItems==='true',scrollItemToViewOnClick:a.scrollItemToViewOnClick==='true',overflow:a.overflow||'visible',marginStr:a.margin||'0,0,0,0',numChildren:0,GetChildAt:()=>null});attachCreationList(o,n.children.filter(c=>c.name==='item').map(c=>({...c.attrs})));}
   if(n.name==='group'){Object.assign(o,{objectType:'group',advanced:a.advanced==='true',layout:a.layout||'',lineGap:Number(a.lineGap||0),columnGap:Number(a.colGap||0),excludeInvisibles:a.excludeInvisibles==='true',mainGridMinSize:Number(a.gridMinSize||0),mainGridIndex:Number(a.gridIndex||0),autoSizeDisabled:a.autoSizeDisabled==='true',collapsed:a.collapsed==='true'});}
   attachLayoutMembers(o);
   for(const c of n.children){
@@ -732,7 +749,7 @@ function serialize() {
  if(o.icon)a.icon=o.icon;
  if(o.objectType==='image')a.src=o.resourceURL.slice('ui://fixture0'.length);
  if(o.objectType==='component')a.src=o.resourceURL.slice('ui://fixture0'.length);
- if(o.objectType==='loader')a.url=o.url;
+ if(o.objectType==='loader'){if(o.url)a.url=o.url;if(o.fill&&o.fill!=='none')a.fill=o.fill;if(o.autoSize)a.autoSize='true';if(o.shrinkOnly)a.shrinkOnly='true';if(o.align&&o.align!=='left')a.align=o.align;if(o.verticalAlign&&o.verticalAlign!=='top')a.vAlign=o.verticalAlign;}
  if(o.objectType==='text'){Object.assign(a,{font:o.font,fontSize:o.fontSize,color:ctx.colorHex(o.color),align:o.align,vAlign:o.verticalAlign,leading:o.leading,letterSpacing:o.letterSpacing,autoSize:o.autoSize});omitDefaults(a);
   // 新建节点的 autoSize 缺省是 both（真机 6.1.4 实测），所以 autoSize=none 要显式写出；
   // 已有节点的缺省是 none，按缺省省略。
@@ -750,7 +767,7 @@ function serialize() {
   if(o.lineGap)a.lineGap=o.lineGap;
   if(o.columnGap)a.colGap=o.columnGap;
   if(o.defaultItem)a.defaultItem=o.defaultItem;
-  if(o.autoResizeItem)a.autoItemSize='true';
+  if(o.items){const def=['column','row'].includes(o.layout||'column');if(Boolean(o.autoResizeItem)!==def)a.autoItemSize=String(Boolean(o.autoResizeItem));}else if(o.autoResizeItem)a.autoItemSize='true';
   a.align=o.align||'none';a.vAlign=o.verticalAlign||'none';
   if(o.selectionController)a.selectionController=o.selectionController;
   if(o.foldInvisibleItems)a.foldInvisibleItems='true';
@@ -770,6 +787,7 @@ function serialize() {
  }
  const attrs=Object.entries(a).map(([k,v])=>`${k}="${esc(v)}"`).join(' ');
  const children=[];
+ if(o.objectType==='list'&&o.items)for(let i=0;i<o.items.Count;i++){const entry=o.items.get_Item(i);const attrs=[];for(const k of ['url','title','icon','name','selectedTitle','selectedIcon'])if(entry[k]&&(k!=='url'||entry[k]!==o.defaultItem))attrs.push(`${k}="${esc(entry[k])}"`);children.push(`<item ${attrs.join(' ')}/> `);}
  const relItems=o.relations&&o.relations._items||[];
  for(const r of relItems)children.push(`<relation target="${r.target?esc(String(r.target.id||'')):''}" sidePair="${esc(r.sidePair||'')}"/>`);
  const gear=o._gears&&o._gears[0];
@@ -2569,6 +2587,65 @@ test('primitives are blocked during publish and cross-branch writes',async()=>{
  ctx.CS.FairyEditor.App.project.activeBranch='other';
  for(const action of ['create_group','duplicate_object','adjust_depth'])
   assert.throws(()=>ctx.handleCommand({action,params:{}}));
+});
+
+const createPrimitive=(kind,params={})=>ctx.handleCommand({action:'insert_'+kind,params:{save:true,...params}});
+test('Loader creation pins defaults and proves disk/reload geometry and resource',()=>{
+ const r=createPrimitive('loader',{url:'ui://fixture0blue',name:'newLoader',x:12.8,y:-4.6,width:180.9,height:90.5,fill:'scale',align:'center',vAlign:'middle',shrinkOnly:true,externalReload:true});
+ assert.equal(r.strength,'reload');assert.equal(r.undoable,false);assert.equal(r.creationPath,'Document.InsertObject');
+ assert.equal(r.verification.xml.fill,'scale');assert.equal(r.verification.reload.values.url,'ui://fixture0blue');
+ assert.equal(r.rounded.length,4);assert.equal(r.after.x,12);assert.equal(r.after.y,-4);
+});
+test('an empty Loader persists omitted defaults without skipping enum checks',()=>{
+ const r=createPrimitive('loader',{externalReload:true});
+ assert.equal(r.strength,'reload');assert.equal(r.verification.xml.url,'');assert.equal(r.verification.xml.fill,'none');
+ assert.equal(r.verification.xml.align,'left');assert.equal(r.verification.xml.autoSize,false);assert.equal(r.verification.xmlSkippedKeys,undefined);
+});
+test('List creation persists item overrides and effective default URLs through reload',()=>{
+ const r=createPrimitive('list',{defaultItem:'ui://fixture0panel',items:[{title:'One',name:'first'},{url:'ui://fixture0panel',title:'Two',icon:'ui://fixture0blue',selectedTitle:'Selected',selectedIcon:'ui://fixture0red'}],layout:'flow_horizontal',columnGap:8,autoItemSize:true,externalReload:true});
+ assert.equal(r.strength,'reload');assert.equal(r.after.itemCount,2);assert.equal(r.verification.xml.itemCount,2);
+ assert.equal(r.verification.xml.autoItemSize,true);assert.equal(r.verification.reload.values.layout,'flow_hz');
+ assert.equal(JSON.parse(r.after.items)[1].selectedTitle,'Selected');assert.equal(JSON.parse(r.after.items)[0].url,'ui://fixture0panel');
+ assert.equal(objects.find(o=>o.id===r.inserted.id).numChildren,2);
+});
+test('an empty List needs no default item and keeps its pinned defaults',()=>{
+ const r=createPrimitive('list',{externalReload:true});assert.equal(r.strength,'reload');assert.equal(r.after.itemCount,0);
+ assert.equal(r.verification.xml.layout,'column');assert.equal(r.verification.xml.autoItemSize,true);assert.equal(r.verification.xml.overflow,'scroll');
+});
+test('List autoItemSize XML default depends on layout',()=>{
+ for(const layout of ['single_column','single_row','flow_horizontal','flow_vertical','pagination'])for(const autoItemSize of [true,false]){
+  const r=createPrimitive('list',{layout,autoItemSize,externalReload:true});assert.equal(r.verification.xml.autoItemSize,autoItemSize);assert.equal(r.strength,'reload');
+ }
+});
+test('explicit per-item component URLs work without a default',()=>{
+ const r=createPrimitive('list',{items:[{url:'ui://fixture0panel'}],externalReload:true});assert.equal(r.after.itemCount,1);assert.equal(JSON.parse(r.after.items)[0].url,'ui://fixture0panel');
+});
+test('invalid creation inputs leave memory, dirty state, selection and disk unchanged',()=>{
+ const cases=[['loader',{width:0}],['list',{height:0.5}],['loader',{x:'2'}],['loader',{width:Infinity}],['loader',{fill:'stretch'}],['loader',{shrinkOnly:'false'}],['loader',{url:'https://example.invalid/image.png'}],['loader',{url:'ui://fixture0panel'}],['loader',{autoSize:true}],['list',{defaultItem:'ui://fixture0blue'}],['list',{defaultItem:'ui://fixture0component'}],['list',{items:[{}]}],['list',{items:{}}],['list',{items:Array(1001).fill({})}],['list',{items:[null]}],['list',{items:[{url:'ui://fixture0panel',bogus:1}]}],['list',{items:[{url:'ui://fixture0panel',title:3}]}],['list',{items:[{url:'ui://fixture0blue'}]}],['list',{items:[{url:'ui://fixture0panel',icon:'ui://fixture0panel'}]}],['list',{layout:'free'}],['list',{lineGap:0.5}],['list',{autoItemSize:0}],['list',{overflow:'auto'}],['list',{name:''}],['loader',{externalReload:true,save:false}],['list',{externalReload:true,verify:false}],['list',{target:{id:'comp1'}}]];
+ doc._selection=[objects[0]];
+ for(const [kind,params] of cases){const before=serialize();const modified=doc.isModified;assert.throws(()=>createPrimitive(kind,params));assert.equal(serialize(),before);assert.equal(doc.isModified,modified);assert.equal(doc._selection[0].id,'image1');assert.equal(files['fixture.xml'],fixture);}
+});
+test('native setter rejection rolls back the newly inserted node',()=>{
+ const original=doc.InsertObject;doc.InsertObject=function(...args){const o=original.apply(this,args);Object.defineProperty(o,'fill',{get:()=> 'none',set(){}});return o;};
+ const before=serialize();rejects(()=>createPrimitive('loader',{fill:'scale'}),'editor_rejected','editor');assert.equal(serialize(),before);assert.equal(doc.isModified,false);
+});
+test('creation preserves user selection and unsaved requests never claim persistence',()=>{
+ doc._selection=[objects[0]];const r=createPrimitive('list',{save:false});assert.equal(r.persisted,false);assert.equal(r.strength,'none');assert.equal(files['fixture.xml'],fixture);assert.equal(doc._selection[0].id,'image1');
+});
+test('creation fails closed when save is stale, throws, or drops a List item',()=>{
+ saveMode='stale';rejects(()=>createPrimitive('loader'),'persistence_failed','xml');
+ saveMode='throw';rejects(()=>createPrimitive('list'),'persistence_failed','save');
+ saveMode='normal';const save=doc.Save;doc.Save=function(){save.call(this);files['fixture.xml']=files['fixture.xml'].replace(/<item[^>]*\/>/g,'');};
+ rejects(()=>createPrimitive('list',{items:[{url:'ui://fixture0panel',title:'Keep'}]}),'persistence_failed','xml');
+});
+test('creation respects publish, document branch, timeline and group edit guards',()=>{
+ for(const kind of ['loader','list']){
+  vm.runInContext('publishInProgress=true',ctx);assert.throws(()=>createPrimitive(kind),/发布进行中/);vm.runInContext('publishInProgress=false',ctx);
+  doc.timelineMode=true;rejects(()=>createPrimitive(kind),'invalid_argument','input');doc.timelineMode=false;
+  doc.openedGroup=objects[0];rejects(()=>createPrimitive(kind),'invalid_argument','input');doc.openedGroup=null;
+  doc.packageItem.branch='other';assert.throws(()=>createPrimitive(kind));doc.packageItem.branch='';
+ }
+ assert.equal(objects.length,4);
 });
 
 // verification *logic* against a mocked host, never Editor acceptance.

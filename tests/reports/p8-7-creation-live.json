@@ -1,0 +1,2911 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-02T11:27:31.247135+08:00",
+  "editor": "FairyGUI Editor 6.1.4 macOS",
+  "bridgeVersion": "0.8.25",
+  "project": "temporary isolated sample copy",
+  "steps": [
+    {
+      "label": "empty Loader",
+      "action": "insert_loader",
+      "params": {
+        "name": "EmptyLoader",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n8_myxf",
+          "name": "EmptyLoader",
+          "type": "loader",
+          "nameRequested": "EmptyLoader",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n8_myxf",
+          "name": "EmptyLoader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n8_myxf",
+          "name": "EmptyLoader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n8_myxf",
+          "name": "EmptyLoader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader through MCP",
+      "action": "insert_loader",
+      "params": {
+        "name": "McpLoader",
+        "url": "ui://qsezbqtwp93m1",
+        "x": 20.9,
+        "y": -10.5,
+        "width": 180.8,
+        "height": 90.5,
+        "fill": "scale",
+        "align": "center",
+        "vAlign": "middle",
+        "shrinkOnly": true,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n9_myxf",
+          "name": "McpLoader",
+          "type": "loader",
+          "nameRequested": "McpLoader",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "rounded": [
+          {
+            "property": "x",
+            "from": 20.9,
+            "to": 20
+          },
+          {
+            "property": "y",
+            "from": -10.5,
+            "to": -10
+          },
+          {
+            "property": "width",
+            "from": 180.8,
+            "to": 180
+          },
+          {
+            "property": "height",
+            "from": 90.5,
+            "to": 90
+          }
+        ],
+        "expected": {
+          "id": "n9_myxf",
+          "name": "McpLoader",
+          "type": "loader",
+          "x": 20,
+          "y": -10,
+          "width": 180,
+          "height": 90,
+          "align": "center",
+          "vAlign": "middle",
+          "url": "ui://qsezbqtwp93m1",
+          "fill": "scale",
+          "shrinkOnly": true,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n9_myxf",
+          "name": "McpLoader",
+          "type": "loader",
+          "x": 20,
+          "y": -10,
+          "width": 180,
+          "height": 90,
+          "align": "center",
+          "vAlign": "middle",
+          "url": "ui://qsezbqtwp93m1",
+          "fill": "scale",
+          "shrinkOnly": true,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n9_myxf",
+          "name": "McpLoader",
+          "type": "loader",
+          "x": 20,
+          "y": -10,
+          "width": 180,
+          "height": 90,
+          "align": "center",
+          "vAlign": "middle",
+          "url": "ui://qsezbqtwp93m1",
+          "fill": "scale",
+          "shrinkOnly": true,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader fill none",
+      "action": "insert_loader",
+      "params": {
+        "name": "Fill_none",
+        "url": "ui://qsezbqtwp93m2",
+        "fill": "none",
+        "align": "right",
+        "vAlign": "bottom",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n10_myxf",
+          "name": "Fill_none",
+          "type": "loader",
+          "nameRequested": "Fill_none",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n10_myxf",
+          "name": "Fill_none",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n10_myxf",
+          "name": "Fill_none",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n10_myxf",
+          "name": "Fill_none",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader fill scale",
+      "action": "insert_loader",
+      "params": {
+        "name": "Fill_scale",
+        "url": "ui://qsezbqtwp93m2",
+        "fill": "scale",
+        "align": "right",
+        "vAlign": "bottom",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n11_myxf",
+          "name": "Fill_scale",
+          "type": "loader",
+          "nameRequested": "Fill_scale",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n11_myxf",
+          "name": "Fill_scale",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scale",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n11_myxf",
+          "name": "Fill_scale",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scale",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n11_myxf",
+          "name": "Fill_scale",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scale",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader fill scaleMatchHeight",
+      "action": "insert_loader",
+      "params": {
+        "name": "Fill_scaleMatchHeight",
+        "url": "ui://qsezbqtwp93m2",
+        "fill": "scaleMatchHeight",
+        "align": "right",
+        "vAlign": "bottom",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n12_myxf",
+          "name": "Fill_scaleMatchHeight",
+          "type": "loader",
+          "nameRequested": "Fill_scaleMatchHeight",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n12_myxf",
+          "name": "Fill_scaleMatchHeight",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleMatchHeight",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n12_myxf",
+          "name": "Fill_scaleMatchHeight",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleMatchHeight",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n12_myxf",
+          "name": "Fill_scaleMatchHeight",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleMatchHeight",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader fill scaleMatchWidth",
+      "action": "insert_loader",
+      "params": {
+        "name": "Fill_scaleMatchWidth",
+        "url": "ui://qsezbqtwp93m2",
+        "fill": "scaleMatchWidth",
+        "align": "right",
+        "vAlign": "bottom",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n13_myxf",
+          "name": "Fill_scaleMatchWidth",
+          "type": "loader",
+          "nameRequested": "Fill_scaleMatchWidth",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n13_myxf",
+          "name": "Fill_scaleMatchWidth",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleMatchWidth",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n13_myxf",
+          "name": "Fill_scaleMatchWidth",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleMatchWidth",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n13_myxf",
+          "name": "Fill_scaleMatchWidth",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleMatchWidth",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader fill scaleFree",
+      "action": "insert_loader",
+      "params": {
+        "name": "Fill_scaleFree",
+        "url": "ui://qsezbqtwp93m2",
+        "fill": "scaleFree",
+        "align": "right",
+        "vAlign": "bottom",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n14_myxf",
+          "name": "Fill_scaleFree",
+          "type": "loader",
+          "nameRequested": "Fill_scaleFree",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n14_myxf",
+          "name": "Fill_scaleFree",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleFree",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n14_myxf",
+          "name": "Fill_scaleFree",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleFree",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n14_myxf",
+          "name": "Fill_scaleFree",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleFree",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "Loader fill scaleNoBorder",
+      "action": "insert_loader",
+      "params": {
+        "name": "Fill_scaleNoBorder",
+        "url": "ui://qsezbqtwp93m2",
+        "fill": "scaleNoBorder",
+        "align": "right",
+        "vAlign": "bottom",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n15_myxf",
+          "name": "Fill_scaleNoBorder",
+          "type": "loader",
+          "nameRequested": "Fill_scaleNoBorder",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n15_myxf",
+          "name": "Fill_scaleNoBorder",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleNoBorder",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n15_myxf",
+          "name": "Fill_scaleNoBorder",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleNoBorder",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n15_myxf",
+          "name": "Fill_scaleNoBorder",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "right",
+          "vAlign": "bottom",
+          "url": "ui://qsezbqtwp93m2",
+          "fill": "scaleNoBorder",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "empty List",
+      "action": "insert_list",
+      "params": {
+        "name": "EmptyList",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n16_myxf",
+          "name": "EmptyList",
+          "type": "list",
+          "nameRequested": "EmptyList",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n16_myxf",
+          "name": "EmptyList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "xml": {
+          "id": "n16_myxf",
+          "name": "EmptyList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "reload": {
+          "id": "n16_myxf",
+          "name": "EmptyList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        }
+      }
+    },
+    {
+      "label": "List items through MCP",
+      "action": "insert_list",
+      "params": {
+        "name": "McpList",
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One",
+            "name": "first"
+          },
+          {
+            "title": "Two",
+            "icon": "ui://qsezbqtwp93m1",
+            "selectedTitle": "Selected",
+            "selectedIcon": "ui://qsezbqtwp93m2"
+          }
+        ],
+        "layout": "flow_horizontal",
+        "lineGap": 8,
+        "columnGap": 4,
+        "width": 320,
+        "height": 200,
+        "autoItemSize": true,
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n17_myxf",
+          "name": "McpList",
+          "type": "list",
+          "nameRequested": "McpList",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n17_myxf",
+          "name": "McpList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 8,
+          "columnGap": 4,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"first\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"},{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"Two\",\"icon\":\"ui://qsezbqtwp93m1\",\"name\":\"\",\"selectedTitle\":\"Selected\",\"selectedIcon\":\"ui://qsezbqtwp93m2\"}]",
+          "itemCount": 2
+        },
+        "xml": {
+          "id": "n17_myxf",
+          "name": "McpList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 8,
+          "columnGap": 4,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"first\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"},{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"Two\",\"icon\":\"ui://qsezbqtwp93m1\",\"name\":\"\",\"selectedTitle\":\"Selected\",\"selectedIcon\":\"ui://qsezbqtwp93m2\"}]",
+          "itemCount": 2
+        },
+        "reload": {
+          "id": "n17_myxf",
+          "name": "McpList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 8,
+          "columnGap": 4,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"first\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"},{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"Two\",\"icon\":\"ui://qsezbqtwp93m1\",\"name\":\"\",\"selectedTitle\":\"Selected\",\"selectedIcon\":\"ui://qsezbqtwp93m2\"}]",
+          "itemCount": 2
+        }
+      }
+    },
+    {
+      "label": "per-item URL without default",
+      "action": "insert_list",
+      "params": {
+        "name": "PerItemList",
+        "items": [
+          {
+            "url": "ui://qsezbqtwp93m3",
+            "title": "Standalone"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n18_myxf",
+          "name": "PerItemList",
+          "type": "list",
+          "nameRequested": "PerItemList",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n18_myxf",
+          "name": "PerItemList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"Standalone\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n18_myxf",
+          "name": "PerItemList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"Standalone\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n18_myxf",
+          "name": "PerItemList",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"Standalone\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List single_column auto=True",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_single_columnTrue",
+        "layout": "single_column",
+        "autoItemSize": true,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n19_myxf",
+          "name": "Layout_single_columnTrue",
+          "type": "list",
+          "nameRequested": "Layout_single_columnTrue",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n19_myxf",
+          "name": "Layout_single_columnTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n19_myxf",
+          "name": "Layout_single_columnTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n19_myxf",
+          "name": "Layout_single_columnTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List single_column auto=False",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_single_columnFalse",
+        "layout": "single_column",
+        "autoItemSize": false,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n20_myxf",
+          "name": "Layout_single_columnFalse",
+          "type": "list",
+          "nameRequested": "Layout_single_columnFalse",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n20_myxf",
+          "name": "Layout_single_columnFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n20_myxf",
+          "name": "Layout_single_columnFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n20_myxf",
+          "name": "Layout_single_columnFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List single_row auto=True",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_single_rowTrue",
+        "layout": "single_row",
+        "autoItemSize": true,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n21_myxf",
+          "name": "Layout_single_rowTrue",
+          "type": "list",
+          "nameRequested": "Layout_single_rowTrue",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n21_myxf",
+          "name": "Layout_single_rowTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n21_myxf",
+          "name": "Layout_single_rowTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n21_myxf",
+          "name": "Layout_single_rowTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List single_row auto=False",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_single_rowFalse",
+        "layout": "single_row",
+        "autoItemSize": false,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n22_myxf",
+          "name": "Layout_single_rowFalse",
+          "type": "list",
+          "nameRequested": "Layout_single_rowFalse",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n22_myxf",
+          "name": "Layout_single_rowFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n22_myxf",
+          "name": "Layout_single_rowFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n22_myxf",
+          "name": "Layout_single_rowFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "row",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List flow_horizontal auto=True",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_flow_horizontalTrue",
+        "layout": "flow_horizontal",
+        "autoItemSize": true,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n23_myxf",
+          "name": "Layout_flow_horizontalTrue",
+          "type": "list",
+          "nameRequested": "Layout_flow_horizontalTrue",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n23_myxf",
+          "name": "Layout_flow_horizontalTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n23_myxf",
+          "name": "Layout_flow_horizontalTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n23_myxf",
+          "name": "Layout_flow_horizontalTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List flow_horizontal auto=False",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_flow_horizontalFalse",
+        "layout": "flow_horizontal",
+        "autoItemSize": false,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n24_myxf",
+          "name": "Layout_flow_horizontalFalse",
+          "type": "list",
+          "nameRequested": "Layout_flow_horizontalFalse",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n24_myxf",
+          "name": "Layout_flow_horizontalFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n24_myxf",
+          "name": "Layout_flow_horizontalFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n24_myxf",
+          "name": "Layout_flow_horizontalFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_hz",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List flow_vertical auto=True",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_flow_verticalTrue",
+        "layout": "flow_vertical",
+        "autoItemSize": true,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n25_myxf",
+          "name": "Layout_flow_verticalTrue",
+          "type": "list",
+          "nameRequested": "Layout_flow_verticalTrue",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n25_myxf",
+          "name": "Layout_flow_verticalTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n25_myxf",
+          "name": "Layout_flow_verticalTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n25_myxf",
+          "name": "Layout_flow_verticalTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List flow_vertical auto=False",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_flow_verticalFalse",
+        "layout": "flow_vertical",
+        "autoItemSize": false,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n26_myxf",
+          "name": "Layout_flow_verticalFalse",
+          "type": "list",
+          "nameRequested": "Layout_flow_verticalFalse",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n26_myxf",
+          "name": "Layout_flow_verticalFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n26_myxf",
+          "name": "Layout_flow_verticalFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n26_myxf",
+          "name": "Layout_flow_verticalFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "flow_vt",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List pagination auto=True",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_paginationTrue",
+        "layout": "pagination",
+        "autoItemSize": true,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n27_myxf",
+          "name": "Layout_paginationTrue",
+          "type": "list",
+          "nameRequested": "Layout_paginationTrue",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n27_myxf",
+          "name": "Layout_paginationTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n27_myxf",
+          "name": "Layout_paginationTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n27_myxf",
+          "name": "Layout_paginationTrue",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List pagination auto=False",
+      "action": "insert_list",
+      "params": {
+        "name": "Layout_paginationFalse",
+        "layout": "pagination",
+        "autoItemSize": false,
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          }
+        ],
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n28_myxf",
+          "name": "Layout_paginationFalse",
+          "type": "list",
+          "nameRequested": "Layout_paginationFalse",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n28_myxf",
+          "name": "Layout_paginationFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n28_myxf",
+          "name": "Layout_paginationFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n28_myxf",
+          "name": "Layout_paginationFalse",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "pagination",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": false,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"One\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "List overflow visible",
+      "action": "insert_list",
+      "params": {
+        "name": "Overflow_visible",
+        "overflow": "visible",
+        "align": "right",
+        "vAlign": "bottom",
+        "selectionMode": "multiple",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n29_myxf",
+          "name": "Overflow_visible",
+          "type": "list",
+          "nameRequested": "Overflow_visible",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n29_myxf",
+          "name": "Overflow_visible",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "visible",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "xml": {
+          "id": "n29_myxf",
+          "name": "Overflow_visible",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "visible",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "reload": {
+          "id": "n29_myxf",
+          "name": "Overflow_visible",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "visible",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        }
+      }
+    },
+    {
+      "label": "List overflow hidden",
+      "action": "insert_list",
+      "params": {
+        "name": "Overflow_hidden",
+        "overflow": "hidden",
+        "align": "right",
+        "vAlign": "bottom",
+        "selectionMode": "multiple",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n30_myxf",
+          "name": "Overflow_hidden",
+          "type": "list",
+          "nameRequested": "Overflow_hidden",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n30_myxf",
+          "name": "Overflow_hidden",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "hidden",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "xml": {
+          "id": "n30_myxf",
+          "name": "Overflow_hidden",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "hidden",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "reload": {
+          "id": "n30_myxf",
+          "name": "Overflow_hidden",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "hidden",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        }
+      }
+    },
+    {
+      "label": "List overflow scroll",
+      "action": "insert_list",
+      "params": {
+        "name": "Overflow_scroll",
+        "overflow": "scroll",
+        "align": "right",
+        "vAlign": "bottom",
+        "selectionMode": "multiple",
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n31_myxf",
+          "name": "Overflow_scroll",
+          "type": "list",
+          "nameRequested": "Overflow_scroll",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n31_myxf",
+          "name": "Overflow_scroll",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "xml": {
+          "id": "n31_myxf",
+          "name": "Overflow_scroll",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "reload": {
+          "id": "n31_myxf",
+          "name": "Overflow_scroll",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "right",
+          "vAlign": "bottom",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "multiple",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        }
+      }
+    },
+    {
+      "label": "CLI insert-loader",
+      "action": "insert_loader",
+      "params": {
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n32_myxf",
+          "name": "Cliinsert-loader",
+          "type": "loader",
+          "nameRequested": "Cliinsert-loader",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n32_myxf",
+          "name": "Cliinsert-loader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": {
+          "id": "n32_myxf",
+          "name": "Cliinsert-loader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "reload": {
+          "id": "n32_myxf",
+          "name": "Cliinsert-loader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        }
+      }
+    },
+    {
+      "label": "CLI insert-list",
+      "action": "insert_list",
+      "params": {
+        "save": true,
+        "externalReload": true
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": true,
+        "strength": "reload",
+        "undoable": false,
+        "inserted": {
+          "id": "n33_myxf",
+          "name": "Cliinsert-list",
+          "type": "list",
+          "nameRequested": "Cliinsert-list",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n33_myxf",
+          "name": "Cliinsert-list",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"CLI\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "xml": {
+          "id": "n33_myxf",
+          "name": "Cliinsert-list",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"CLI\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        },
+        "reload": {
+          "id": "n33_myxf",
+          "name": "Cliinsert-list",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "ui://qsezbqtwp93m3",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[{\"url\":\"ui://qsezbqtwp93m3\",\"title\":\"CLI\",\"icon\":\"\",\"name\":\"\",\"selectedTitle\":\"\",\"selectedIcon\":\"\"}]",
+          "itemCount": 1
+        }
+      }
+    },
+    {
+      "label": "reject zero width",
+      "action": "insert_loader",
+      "params": {
+        "width": 0
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject truncated zero height",
+      "action": "insert_list",
+      "params": {
+        "height": 0.5
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject string geometry",
+      "action": "insert_loader",
+      "params": {
+        "x": "12"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject invalid fill",
+      "action": "insert_loader",
+      "params": {
+        "fill": "stretch"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject external URL",
+      "action": "insert_loader",
+      "params": {
+        "url": "https://example.invalid/image.png"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject Loader component resource",
+      "action": "insert_loader",
+      "params": {
+        "url": "ui://qsezbqtwp93m3"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject autoSize",
+      "action": "insert_loader",
+      "params": {
+        "autoSize": true
+      },
+      "passed": true,
+      "errorCode": "unsupported_property",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject unknown field",
+      "action": "insert_list",
+      "params": {
+        "bogus": 1
+      },
+      "passed": true,
+      "errorCode": "unsupported_property",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject image default item",
+      "action": "insert_list",
+      "params": {
+        "defaultItem": "ui://qsezbqtwp93m1"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject self reference",
+      "action": "insert_list",
+      "params": {
+        "defaultItem": "ui://qsezbqtwfix01"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject item without component",
+      "action": "insert_list",
+      "params": {
+        "items": [
+          {}
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject items object",
+      "action": "insert_list",
+      "params": {
+        "items": {}
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject null entry",
+      "action": "insert_list",
+      "params": {
+        "items": [
+          null
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject invalid last item field",
+      "action": "insert_list",
+      "params": {
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": "One"
+          },
+          {
+            "unknown": "value"
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "unsupported_property",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject non-string title",
+      "action": "insert_list",
+      "params": {
+        "defaultItem": "ui://qsezbqtwp93m3",
+        "items": [
+          {
+            "title": 2
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject image item URL",
+      "action": "insert_list",
+      "params": {
+        "items": [
+          {
+            "url": "ui://qsezbqtwp93m1"
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject component icon",
+      "action": "insert_list",
+      "params": {
+        "items": [
+          {
+            "url": "ui://qsezbqtwp93m3",
+            "icon": "ui://qsezbqtwp93m3"
+          }
+        ]
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject fractional gap",
+      "action": "insert_list",
+      "params": {
+        "lineGap": 1.5
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject string boolean",
+      "action": "insert_list",
+      "params": {
+        "autoItemSize": "false"
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject nested parent",
+      "action": "insert_list",
+      "params": {
+        "target": {
+          "id": "n3_fix01"
+        }
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject empty name",
+      "action": "insert_loader",
+      "params": {
+        "name": ""
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject reload without save",
+      "action": "insert_loader",
+      "params": {
+        "externalReload": true
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "reject reload without verification",
+      "action": "insert_list",
+      "params": {
+        "save": true,
+        "verify": false,
+        "externalReload": true
+      },
+      "passed": true,
+      "errorCode": "invalid_argument",
+      "documentAndDiskUnchanged": true
+    },
+    {
+      "label": "unsaved loader",
+      "action": "insert_loader",
+      "params": {
+        "name": "Discard_loader",
+        "save": false
+      },
+      "passed": true,
+      "result": {
+        "saved": false,
+        "persisted": false,
+        "strength": "none",
+        "undoable": false,
+        "inserted": {
+          "id": "n34_myxf",
+          "name": "Discard_loader",
+          "type": "loader",
+          "nameRequested": "Discard_loader",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n34_myxf",
+          "name": "Discard_loader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": null,
+        "reload": null
+      }
+    },
+    {
+      "label": "discard loader",
+      "passed": true,
+      "diskUnchanged": true,
+      "treeRestored": true
+    },
+    {
+      "label": "unsaved list",
+      "action": "insert_list",
+      "params": {
+        "name": "Discard_list",
+        "save": false
+      },
+      "passed": true,
+      "result": {
+        "saved": false,
+        "persisted": false,
+        "strength": "none",
+        "undoable": false,
+        "inserted": {
+          "id": "n34_myxf",
+          "name": "Discard_list",
+          "type": "list",
+          "nameRequested": "Discard_list",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n34_myxf",
+          "name": "Discard_list",
+          "type": "list",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200,
+          "align": "left",
+          "vAlign": "top",
+          "layout": "column",
+          "defaultItem": "",
+          "selectionMode": "single",
+          "overflow": "scroll",
+          "autoItemSize": true,
+          "lineGap": 0,
+          "columnGap": 0,
+          "items": "[]",
+          "itemCount": 0
+        },
+        "xml": null,
+        "reload": null
+      }
+    },
+    {
+      "label": "discard list",
+      "passed": true,
+      "diskUnchanged": true,
+      "treeRestored": true
+    },
+    {
+      "label": "save with verification disabled",
+      "action": "insert_loader",
+      "params": {
+        "name": "NoVerifyLoader",
+        "save": true,
+        "verify": false
+      },
+      "passed": true,
+      "result": {
+        "saved": true,
+        "persisted": false,
+        "strength": "none",
+        "undoable": false,
+        "inserted": {
+          "id": "n34_myxf",
+          "name": "NoVerifyLoader",
+          "type": "loader",
+          "nameRequested": "NoVerifyLoader",
+          "nameAdjusted": false
+        },
+        "creationPath": "Document.InsertObject",
+        "propertyWritePath": "object-model",
+        "expected": {
+          "id": "n34_myxf",
+          "name": "NoVerifyLoader",
+          "type": "loader",
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "align": "left",
+          "vAlign": "top",
+          "url": "",
+          "fill": "none",
+          "shrinkOnly": false,
+          "autoSize": false
+        },
+        "xml": null,
+        "reload": null
+      }
+    },
+    {
+      "label": "full restart EmptyLoader",
+      "passed": true,
+      "sourceId": "n8_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart McpLoader",
+      "passed": true,
+      "sourceId": "n9_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Fill_none",
+      "passed": true,
+      "sourceId": "n10_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Fill_scale",
+      "passed": true,
+      "sourceId": "n11_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Fill_scaleMatchHeight",
+      "passed": true,
+      "sourceId": "n12_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Fill_scaleMatchWidth",
+      "passed": true,
+      "sourceId": "n13_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Fill_scaleFree",
+      "passed": true,
+      "sourceId": "n14_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Fill_scaleNoBorder",
+      "passed": true,
+      "sourceId": "n15_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart EmptyList",
+      "passed": true,
+      "sourceId": "n16_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 0,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart McpList",
+      "passed": true,
+      "sourceId": "n17_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 2,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart PerItemList",
+      "passed": true,
+      "sourceId": "n18_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_single_columnTrue",
+      "passed": true,
+      "sourceId": "n19_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_single_columnFalse",
+      "passed": true,
+      "sourceId": "n20_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_single_rowTrue",
+      "passed": true,
+      "sourceId": "n21_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_single_rowFalse",
+      "passed": true,
+      "sourceId": "n22_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_flow_horizontalTrue",
+      "passed": true,
+      "sourceId": "n23_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_flow_horizontalFalse",
+      "passed": true,
+      "sourceId": "n24_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_flow_verticalTrue",
+      "passed": true,
+      "sourceId": "n25_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_flow_verticalFalse",
+      "passed": true,
+      "sourceId": "n26_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_paginationTrue",
+      "passed": true,
+      "sourceId": "n27_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Layout_paginationFalse",
+      "passed": true,
+      "sourceId": "n28_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Overflow_visible",
+      "passed": true,
+      "sourceId": "n29_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 0,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Overflow_hidden",
+      "passed": true,
+      "sourceId": "n30_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 0,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Overflow_scroll",
+      "passed": true,
+      "sourceId": "n31_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 0,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Cliinsert-loader",
+      "passed": true,
+      "sourceId": "n32_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart Cliinsert-list",
+      "passed": true,
+      "sourceId": "n33_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": 1,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "full restart NoVerifyLoader",
+      "passed": true,
+      "sourceId": "n34_myxf",
+      "serializedSourcePreserved": true,
+      "listPreviewItemCount": null,
+      "method": "After full Editor process restart, compare original disk node with the native serialized duplicate of the freshly loaded source; ignore only copied id/name. No save."
+    },
+    {
+      "label": "MovieClip Loader",
+      "passed": true,
+      "url": "ui://qsezbqtwt4wy9",
+      "strength": "reload",
+      "size": [
+        180,
+        90
+      ]
+    },
+    {
+      "label": "unsaved creation preserves existing selection",
+      "passed": true,
+      "selectionCountPreserved": 1,
+      "diskUnchangedAfterDiscard": true
+    }
+  ],
+  "limitations": [
+    "Windows Editor not tested",
+    "Unity runtime and published packages not tested",
+    "Creation is limited to direct children of the current component",
+    "Loader supports internal image/MovieClip URLs; external URLs are rejected"
+  ],
+  "handshake": {
+    "versionMatch": true,
+    "bridgeVersion": "0.8.25"
+  },
+  "passed": 83,
+  "total": 83,
+  "continuousHeartbeatVerified": true,
+  "finalDiskSha256": "fc1f2126aff910043795c6449876c5d12d6879e8c61e4c62454af8112b9e3d84",
+  "crossRestartVerified": true,
+  "restartSourceNodes": 27,
+  "restartCopiesDiscarded": true,
+  "crossRestartScope": "27 saved creation nodes from the main matrix; MovieClip Loader received document save/reload verification separately",
+  "offlineValidation": {
+    "pythonTests": 66,
+    "mockedHostTests": 301,
+    "typescriptCompilation": "passed",
+    "mcpTools": 74
+  }
+}
