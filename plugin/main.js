@@ -274,12 +274,22 @@ function safeValue(value) {
         return null;
     }
 }
+// A stale or broken resource reference makes FairyEditor.ResourceRef.GetURL() throw,
+// which aborts the whole tree walk. Guard it so one bad reference cannot break the read.
+function safeResourceURL(obj) {
+    try {
+        return obj.resourceURL || null;
+    }
+    catch (_) {
+        return null;
+    }
+}
 function describeObject(obj, depth, maxDepth) {
     const result = {
         id: obj.id,
         name: obj.name,
         type: obj.objectType,
-        resourceURL: obj.resourceURL || null,
+        resourceURL: safeResourceURL(obj),
         x: obj.x,
         y: obj.y,
         width: obj.width,
@@ -1356,7 +1366,7 @@ function findObjectById(root, id) {
     return null;
 }
 function findObjectsByResourceUrl(root, resourceUrl, result) {
-    if (String(root.resourceURL || "") === resourceUrl)
+    if (String(safeResourceURL(root) || "") === resourceUrl)
         result.push(root);
     const component = root;
     if (typeof component.numChildren !== "number")
